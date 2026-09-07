@@ -71,6 +71,8 @@ Development and production bind to `0.0.0.0:3000` so phones on the same network 
 
 On a Raspberry Pi, install from the lockfile, build, and run the same production command. Stop Nasr (`nasr.service`) once HQ is serving deen from the imported database.
 
+`deploy/` holds the systemd units the Pi runs. Copy them to `/etc/systemd/system/`, then `systemctl enable --now hq.service hq-backup.timer`. `hq.service` binds port 80 so the app answers at `hq.local`, and grants only `CAP_NET_BIND_SERVICE` so it still runs as the app user rather than root. Put `GITHUB_TOKEN` in `.env` beside the lockfile; the unit reads it through `EnvironmentFile`.
+
 ## Storage and import behavior
 
 - GitHub data lives in `data/activity.sqlite`. Nasr data lives in `data/deen.sqlite`. Override with `HQ_DATABASE` and `HQ_DEEN_DATABASE`. Database files and credentials are ignored by Git.
@@ -86,6 +88,8 @@ On a Raspberry Pi, install from the lockfile, build, and run the same production
 - The GitHub database is tied to the importing GitHub account; importing another account into it is rejected.
 
 To back up or move the databases, stop the app first and copy the entire `data` directory, including SQLite sidecar files if present. Do not copy `node_modules` between machines.
+
+`hq-backup.timer` runs `scripts/backup.mjs` daily at 02:00 and keeps 7 daily and 4 weekly copies of every database under `backups/`, which Git ignores. It uses `VACUUM INTO` rather than a file copy: copying a WAL-mode database captures only the main file and silently omits everything still in the `-wal`, which is how Nasr's old timer ended up a week stale. Each snapshot is reopened and `PRAGMA integrity_check`ed before anything is pruned, so a bad write cannot displace a good copy. Pruning is by count, so a long gap in runs cannot delete every backup. The weekly tier fires whenever the newest weekly copy is seven days old rather than on a fixed weekday, so a Pi that is off on Sundays still gets one. Run `node scripts/backup.mjs` for an ad-hoc snapshot, or set `HQ_BACKUP_WEEKLY=1` to force the weekly tier.
 
 ## Date ranges and charts
 
