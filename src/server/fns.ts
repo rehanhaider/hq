@@ -11,6 +11,7 @@ import {
   DEEN_CONTENT,
   calculateAdherence,
   dateString,
+  daysInCycleWindow,
   deenDayUpdateSchema,
   fajrOnTimeStreak,
   getCycleDay,
@@ -28,24 +29,25 @@ function deenSummary() {
   const today = getToday(settings.timezone);
   const days = deen.days();
   const cycleDay = getCycleDay(settings.cycle_start_date, today);
+  // Adherence divides by the cycle length, so it has to count only the days
+  // inside that cycle. `days` stays whole for the calendar and the day pager.
+  const windowed = daysInCycleWindow(days, settings.cycle_start_date, today);
+  const cycleDays = cycleDay !== null ? Math.min(cycleDay, 40) : windowed.length;
   return {
     settings,
     today,
     day: deen.day(today),
     days,
     cycleDay,
+    cycleDays,
     cycleComplete: isCycleComplete(cycleDay),
-    fajrStreak: fajrOnTimeStreak(days, today),
+    fajrStreak: fajrOnTimeStreak(windowed, today),
     adherence: calculateAdherence(
-      days,
-      cycleDay !== null ? Math.min(cycleDay, 40) : days.length,
+      windowed,
+      cycleDays,
       settings.istighfar_target,
     ),
-    overall: overallAdherence(
-      days,
-      cycleDay !== null ? Math.min(cycleDay, 40) : days.length,
-      settings.istighfar_target,
-    ),
+    overall: overallAdherence(windowed, cycleDays, settings.istighfar_target),
     content: DEEN_CONTENT,
   };
 }
