@@ -272,6 +272,47 @@ describe("backup", () => {
     expect(listed("deen", "weekly")).toHaveLength(2);
   });
 
+  it("fails when an explicitly configured database is missing", () => {
+    // Regression: a configured path that did not exist was silently dropped, so
+    // the other database was backed up, the run exited 0, and the timer would
+    // report healthy runs forever while an absent mount went unsnapshotted.
+    const absent = join(dir, "not-mounted", "deen.sqlite");
+    rmSync(join(dataDir(), "deen.sqlite"));
+
+    let failure;
+    try {
+      run({ HQ_DEEN_DATABASE: absent });
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toBeDefined();
+    expect(failure.status).toBe(1);
+    expect(String(failure.stderr)).toContain("HQ_DEEN_DATABASE");
+    expect(String(failure.stderr)).toContain(absent);
+    // The database that is present is still backed up.
+    expect(listed("activity", "daily")).toHaveLength(1);
+  });
+
+  it("does not fail when a default path simply does not exist yet", () => {
+    // Only an explicitly configured path is required; a default that has not
+    // been created yet is ordinary on a fresh install.
+    rmSync(join(dataDir(), "activity.sqlite"));
+    run();
+    expect(listed("deen", "daily")).toHaveLength(1);
+    expect(listed("activity", "daily")).toEqual([]);
+  });
+
+  it("leaves no residue when recovering a stale lock", () => {
+    // Stale recovery renames the lock away rather than stat-then-unlink, which
+    // cannot promise the inode removed is the one inspected.
+    mkdirSync(backupDir(), { recursive: true });
+    writeFileSync(join(backupDir(), ".lock"), JSON.stringify({ pid: 2147483647 }));
+    run();
+    expect(listed("deen", "daily")).toHaveLength(1);
+    const residue = readdirSync(backupDir()).filter((f) => f.startsWith(".lock"));
+    expect(residue).toEqual([]);
+  });
+
   it("fails loudly when there is nothing to back up", () => {
     rmSync(dataDir(), { recursive: true });
     expect(() => run()).toThrow();
