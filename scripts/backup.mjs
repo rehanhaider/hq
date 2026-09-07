@@ -14,16 +14,15 @@
 
 import { DatabaseSync } from "node:sqlite";
 import {
-  closeSync,
   existsSync,
+  linkSync,
   mkdirSync,
-  openSync,
   readFileSync,
   readdirSync,
-  rmSync,
   renameSync,
+  rmSync,
   statSync,
-  writeSync,
+  writeFileSync,
 } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -82,23 +81,58 @@ function heldBy(holder) {
 function acquireLock() {
   const path = join(backupDir, ".lock");
   mkdirSync(backupDir, { recursive: true });
-  for (let attempt = 0; attempt < 2; attempt++) {
+  const mine = JSON.stringify(self());
+  const staging = `${path}.${process.pid}`;
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    // Fill the file before it is visible under the lock name. Creating it with
+    // "wx" and writing afterwards leaves a window where a contender reads an
+    // empty file, fails to parse it, and concludes the lock is stale. link()
+    // publishes a complete file and fails with EEXIST if one already exists.
+    rmSync(staging, { force: true });
+    writeFileSync(staging, mine);
     try {
-      const fd = openSync(path, "wx");
-      writeSync(fd, JSON.stringify(self()));
-      closeSync(fd);
-      return () => rmSync(path, { force: true });
-    } catch (error) {
-      if (error.code !== "EEXIST") throw error;
-      let holder = null;
+      linkSync(staging, path);
+      rmSync(staging, { force: true });
+      // A contender that judged this lock stale a moment ago may still unlink
+      // it and put its own in place. Reading back what is actually there
+      // settles who owns it, and the loser backs off rather than running too.
       try {
-        holder = JSON.parse(readFileSync(path, "utf8"));
+        if (readFileSync(path, "utf8") !== mine) return null;
       } catch {
-        // Released between our open and this read, or written by an older
-        // version that stored a bare pid. Either way, re-derive and retry.
+        return null;
       }
-      if (heldBy(holder)) return null;
-      rmSync(path, { force: true });
+      return () => {
+        try {
+          if (readFileSync(path, "utf8") === mine) rmSync(path, { force: true });
+        } catch {
+          // Already gone, or taken over; either way not ours to remove.
+        }
+      };
+    } catch (error) {
+      rmSync(staging, { force: true });
+      if (error.code !== "EEXIST") throw error;
+    }
+
+    let holder = null;
+    let before;
+    try {
+      holder = JSON.parse(readFileSync(path, "utf8"));
+      before = statSync(path).ino;
+    } catch {
+      // Released between our link and this read, or written by an older
+      // version that stored a bare pid. Retry rather than assume.
+      continue;
+    }
+    if (heldBy(holder)) return null;
+
+    // Remove the stale lock only if it is still the same file we judged stale.
+    // Without the inode check, two processes recovering the same stale lock
+    // would each unlink whatever is there — including the other's fresh lock.
+    try {
+      if (statSync(path).ino === before) rmSync(path, { force: true });
+    } catch {
+      // Someone else cleared it first; loop round and try to claim it.
     }
   }
   return null;

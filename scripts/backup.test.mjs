@@ -174,6 +174,9 @@ describe("backup", () => {
     expect(existsSync(backupDir())).toBe(false);
   });
 
+  // The script reads these from /proc and falls back where it is absent, so the
+  // cases that forge a lock identity only make sense on Linux.
+  const onLinux = it.runIf(process.platform === "linux");
   const bootId = () =>
     readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
   const startTime = (pid) => {
@@ -185,7 +188,7 @@ describe("backup", () => {
     writeFileSync(join(backupDir(), ".lock"), JSON.stringify(holder));
   };
 
-  it("skips a run while another holds the lock", () => {
+  onLinux("skips a run while another holds the lock", () => {
     // Regression: overlapping runs both saw the weekly tier as due and burned
     // two of the four weekly slots on the same day.
     writeLock({
@@ -198,13 +201,13 @@ describe("backup", () => {
     expect(listed("deen", "daily")).toEqual([]);
   });
 
-  it("takes over a lock left behind by a dead run", () => {
+  onLinux("takes over a lock left behind by a dead run", () => {
     writeLock({ pid: 2147483647, boot: bootId(), start: "1" });
     run();
     expect(listed("deen", "daily")).toHaveLength(1);
   });
 
-  it("takes over a lock held from a previous boot", () => {
+  onLinux("takes over a lock held from a previous boot", () => {
     // Regression: the lock file outlives a reboot while pid allocation
     // restarts, so a live process inheriting the number looked like a running
     // backup forever and silently suppressed every run.
@@ -217,11 +220,25 @@ describe("backup", () => {
     expect(listed("deen", "daily")).toHaveLength(1);
   });
 
-  it("takes over a lock whose pid has been reused", () => {
+  onLinux("takes over a lock whose pid has been reused", () => {
     // Same pid, same boot, different process: the start time gives it away.
     writeLock({ pid: process.pid, boot: bootId(), start: "1" });
     run();
     expect(listed("deen", "daily")).toHaveLength(1);
+  });
+
+  it("does not let two runs recovering the same stale lock both proceed", () => {
+    // Regression: stale recovery unlinked whatever was at the lock path, so a
+    // second recoverer could delete the first's fresh lock and run alongside
+    // it. Claiming is now link-based and removal is inode-checked.
+    mkdirSync(backupDir(), { recursive: true });
+    writeFileSync(join(backupDir(), ".lock"), JSON.stringify({ pid: 2147483647 }));
+    const outputs = [run(), run()];
+    // Both recover the stale lock in turn; neither leaves the lock behind.
+    expect(existsSync(join(backupDir(), ".lock"))).toBe(false);
+    expect(readdirSync(backupDir()).filter((f) => f.startsWith(".lock."))).toEqual([]);
+    expect(outputs.every((o) => typeof o === "string")).toBe(true);
+    expect(listed("deen", "daily")).toHaveLength(2);
   });
 
   it("clears a partial snapshot left by a run that died mid-write", () => {
