@@ -13,7 +13,6 @@
 // neither prune nor suppress the backups of another.
 
 import { DatabaseSync } from "node:sqlite";
-import { createHash } from "node:crypto";
 import {
   closeSync,
   existsSync,
@@ -32,9 +31,6 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const backupDir = process.env.HQ_BACKUP_DIR ?? join(root, "backups");
 
 const KEEP = { daily: 7, weekly: 4 };
-
-const shortHash = (value) =>
-  createHash("sha1").update(value).digest("hex").slice(0, 8);
 
 /**
  * Serialises runs. Two processes — the timer and a manual invocation — would
@@ -114,25 +110,22 @@ function sources() {
     }
   }
 
-  // Two databases in different directories can share a basename, which would
-  // otherwise put both in one backup directory and let each prune the other.
-  const paths = [...found].sort();
-  const seen = new Map();
-  for (const path of paths) {
-    const base = basename(path, ".sqlite");
-    seen.set(base, (seen.get(base) ?? 0) + 1);
-  }
-
-  // A counter would number the duplicates by discovery order, so adding a
-  // database whose path sorts earlier would hand it the label of an existing
-  // one — its snapshots would land in that database's directory and prune the
-  // history there. Deriving the suffix from the directory instead makes a
-  // label depend only on the database's own path.
+  // A backup directory is named after its database, so two databases sharing a
+  // filename would share a directory and prune each other's history. Inventing
+  // a distinct name for them is guesswork, and the guessing is what produced
+  // silent data loss twice: a dropped database, and one stealing another's
+  // history. An ambiguous configuration is refused instead, loudly and before
+  // anything is written.
   const byLabel = new Map();
-  for (const path of paths) {
-    const base = basename(path, ".sqlite");
-    const label =
-      seen.get(base) === 1 ? base : `${base}-${shortHash(dirname(path))}`;
+  for (const path of [...found].sort()) {
+    const label = basename(path, ".sqlite");
+    const clash = byLabel.get(label);
+    if (clash) {
+      throw new Error(
+        `Two databases are both named "${label}":\n  ${clash}\n  ${path}\n` +
+          "Rename one, or move it out of the directories being scanned.",
+      );
+    }
     byLabel.set(label, path);
   }
   return byLabel;
@@ -238,7 +231,13 @@ function snapshot(sourcePath, label, tier, at) {
 }
 
 const now = new Date();
-const found = sources();
+let found;
+try {
+  found = sources();
+} catch (error) {
+  console.error(error.message);
+  process.exit(1);
+}
 
 if (!found.size) {
   console.error("No HQ databases found; nothing to back up.");
