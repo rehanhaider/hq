@@ -1,9 +1,37 @@
 import type { DeenDay } from "./schemas";
+import { cycleDatesForDay, shiftDate } from "./cycle";
 
 export interface AdherenceResult {
   percentage: number;
   completed: number;
   total: number;
+}
+
+/**
+ * Restricts days to the span the adherence denominator measures.
+ *
+ * Every percentage divides a count of days by `cycleDays`, so the two have to
+ * describe the same span. Counting all history against a denominator of
+ * `min(cycleDay, 40)` reads over 100% — a cycle started today scores its first
+ * day against every day ever logged.
+ *
+ * With a cycle set the span is that cycle, ending no later than today; without
+ * one it is the trailing 40 days, which is the longest span a cycle can cover.
+ */
+export function daysInCycleWindow(
+  days: DeenDay[],
+  cycleStartDate: string | null,
+  today: string,
+): DeenDay[] {
+  if (cycleStartDate) {
+    const dates = cycleDatesForDay(cycleStartDate);
+    const first = dates[0]!;
+    const last = dates[dates.length - 1]!;
+    const end = last > today ? today : last;
+    return days.filter((d) => d.date >= first && d.date <= end);
+  }
+  const first = shiftDate(today, -39);
+  return days.filter((d) => d.date >= first && d.date <= today);
 }
 
 export function calculateAdherence(

@@ -1,13 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { deenQuery } from "@/queries/deen";
-import {
-  calculateAdherence,
-  cycleDatesForDay,
-  fajrOnTimeStreak,
-  isCycleComplete,
-  overallAdherence,
-} from "@/lib/deen";
+import type { AdherenceResult } from "@/lib/deen";
+import { cycleDatesForDay } from "@/lib/deen";
 
 export const Route = createFileRoute("/deen/history")({
   loader: ({ context }) => context.queryClient.ensureQueryData(deenQuery),
@@ -25,13 +20,19 @@ function HistoryPage() {
   }
   const data = summary.data;
   if (!data) return null;
-  const { settings, today, days, cycleDay } = data;
-  const cycleComplete = isCycleComplete(cycleDay);
-  const target = settings.istighfar_target;
-  const cycleDays = cycleDay !== null ? Math.min(cycleDay, 40) : days.length;
-  const adherence = calculateAdherence(days, cycleDays, target);
-  const overall = overallAdherence(days, cycleDays, target);
-  const fajrStreak = fajrOnTimeStreak(days, today);
+  // Adherence, the streak and the cycle length come from the server so the
+  // window they are measured over is defined in exactly one place.
+  const {
+    settings,
+    today,
+    days,
+    cycleDay,
+    cycleDays,
+    cycleComplete,
+    adherence,
+    overall,
+    fajrStreak,
+  } = data;
   const calDates = settings.cycle_start_date
     ? cycleDatesForDay(settings.cycle_start_date)
     : [];
@@ -171,7 +172,7 @@ function Breakdown({
   adherence,
   items,
 }: {
-  adherence: ReturnType<typeof calculateAdherence>;
+  adherence: Record<string, AdherenceResult>;
   items: [string, string][];
 }) {
   return (

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { calculateAdherence, overallAdherence } from "./adherence";
+import {
+  calculateAdherence,
+  daysInCycleWindow,
+  overallAdherence,
+} from "./adherence";
 import { emptyDay } from "./schemas";
 import type { DeenDay } from "./schemas";
 
@@ -106,5 +110,49 @@ describe("overallAdherence", () => {
   });
   it("returns 0 for no cycle days", () => {
     expect(overallAdherence([], 0, 100).percentage).toBe(0);
+  });
+});
+
+describe("daysInCycleWindow", () => {
+  const logged = ["2026-08-27", "2026-08-28", "2026-09-06", "2026-09-07"].map(
+    (date) => makeDay(date, { fajr: "qada" }),
+  );
+
+  it("keeps a percentage at or below 100 when a cycle starts today", () => {
+    // Regression: counting all history against a denominator of one cycle day
+    // reported 1200% for twelve logged days.
+    const windowed = daysInCycleWindow(logged, "2026-09-08", "2026-09-08");
+    expect(windowed).toEqual([]);
+    const result = calculateAdherence(windowed, 1, 100);
+    expect(result.fajr!.percentage).toBe(0);
+    expect(overallAdherence(windowed, 1, 100).percentage).toBe(0);
+  });
+
+  it("counts only days inside the cycle", () => {
+    const windowed = daysInCycleWindow(logged, "2026-09-06", "2026-09-08");
+    expect(windowed.map((d) => d.date)).toEqual(["2026-09-06", "2026-09-07"]);
+    expect(calculateAdherence(windowed, 3, 100).fajr!.percentage).toBe(67);
+  });
+
+  it("stops at the fortieth day, not at today", () => {
+    const days = [makeDay("2026-08-27"), makeDay("2026-10-20")];
+    const windowed = daysInCycleWindow(days, "2026-08-27", "2026-12-01");
+    expect(windowed.map((d) => d.date)).toEqual(["2026-08-27"]);
+  });
+
+  it("excludes days before the cycle starts", () => {
+    const windowed = daysInCycleWindow(logged, "2026-09-01", "2026-09-08");
+    expect(windowed.map((d) => d.date)).toEqual(["2026-09-06", "2026-09-07"]);
+  });
+
+  it("is empty while the cycle is still in the future", () => {
+    expect(daysInCycleWindow(logged, "2026-10-01", "2026-09-08")).toEqual([]);
+  });
+
+  it("falls back to the trailing 40 days with no cycle set", () => {
+    const days = [makeDay("2026-07-01"), ...logged];
+    const windowed = daysInCycleWindow(days, null, "2026-09-08");
+    expect(windowed.map((d) => d.date)).not.toContain("2026-07-01");
+    expect(windowed).toHaveLength(4);
   });
 });
