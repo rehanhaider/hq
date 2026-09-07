@@ -115,10 +115,8 @@ function acquireLock() {
     }
 
     let holder = null;
-    let before;
     try {
       holder = JSON.parse(readFileSync(path, "utf8"));
-      before = statSync(path).ino;
     } catch {
       // Released between our link and this read, or written by an older
       // version that stored a bare pid. Retry rather than assume.
@@ -126,13 +124,18 @@ function acquireLock() {
     }
     if (heldBy(holder)) return null;
 
-    // Remove the stale lock only if it is still the same file we judged stale.
-    // Without the inode check, two processes recovering the same stale lock
-    // would each unlink whatever is there — including the other's fresh lock.
+    // Take the stale lock away by renaming it, which is atomic: of two
+    // processes recovering the same stale lock exactly one rename succeeds and
+    // the other gets ENOENT. A stat-then-unlink pair cannot promise that — the
+    // file can be replaced in between, and the unlink would then destroy a
+    // lock someone else had legitimately acquired.
     try {
-      if (statSync(path).ino === before) rmSync(path, { force: true });
-    } catch {
-      // Someone else cleared it first; loop round and try to claim it.
+      const taken = `${path}.stale.${process.pid}`;
+      renameSync(path, taken);
+      rmSync(taken, { force: true });
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+      // Another process cleared it first; loop round and contend for the claim.
     }
   }
   return null;
@@ -167,11 +170,24 @@ function calendarDay(ms) {
  */
 function sources() {
   const configured = [
-    resolve(process.env.HQ_DEEN_DATABASE ?? "data/deen.sqlite"),
-    resolve(process.env.HQ_DATABASE ?? "data/activity.sqlite"),
-  ];
-  const found = new Set(configured.filter((path) => existsSync(path)));
-  const dirs = new Set(configured.map((path) => dirname(path)));
+    { env: "HQ_DEEN_DATABASE", fallback: "data/deen.sqlite" },
+    { env: "HQ_DATABASE", fallback: "data/activity.sqlite" },
+  ].map(({ env, fallback }) => ({
+    env,
+    explicit: Boolean(process.env[env]),
+    path: resolve(process.env[env] ?? fallback),
+  }));
+
+  // A path named explicitly must exist. Skipping it would back up the other
+  // database, exit 0, and let the timer report healthy runs indefinitely while
+  // the named one — an absent external mount, say — was never snapshotted. A
+  // missing *default* is not an error: it just has not been created yet.
+  const missing = configured.filter((c) => c.explicit && !existsSync(c.path));
+
+  const found = new Set(
+    configured.filter((c) => existsSync(c.path)).map((c) => c.path),
+  );
+  const dirs = new Set(configured.map((c) => dirname(c.path)));
   if (process.env.HQ_BACKUP_DATA) dirs.add(resolve(process.env.HQ_BACKUP_DATA));
   for (const dir of dirs) {
     let entries;
@@ -203,7 +219,7 @@ function sources() {
     }
     byLabel.set(label, path);
   }
-  return byLabel;
+  return { byLabel, missing };
 }
 
 function stamp(date) {
@@ -320,16 +336,24 @@ function snapshot(sourcePath, label, tier, at) {
 }
 
 const now = new Date();
-let found;
+let byLabel;
+let missing;
 try {
-  found = sources();
+  ({ byLabel, missing } = sources());
 } catch (error) {
   console.error(error.message);
   process.exit(1);
 }
 
-if (!found.size) {
-  console.error("No HQ databases found; nothing to back up.");
+let failed = 0;
+// Reported before the lock, so a run that can do nothing else still says why.
+for (const { env, path } of missing) {
+  failed++;
+  console.error(`FAILED ${env}: ${path} does not exist`);
+}
+
+if (!byLabel.size) {
+  if (!failed) console.error("No HQ databases found; nothing to back up.");
   process.exit(1);
 }
 
@@ -340,9 +364,8 @@ if (!release) {
   process.exit(0);
 }
 
-let failed = 0;
 try {
-  for (const [label, path] of found) {
+  for (const [label, path] of byLabel) {
     const tiers = weeklyIsDue(label, now) ? ["daily", "weekly"] : ["daily"];
     console.log(`${label} <- ${path} (${tiers.join(", ")})`);
     for (const tier of tiers) {
