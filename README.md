@@ -49,12 +49,7 @@ GITHUB_TOKEN="$(gh auth token)" pnpm dev
 
 Open port 3000 on this machine from any device on the LAN. GitHub import still needs `GITHUB_TOKEN`. Nasr does not.
 
-To bring Nasr history across, copy the Pi database into place before the first HQ deen write, or point `NASR_DB_PATH` / `HQ_DEEN_IMPORT` at `nasr.db`. HQ copies days, notes, timezone, cycle start, and the istighfar target once. It leaves the PIN behind.
-
-```bash
-# From the Pi, after stopping Nasr:
-scp pi@<pi-ip>:/opt/nasr/data/nasr.db ./data/nasr.db
-```
+Nasr's history was imported into `data/deen.sqlite` on 8 September 2026 and the Nasr install has been removed; the `imported_from` setting records where it came from. The one-shot importer has been deleted along with it, so a database restored from a Nasr backup would need importing by hand.
 
 Override database paths with `HQ_DATABASE` (GitHub) and `HQ_DEEN_DATABASE` (deen). Both default under `data/`.
 
@@ -69,7 +64,7 @@ GITHUB_TOKEN="$(gh auth token)" pnpm start
 
 Development and production bind to `0.0.0.0:3000` so phones on the same network can open it. This is a house-network app with no application login. Do not put it on the public internet.
 
-On a Raspberry Pi, install from the lockfile, build, and run the same production command. Stop Nasr (`nasr.service`) once HQ is serving deen from the imported database.
+On a Raspberry Pi, install from the lockfile, build, and run the same production command.
 
 `deploy/` holds the systemd units the Pi runs. Copy them to `/etc/systemd/system/`, then `systemctl enable --now hq.service hq-backup.timer`. `hq.service` binds port 80 so the app answers at `hq.local`, and grants only `CAP_NET_BIND_SERVICE` so it still runs as the app user rather than root. Put `GITHUB_TOKEN` in `.env` beside the lockfile; the unit reads it through `EnvironmentFile`.
 
@@ -121,6 +116,6 @@ pnpm typecheck
 pnpm build
 ```
 
-Tests cover UTC date boundaries, attribution, merge exclusion, category rules, snapshot replacement, account isolation, pagination, commit reuse, failure preservation, deen cycle arithmetic, streaks, adherence, and Nasr database import.
+Tests cover UTC date boundaries, attribution, merge exclusion, category rules, snapshot replacement, account isolation, pagination, commit reuse, failure preservation, deen cycle arithmetic, streaks, adherence, and backup rotation.
 
 Server functions in `src/server/fns.ts` own the data boundary. Server-derived data belongs to Query. Shareable dates, repository, record type, page, and view belong to Router search parameters. Zustand owns the theme preference. Secrets and database imports stay on the server.

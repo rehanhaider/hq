@@ -96,19 +96,6 @@ function normalizeDay(row: DayRow): DeenDay {
   };
 }
 
-export function nasrImportCandidates(): string[] {
-  const env = [process.env.HQ_DEEN_IMPORT, process.env.NASR_DB_PATH].filter(
-    (value): value is string => Boolean(value),
-  );
-  return [
-    ...env,
-    resolve("data/nasr.db"),
-    resolve("../nasr/apps/web/data/nasr.db"),
-    "/opt/nasr/data/nasr.db",
-    "/home/rehan/nasr/apps/web/data/nasr.db",
-  ];
-}
-
 export class DeenStore {
   readonly db: DatabaseSync;
   readonly path: string;
@@ -117,7 +104,6 @@ export class DeenStore {
     if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
     this.db = new DatabaseSync(path);
     this.db.exec(schema);
-    if (path !== ":memory:") this.maybeImportFromNasr();
   }
   setting(key: string): string | null {
     const row = this.db
@@ -291,83 +277,6 @@ export class DeenStore {
       );
     }
     return { backup_path: backupPath, deleted };
-  }
-  maybeImportFromNasr() {
-    if (this.setting("imported_from")) return;
-    for (const candidate of nasrImportCandidates()) {
-      if (!existsSync(candidate)) continue;
-      if (this.importNasr(candidate)) return;
-    }
-  }
-  importNasr(path: string): boolean {
-    let source: DatabaseSync | undefined;
-    try {
-      source = new DatabaseSync(path, { readOnly: true });
-      const tables = source
-        .prepare("SELECT name FROM sqlite_master WHERE type='table'")
-        .all() as { name: string }[];
-      const names = new Set(tables.map((row) => row.name));
-      if (!names.has("deen_days")) return false;
-      const days = source.prepare("SELECT * FROM deen_days").all() as DayRow[];
-      const insert = this.db.prepare(
-        `INSERT OR IGNORE INTO deen_days (
-          date, fajr, dhuhr, asr, maghrib, isha,
-          morning_adhkar, evening_adhkar, night_ayat_kursi, night_baqarah,
-          night_three_suras, ruqyah, istighfar_count, note
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      );
-      for (const row of days) {
-        const day = normalizeDay(row);
-        insert.run(
-          day.date,
-          day.fajr,
-          day.dhuhr,
-          day.asr,
-          day.maghrib,
-          day.isha,
-          day.morning_adhkar ? 1 : 0,
-          day.evening_adhkar ? 1 : 0,
-          day.night_ayat_kursi ? 1 : 0,
-          day.night_baqarah ? 1 : 0,
-          day.night_three_suras ? 1 : 0,
-          day.ruqyah ? 1 : 0,
-          day.istighfar_count,
-          day.note,
-        );
-      }
-      if (names.has("observations")) {
-        const rows = source
-          .prepare("SELECT * FROM observations")
-          .all() as Observation[];
-        const insertObs = this.db.prepare(
-          "INSERT OR IGNORE INTO observations VALUES (?, ?, ?)",
-        );
-        for (const row of rows) {
-          if (!row.id) continue;
-          insertObs.run(row.id, row.timestamp, row.text);
-        }
-      }
-      if (names.has("settings")) {
-        const rows = source
-          .prepare("SELECT key, value FROM settings")
-          .all() as { key: string; value: string | null }[];
-        for (const row of rows) {
-          if (
-            row.key === "timezone" ||
-            row.key === "cycle_start_date" ||
-            row.key === "istighfar_target"
-          ) {
-            this.setSetting(row.key, row.value);
-          }
-        }
-      }
-      this.setSetting("imported_from", path);
-      return true;
-    } catch {
-      return false;
-    } finally {
-      source?.close();
-    }
   }
   close() {
     this.db.close();
