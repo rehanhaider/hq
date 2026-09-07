@@ -9,5 +9,9 @@ Type=oneshot
 User=rehan
 Group=rehan
 WorkingDirectory=/home/rehan/Apps/hq
+# Must match hq.service. The script backs up the paths HQ_DEEN_DATABASE and
+# HQ_DATABASE point at, so without the same environment it would snapshot the
+# defaults while the live databases went untouched — and still report success.
+EnvironmentFile=-/home/rehan/Apps/hq/.env
 # VACUUM INTO reads through a live WAL, so the app keeps serving during this.
 ExecStart=/usr/bin/node /home/rehan/Apps/hq/scripts/backup.mjs
