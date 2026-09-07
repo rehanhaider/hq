@@ -1,6 +1,13 @@
 import { execFileSync } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -144,9 +151,12 @@ describe("backup", () => {
     makeDb(b, "two");
     rmSync(join(dataDir(), "deen.sqlite"));
     run({ HQ_DEEN_DATABASE: a, HQ_BACKUP_DATA: join(dir, "two") });
-    expect(listed("deen", "daily")).toHaveLength(1);
-    expect(listed("deen-2", "daily")).toHaveLength(1);
-    const tables = ["deen", "deen-2"].map((label) => {
+
+    // Colliding basenames are disambiguated by directory, so both survive.
+    const labels = readdirSync(backupDir()).filter((d) => d.startsWith("deen-"));
+    expect(labels).toHaveLength(2);
+    const tables = labels.map((label) => {
+      expect(listed(label, "daily")).toHaveLength(1);
       const db = new DatabaseSync(
         join(backupDir(), label, "daily", listed(label, "daily")[0]),
         { readOnly: true },
@@ -156,6 +166,67 @@ describe("backup", () => {
       return t;
     });
     expect(tables.sort()).toEqual(["one", "two"]);
+  });
+
+  it("does not hand an existing label to a database discovered later", () => {
+    // Regression: labels were numbered by discovery order, so adding a
+    // same-basename database that sorts earlier stole the existing label — its
+    // snapshots landed in the other database's directory and pruned its copies.
+    const kept = join(dir, "zzz", "deen.sqlite");
+    makeDb(kept, "kept");
+    rmSync(join(dataDir(), "deen.sqlite"));
+    run({ HQ_DEEN_DATABASE: kept });
+    expect(listed("deen", "daily")).toHaveLength(1);
+
+    // A newcomer sorting before it must not take over backups/deen.
+    const newcomer = join(dir, "aaa", "deen.sqlite");
+    makeDb(newcomer, "newcomer");
+    run({ HQ_DEEN_DATABASE: kept, HQ_BACKUP_DATA: join(dir, "aaa") });
+    expect(listed("deen", "daily")).toHaveLength(1);
+
+    const dirs = readdirSync(backupDir()).filter((d) => d.startsWith("deen"));
+    expect(dirs).toHaveLength(3); // deen, plus one hashed label per collision
+    for (const label of dirs.filter((d) => d !== "deen")) {
+      expect(listed(label, "daily")).toHaveLength(1);
+    }
+
+    // Labels are a function of path, so a repeat run reuses the same ones.
+    run({ HQ_DEEN_DATABASE: kept, HQ_BACKUP_DATA: join(dir, "aaa") });
+    expect(readdirSync(backupDir()).filter((d) => d.startsWith("deen")).sort())
+      .toEqual(dirs.sort());
+  });
+
+  it("skips a run while another holds the lock", () => {
+    // Regression: overlapping runs both saw the weekly tier as due and burned
+    // two of the four weekly slots on the same day.
+    mkdirSync(backupDir(), { recursive: true });
+    writeFileSync(join(backupDir(), ".lock"), String(process.pid));
+    const out = run();
+    expect(out).toContain("Another backup run is in progress");
+    expect(listed("deen", "daily")).toEqual([]);
+  });
+
+  it("takes over a lock left behind by a dead run", () => {
+    mkdirSync(backupDir(), { recursive: true });
+    writeFileSync(join(backupDir(), ".lock"), "2147483647");
+    run();
+    expect(listed("deen", "daily")).toHaveLength(1);
+  });
+
+  it("takes the weekly copy on the seventh day despite timer jitter", () => {
+    // Regression: a strict 168-hour threshold plus RandomizedDelaySec=300 meant
+    // a run seven days after a late one fell minutes short, giving 8-day gaps.
+    run();
+    expect(listed("deen", "weekly")).toHaveLength(1);
+    const weekly = join(backupDir(), "deen", "weekly", listed("deen", "weekly")[0]);
+    const midnight = new Date();
+    midnight.setHours(0, 0, 0, 0);
+    // Last minute of the day seven calendar days ago: always under 168 hours.
+    const when = new Date(midnight.getTime() - 7 * 86_400_000 + 86_340_000);
+    expect(Date.now() - when.getTime()).toBeLessThan(7 * 86_400_000);
+    utimesSync(weekly, when, when);
+    run();
+    expect(listed("deen", "weekly")).toHaveLength(2);
   });
 
   it("fails loudly when there is nothing to back up", () => {
