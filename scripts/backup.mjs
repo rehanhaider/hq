@@ -21,6 +21,7 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  renameSync,
   statSync,
   writeSync,
 } from "node:fs";
@@ -33,11 +34,50 @@ const backupDir = process.env.HQ_BACKUP_DIR ?? join(root, "backups");
 const KEEP = { daily: 7, weekly: 4 };
 
 /**
+ * Identity of a lock holder. A bare pid is not enough: the lock file outlives a
+ * reboot while pid allocation restarts, so a long-lived process inheriting the
+ * number would look alive forever and silently suppress every backup while the
+ * unit still reported success. The boot id catches the reboot case and the
+ * process start time catches reuse within one boot.
+ */
+function self() {
+  return { pid: process.pid, boot: bootId(), start: startTime(process.pid) };
+}
+
+function bootId() {
+  try {
+    return readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
+  } catch {
+    return null; // not Linux; fall back to the pid check alone
+  }
+}
+
+function startTime(pid) {
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+    // Skip past the comm field, which may itself contain spaces and brackets.
+    return stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function heldBy(holder) {
+  if (!holder?.pid) return false;
+  const boot = bootId();
+  if (holder.boot && boot && holder.boot !== boot) return false; // earlier boot
+  if (!alive(holder.pid)) return false;
+  const start = startTime(holder.pid);
+  if (holder.start && start && holder.start !== start) return false; // pid reused
+  return true;
+}
+
+/**
  * Serialises runs. Two processes — the timer and a manual invocation — would
  * otherwise both find the weekly tier due, both write a snapshot, and burn two
  * of the four weekly slots on the same day; their prunes would race too.
- * Returns null when another live run holds the lock. A lock left behind by a
- * killed run is detected by its pid and taken over.
+ * Returns null when another live run holds the lock; a lock left behind by a
+ * killed run, or by a previous boot, is taken over.
  */
 function acquireLock() {
   const path = join(backupDir, ".lock");
@@ -45,18 +85,19 @@ function acquireLock() {
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const fd = openSync(path, "wx");
-      writeSync(fd, String(process.pid));
+      writeSync(fd, JSON.stringify(self()));
       closeSync(fd);
       return () => rmSync(path, { force: true });
     } catch (error) {
       if (error.code !== "EEXIST") throw error;
-      let holder = 0;
+      let holder = null;
       try {
-        holder = Number(readFileSync(path, "utf8").trim());
+        holder = JSON.parse(readFileSync(path, "utf8"));
       } catch {
-        // The holder released it between our open and this read; retry.
+        // Released between our open and this read, or written by an older
+        // version that stored a bare pid. Either way, re-derive and retry.
       }
-      if (holder && alive(holder)) return null;
+      if (heldBy(holder)) return null;
       rmSync(path, { force: true });
     }
   }
@@ -194,19 +235,31 @@ function snapshot(sourcePath, label, tier, at) {
   }
   const target = join(dir, `${label}-${name}.sqlite`);
 
+  // Write under a name nothing counts, and only take the .sqlite name once the
+  // copy has been verified. A kill or a power cut mid-VACUUM would otherwise
+  // leave a partial file already wearing the real extension: retention would
+  // count it, and its mtime would read as a successful weekly snapshot and
+  // suppress the next one. The rename is atomic within the directory, so a
+  // .sqlite here is always a file that passed validation.
+  const staged = `${target}.tmp`;
+  // Runs are serialised by the lock, so any .tmp already here is a leftover
+  // from a run that died mid-write. Nothing counts it, but nothing would ever
+  // remove it either.
+  for (const file of readdirSync(dir)) {
+    if (file.endsWith(".sqlite.tmp")) rmSync(join(dir, file), { force: true });
+  }
+
   const db = new DatabaseSync(sourcePath, { readOnly: true });
   try {
-    db.prepare("VACUUM INTO ?").run(target);
+    db.prepare("VACUUM INTO ?").run(staged);
   } finally {
     db.close();
   }
 
-  // A backup nobody has opened is a guess, not a backup. Verify before pruning
-  // anything, so a corrupt write can never displace a good copy — and delete a
-  // failed snapshot, or it would count towards retention and, in the weekly
-  // tier, suppress the next week's attempt.
+  // A backup nobody has opened is a guess, not a backup. Verify before the
+  // rename, so only a file that passed validation ever takes the .sqlite name.
   try {
-    const check = new DatabaseSync(target, { readOnly: true });
+    const check = new DatabaseSync(staged, { readOnly: true });
     try {
       const verdict = check.prepare("PRAGMA integrity_check").get()
         ?.integrity_check;
@@ -219,9 +272,11 @@ function snapshot(sourcePath, label, tier, at) {
       check.close();
     }
   } catch (error) {
-    rmSync(target, { force: true });
+    rmSync(staged, { force: true });
     throw error;
   }
+
+  renameSync(staged, target);
 
   const size = statSync(target).size;
   console.log(
