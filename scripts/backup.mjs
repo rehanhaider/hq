@@ -13,12 +13,17 @@
 // neither prune nor suppress the backups of another.
 
 import { DatabaseSync } from "node:sqlite";
+import { createHash } from "node:crypto";
 import {
+  closeSync,
   existsSync,
   mkdirSync,
+  openSync,
+  readFileSync,
   readdirSync,
   rmSync,
   statSync,
+  writeSync,
 } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -27,7 +32,55 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const backupDir = process.env.HQ_BACKUP_DIR ?? join(root, "backups");
 
 const KEEP = { daily: 7, weekly: 4 };
-const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+const shortHash = (value) =>
+  createHash("sha1").update(value).digest("hex").slice(0, 8);
+
+/**
+ * Serialises runs. Two processes — the timer and a manual invocation — would
+ * otherwise both find the weekly tier due, both write a snapshot, and burn two
+ * of the four weekly slots on the same day; their prunes would race too.
+ * Returns null when another live run holds the lock. A lock left behind by a
+ * killed run is detected by its pid and taken over.
+ */
+function acquireLock() {
+  const path = join(backupDir, ".lock");
+  mkdirSync(backupDir, { recursive: true });
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const fd = openSync(path, "wx");
+      writeSync(fd, String(process.pid));
+      closeSync(fd);
+      return () => rmSync(path, { force: true });
+    } catch (error) {
+      if (error.code !== "EEXIST") throw error;
+      let holder = 0;
+      try {
+        holder = Number(readFileSync(path, "utf8").trim());
+      } catch {
+        // The holder released it between our open and this read; retry.
+      }
+      if (holder && alive(holder)) return null;
+      rmSync(path, { force: true });
+    }
+  }
+  return null;
+}
+
+function alive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error.code === "EPERM"; // running, just not ours to signal
+  }
+}
+
+// Whole days since the epoch, in local time, matching how stamp() names files.
+function calendarDay(ms) {
+  const d = new Date(ms);
+  return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86_400_000);
+}
 
 /**
  * Resolves the databases the app actually opens.
@@ -63,14 +116,23 @@ function sources() {
 
   // Two databases in different directories can share a basename, which would
   // otherwise put both in one backup directory and let each prune the other.
-  const byLabel = new Map();
-  for (const path of [...found].sort()) {
-    // The base has to stay fixed while the suffix advances. Growing the label
-    // itself walks away from the names actually in use, so the loop exits on a
-    // free name like "foo-2-3" and then overwrites whatever holds "foo-2".
+  const paths = [...found].sort();
+  const seen = new Map();
+  for (const path of paths) {
     const base = basename(path, ".sqlite");
-    let label = base;
-    for (let n = 2; byLabel.has(label); n++) label = `${base}-${n}`;
+    seen.set(base, (seen.get(base) ?? 0) + 1);
+  }
+
+  // A counter would number the duplicates by discovery order, so adding a
+  // database whose path sorts earlier would hand it the label of an existing
+  // one — its snapshots would land in that database's directory and prune the
+  // history there. Deriving the suffix from the directory instead makes a
+  // label depend only on the database's own path.
+  const byLabel = new Map();
+  for (const path of paths) {
+    const base = basename(path, ".sqlite");
+    const label =
+      seen.get(base) === 1 ? base : `${base}-${shortHash(dirname(path))}`;
     byLabel.set(label, path);
   }
   return byLabel;
@@ -119,7 +181,11 @@ function weeklyIsDue(label, now) {
   for (const file of snapshots(label, "weekly")) {
     newest = Math.max(newest, statSync(join(dir, file)).mtimeMs);
   }
-  return now.getTime() - newest >= WEEK_MS;
+  if (!newest) return true;
+  // Calendar days, not a strict 168 hours: the timer adds up to five minutes of
+  // jitter, so the run seven days after a late one can land minutes short of the
+  // hour threshold and push the weekly copy out to an eight-day interval.
+  return calendarDay(now.getTime()) - calendarDay(newest) >= 7;
 }
 
 function snapshot(sourcePath, label, tier, at) {
@@ -179,18 +245,29 @@ if (!found.size) {
   process.exit(1);
 }
 
+const release = acquireLock();
+if (!release) {
+  // Not a failure: the run that holds the lock is doing the same work.
+  console.log("Another backup run is in progress; skipping.");
+  process.exit(0);
+}
+
 let failed = 0;
-for (const [label, path] of found) {
-  const tiers = weeklyIsDue(label, now) ? ["daily", "weekly"] : ["daily"];
-  console.log(`${label} <- ${path} (${tiers.join(", ")})`);
-  for (const tier of tiers) {
-    try {
-      snapshot(path, label, tier, now);
-    } catch (error) {
-      failed++;
-      console.error(`  FAILED ${label}/${tier}: ${error.message}`);
+try {
+  for (const [label, path] of found) {
+    const tiers = weeklyIsDue(label, now) ? ["daily", "weekly"] : ["daily"];
+    console.log(`${label} <- ${path} (${tiers.join(", ")})`);
+    for (const tier of tiers) {
+      try {
+        snapshot(path, label, tier, now);
+      } catch (error) {
+        failed++;
+        console.error(`  FAILED ${label}/${tier}: ${error.message}`);
+      }
     }
   }
+} finally {
+  release();
 }
 
 process.exit(failed ? 1 : 0);
