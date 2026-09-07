@@ -5,6 +5,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readdirSync,
+  readFileSync,
   rmSync,
   utimesSync,
   writeFileSync,
@@ -19,9 +20,12 @@ let dir;
 
 const dataDir = () => join(dir, "data");
 const backupDir = () => join(dir, "backups");
+// Only finished snapshots: a staged .tmp is deliberately not one.
 const listed = (label, tier) => {
   try {
-    return readdirSync(join(backupDir(), label, tier)).sort();
+    return readdirSync(join(backupDir(), label, tier))
+      .filter((f) => f.endsWith(".sqlite"))
+      .sort();
   } catch {
     return [];
   }
@@ -170,21 +174,69 @@ describe("backup", () => {
     expect(existsSync(backupDir())).toBe(false);
   });
 
+  const bootId = () =>
+    readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
+  const startTime = (pid) => {
+    const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+    return stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19];
+  };
+  const writeLock = (holder) => {
+    mkdirSync(backupDir(), { recursive: true });
+    writeFileSync(join(backupDir(), ".lock"), JSON.stringify(holder));
+  };
+
   it("skips a run while another holds the lock", () => {
     // Regression: overlapping runs both saw the weekly tier as due and burned
     // two of the four weekly slots on the same day.
-    mkdirSync(backupDir(), { recursive: true });
-    writeFileSync(join(backupDir(), ".lock"), String(process.pid));
+    writeLock({
+      pid: process.pid,
+      boot: bootId(),
+      start: startTime(process.pid),
+    });
     const out = run();
     expect(out).toContain("Another backup run is in progress");
     expect(listed("deen", "daily")).toEqual([]);
   });
 
   it("takes over a lock left behind by a dead run", () => {
-    mkdirSync(backupDir(), { recursive: true });
-    writeFileSync(join(backupDir(), ".lock"), "2147483647");
+    writeLock({ pid: 2147483647, boot: bootId(), start: "1" });
     run();
     expect(listed("deen", "daily")).toHaveLength(1);
+  });
+
+  it("takes over a lock held from a previous boot", () => {
+    // Regression: the lock file outlives a reboot while pid allocation
+    // restarts, so a live process inheriting the number looked like a running
+    // backup forever and silently suppressed every run.
+    writeLock({
+      pid: process.pid,
+      boot: "00000000-0000-0000-0000-000000000000",
+      start: startTime(process.pid),
+    });
+    run();
+    expect(listed("deen", "daily")).toHaveLength(1);
+  });
+
+  it("takes over a lock whose pid has been reused", () => {
+    // Same pid, same boot, different process: the start time gives it away.
+    writeLock({ pid: process.pid, boot: bootId(), start: "1" });
+    run();
+    expect(listed("deen", "daily")).toHaveLength(1);
+  });
+
+  it("clears a partial snapshot left by a run that died mid-write", () => {
+    // Regression: a kill or power cut during VACUUM INTO left a partial file
+    // already named .sqlite, which counted towards retention and whose mtime
+    // read as a successful weekly snapshot. Snapshots are now staged as .tmp
+    // and renamed only after validation.
+    run();
+    const weeklyDir = join(backupDir(), "deen", "weekly");
+    const partial = join(weeklyDir, "deen-20260101-000000.sqlite.tmp");
+    writeFileSync(partial, "");
+    expect(listed("deen", "weekly")).toHaveLength(1); // .tmp is not counted
+    run({ HQ_BACKUP_WEEKLY: "1" });
+    expect(existsSync(partial)).toBe(false); // and it is swept away
+    expect(listed("deen", "weekly")).toHaveLength(2);
   });
 
   it("takes the weekly copy on the seventh day despite timer jitter", () => {
