@@ -1,0 +1,289 @@
+import { useEffect, useState, type ReactNode } from "react";
+import { createFileRoute } from "@tanstack/react-router";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { exportDeen, resetDeen, updateDeenSettings } from "@/server/fns";
+import { deenKeys, deenSettingsQuery } from "@/queries/deen";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+
+export const Route = createFileRoute("/deen/settings")({
+  loader: ({ context }) =>
+    context.queryClient.ensureQueryData(deenSettingsQuery),
+  component: SettingsPage,
+});
+
+function SettingsPage() {
+  const queryClient = useQueryClient();
+  const settings = useQuery(deenSettingsQuery);
+  const [timezone, setTimezone] = useState("");
+  const [cycleStart, setCycleStart] = useState("");
+  const [target, setTarget] = useState("100");
+  useEffect(() => {
+    if (!settings.data) return;
+    setTimezone(settings.data.timezone);
+    setCycleStart(settings.data.cycle_start_date ?? "");
+    setTarget(String(settings.data.istighfar_target));
+  }, [settings.data]);
+  const save = useMutation({
+    mutationFn: updateDeenSettings,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: deenKeys.all });
+      await queryClient.invalidateQueries({ queryKey: deenKeys.home });
+    },
+  });
+  const download = useMutation({
+    mutationFn: exportDeen,
+    onSuccess: (file) => {
+      const blob = new Blob([file.body], {
+        type: file.format === "csv" ? "text/csv" : "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = file.format === "csv" ? "nasr.csv" : "nasr.json";
+      link.click();
+      URL.revokeObjectURL(url);
+    },
+  });
+
+  if (settings.isPending) {
+    return (
+      <p className="py-16 text-center text-sm text-muted-foreground">
+        Loading…
+      </p>
+    );
+  }
+
+  return (
+    <div className="max-w-3xl space-y-8">
+      <header>
+        <h1 className="text-xl font-semibold tracking-tight">Settings</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Targets, dates, and the clock everything is measured against.
+        </p>
+      </header>
+      <form
+        className="space-y-6"
+        onSubmit={(event) => {
+          event.preventDefault();
+          save.mutate({
+            data: {
+              timezone,
+              cycle_start_date: cycleStart || null,
+              istighfar_target: Number(target),
+            },
+          });
+        }}
+      >
+        <div className="panel divide-y">
+          <Row label="Timezone" hint="e.g. Asia/Kolkata, America/New_York">
+            <Input
+              value={timezone}
+              onChange={(event) => setTimezone(event.target.value)}
+            />
+          </Row>
+          <Row label="40-day cycle start">
+            <Input
+              type="date"
+              value={cycleStart}
+              onChange={(event) => setCycleStart(event.target.value)}
+            />
+          </Row>
+          <Row label="Istighfar daily target">
+            <Input
+              type="number"
+              min="1"
+              className="font-mono"
+              value={target}
+              onChange={(event) => setTarget(event.target.value)}
+            />
+          </Row>
+        </div>
+        <div className="flex items-center gap-3">
+          <Button type="submit" disabled={save.isPending}>
+            {save.isPending ? "Saving…" : "Save settings"}
+          </Button>
+          {save.isSuccess && (
+            <span className="text-xs text-positive">Saved.</span>
+          )}
+        </div>
+      </form>
+      <section className="space-y-3">
+        <h2 className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+          Data
+        </h2>
+        <div className="panel divide-y">
+          <button
+            type="button"
+            className="flex w-full items-center justify-between px-4 py-4 text-left"
+            onClick={() => download.mutate({ data: { format: "json" } })}
+          >
+            <span>
+              <span className="block text-sm font-medium">
+                Full JSON export
+              </span>
+              <span className="block text-xs text-muted-foreground">
+                Practice history and settings
+              </span>
+            </span>
+            <span className="font-mono text-xs text-muted-foreground">
+              json
+            </span>
+          </button>
+          <button
+            type="button"
+            className="flex w-full items-center justify-between px-4 py-4 text-left"
+            onClick={() => download.mutate({ data: { format: "csv" } })}
+          >
+            <span>
+              <span className="block text-sm font-medium">Daily practices</span>
+              <span className="block text-xs text-muted-foreground">
+                Salah, adhkar and istighfar records
+              </span>
+            </span>
+            <span className="font-mono text-xs text-muted-foreground">csv</span>
+          </button>
+        </div>
+      </section>
+      <ResetSection
+        onDone={async () => {
+          await queryClient.invalidateQueries({ queryKey: deenKeys.all });
+          await queryClient.invalidateQueries({ queryKey: deenKeys.home });
+        }}
+      />
+    </div>
+  );
+}
+
+function ResetSection({ onDone }: { onDone: () => Promise<void> }) {
+  const reset = useMutation({
+    mutationFn: () => resetDeen({ data: { confirm: "RESET" } }),
+    onSuccess: () => {
+      void onDone();
+    },
+  });
+  const [confirming, setConfirming] = useState(false);
+  const [typed, setTyped] = useState("");
+  if (reset.isSuccess) {
+    const cleared = Object.entries(reset.data.deleted).filter(([, n]) => n > 0);
+    return (
+      <section className="space-y-3">
+        <h2 className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+          Danger zone
+        </h2>
+        <div className="panel space-y-3 px-4 py-3.5">
+          <p className="text-sm font-medium">Reset complete.</p>
+          <p className="text-xs text-muted-foreground">
+            {cleared.length === 0
+              ? "There was nothing logged to delete."
+              : cleared
+                  .map(([table, n]) => `${table.replace(/_/g, " ")}: ${n}`)
+                  .join(" · ")}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Backup written to{" "}
+            <code className="font-mono">{reset.data.backup_path}</code>.
+          </p>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setConfirming(false);
+              setTyped("");
+              reset.reset();
+            }}
+          >
+            Done
+          </Button>
+        </div>
+      </section>
+    );
+  }
+  return (
+    <section className="space-y-3">
+      <h2 className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+        Danger zone
+      </h2>
+      <div className="panel space-y-3 px-4 py-3.5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <span>
+            <span className="block text-sm font-medium">Reset all data</span>
+            <span className="block text-xs text-muted-foreground">
+              Deletes all practice history. Settings stay.
+            </span>
+          </span>
+          {!confirming && (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setConfirming(true)}
+            >
+              Reset…
+            </Button>
+          )}
+        </div>
+        {confirming && (
+          <div className="space-y-3 border-t pt-3">
+            <p className="text-xs text-muted-foreground">
+              A backup is written first. Type RESET to confirm.
+            </p>
+            <Input
+              value={typed}
+              spellCheck={false}
+              autoComplete="off"
+              placeholder="RESET"
+              className="font-mono"
+              onChange={(event) => setTyped(event.target.value)}
+            />
+            {reset.isError && (
+              <p className="text-xs text-negative">
+                Reset failed. Nothing was deleted.
+              </p>
+            )}
+            <div className="flex gap-2">
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={typed !== "RESET" || reset.isPending}
+                onClick={() => reset.mutate()}
+              >
+                {reset.isPending ? "Resetting…" : "Delete everything"}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={reset.isPending}
+                onClick={() => {
+                  setConfirming(false);
+                  setTyped("");
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function Row({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="grid gap-2 px-4 py-4 sm:grid-cols-[1fr_260px] sm:items-center sm:gap-6">
+      <div>
+        <p className="text-sm font-medium">{label}</p>
+        {hint && <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>}
+      </div>
+      {children}
+    </div>
+  );
+}

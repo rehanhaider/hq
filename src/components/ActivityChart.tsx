@@ -6,7 +6,6 @@ import type { Filters } from "@/lib/model";
 const labels = {
   commits: "Commits",
   prs: "Your PRs merged",
-  mergedPrs: "PRs merged by you",
   lines: "Line changes",
 };
 export function ActivityChart({
@@ -43,7 +42,7 @@ export function ActivityChart({
   return (
     <section className="panel min-w-0 p-5" aria-label="Activity over time">
       <h2 className="font-semibold">Activity over time</h2>
-      <div className="my-3 flex flex-wrap items-start justify-between gap-3">
+      <div className="my-3 flex flex-wrap items-center gap-3">
         <div
           role="group"
           aria-label="Chart metric"
@@ -79,12 +78,6 @@ export function ActivityChart({
           ))}
         </div>
       </div>
-      <p className="text-xs text-muted-foreground">
-        {chart === "daily"
-          ? "Daily totals in UTC. Today may be partial."
-          : "Running total of imported activity within the selected dates."}{" "}
-        Line changes count additions + deletions.
-      </p>
       <div className="overflow-x-auto">
         <svg
           viewBox="0 0 900 220"
@@ -189,8 +182,8 @@ export function ActivityChart({
         className="mt-2 min-h-8 text-xs text-muted-foreground"
       >
         {selected
-          ? `${selected.day}: ${values[active!] === null ? "Not imported" : `${values[active!]!.toLocaleString()} ${labels[metric]}`} · ${selected.coverage} coverage`
-          : "Select a day to see its records. Gaps mean history has not been imported; faded bars indicate partial coverage."}
+          ? `${selected.day}: ${values[active!] === null ? "Not imported" : `${values[active!]!.toLocaleString()} ${labels[metric]}`}`
+          : ""}
       </p>
     </section>
   );

@@ -7,14 +7,19 @@ import { Label } from "@/components/ui/label";
 import { connectionQuery, repositoriesQuery } from "@/queries/dashboard";
 import { beginImport } from "@/server/fns";
 import { daysAgo, importSchema } from "@/lib/model";
+import { utcDay, utcStamp } from "@/lib/activity";
 
 export function ImportPanel({
   defaultSince,
+  savedFrom,
+  lastFetched,
   imported,
   busy,
   onClose,
 }: {
   defaultSince: string;
+  savedFrom?: string;
+  lastFetched?: string;
   imported: string[];
   busy: boolean;
   onClose: () => void;
@@ -62,11 +67,12 @@ export function ImportPanel({
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 id="import-heading" className="font-semibold">
-            Import your activity
+            {imported.length ? "Add repositories" : "Import your activity"}
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Select repositories and a start date. Your token stays on the
-            server.
+            {imported.length
+              ? "Pick more repositories. Already stored history stays put."
+              : "Select repositories and how far back to store. Your token stays on the server."}
           </p>
         </div>
         <Button
@@ -224,7 +230,9 @@ export function ImportPanel({
               </div>
             </div>
             <div>
-              <Label htmlFor="import-since">Import from</Label>
+              <Label htmlFor="import-since">
+                {imported.length ? "Older history from" : "Start of history"}
+              </Label>
               <Input
                 id="import-since"
                 type="date"
@@ -233,11 +241,19 @@ export function ImportPanel({
                 value={since}
                 onChange={(e) => setSince(e.target.value)}
               />
-              <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-                Each selected repository is refreshed from this date through the
-                import start time. Its previous date range is replaced only
-                after a successful import.
-              </p>
+              {savedFrom && lastFetched ? (
+                <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+                  You already have {utcDay(savedFrom)} through now. Last
+                  fetched {utcStamp(lastFetched)} UTC. The 1W–1Y chart range is
+                  a view, not this date. Change this only to reach before{" "}
+                  {utcDay(savedFrom)}, or when adding a repository.
+                </p>
+              ) : (
+                <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+                  HQ stores commits from this day through today, then keeps
+                  them current. The chart range is a separate view.
+                </p>
+              )}
               <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
                 Large histories can take several minutes. Keep the app server
                 running; you can close this panel.

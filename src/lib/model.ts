@@ -16,15 +16,30 @@ export function daysAgo(days: number) {
 export const searchSchema = z.object({
   from: daySchema.catch(() => monthsBefore(daysAgo(0), 3)),
   to: daySchema.catch(() => daysAgo(0)),
-  repo: z.string().catch("all"),
-  view: z.enum(["overview", "projects", "history"]).catch("overview"),
+  repo: z.union([z.string(), z.array(z.string())]).catch("all"),
+  view: z
+    .enum(["overview", "projects", "history", "connections"])
+    .catch("overview"),
   kind: z.enum(["all", "commit", "pr"]).catch("all"),
-  metric: z.enum(["commits", "prs", "mergedPrs", "lines"]).catch("commits"),
+  metric: z.enum(["commits", "prs", "lines"]).catch("commits"),
   languages: z.enum(["pie", "table"]).catch("pie"),
   chart: z.enum(["daily", "cumulative"]).catch("daily"),
   page: z.coerce.number().int().min(1).catch(1),
 });
 export type Filters = z.infer<typeof searchSchema>;
+export function defaultFilters(): Filters {
+  return {
+    from: monthsBefore(daysAgo(0), 3),
+    to: daysAgo(0),
+    repo: "all",
+    view: "overview",
+    kind: "all",
+    metric: "commits",
+    languages: "pie",
+    chart: "daily",
+    page: 1,
+  };
+}
 export const importSchema = z
   .object({
     repositories: z
@@ -102,4 +117,11 @@ export type Dataset = {
   login: string | null;
   snapshots: Snapshot[];
   status: ImportStatus;
+};
+export type RepoSync = {
+  fullName: string;
+  state: "idle" | "syncing" | "ok" | "error";
+  error: string | null;
+  lastSuccessAt: string | null;
+  lastAttemptAt: string | null;
 };

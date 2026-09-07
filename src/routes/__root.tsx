@@ -1,11 +1,11 @@
 import {
   createRootRouteWithContext,
   HeadContent,
-  Outlet,
   Scripts,
 } from "@tanstack/react-router";
 import type { QueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { Shell } from "@/components/Shell";
 import appCss from "../styles/app.css?url";
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   {
@@ -13,7 +13,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       meta: [
         { charSet: "utf-8" },
         { name: "viewport", content: "width=device-width, initial-scale=1" },
-        { title: "HQ · GitHub activity" },
+        { title: "HQ" },
       ],
       links: [
         { rel: "stylesheet", href: appCss },
@@ -34,17 +34,17 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
           <HeadContent />
         </head>
         <body>
-          <Outlet />
+          <Shell />
           <Scripts />
         </body>
       </html>
     ),
     errorComponent: ({ error, reset }) => (
       <main className="mx-auto max-w-xl p-8">
-        <h1 className="text-xl font-semibold">The dashboard could not load</h1>
+        <h1 className="text-xl font-semibold">HQ could not load</h1>
         <p className="my-4 text-muted-foreground">{error.message}</p>
         <Button variant="outline" onClick={reset}>
-          Reload dashboard
+          Reload
         </Button>
       </main>
     ),
@@ -52,7 +52,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       <main className="p-8">
         <h1>Page not found</h1>
         <a href="/" className="underline">
-          Back to activity
+          Back to HQ
         </a>
       </main>
     ),

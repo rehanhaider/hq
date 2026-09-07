@@ -1,11 +1,11 @@
 {
-  "name": "github-hq",
+  "name": "hq",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite dev --host 127.0.0.1 --port 3000",
+    "dev": "vite dev --host 0.0.0.0 --port 3000",
     "build": "vite build",
-    "start": "srvx serve --prod --dir . --entry dist/server/server.js --static dist/client --host 127.0.0.1 --port 3000",
+    "start": "srvx serve --prod --dir . --entry dist/server/server.js --static dist/client --host 0.0.0.0 --port 3000",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
@@ -21,6 +21,7 @@
     "@tanstack/react-router": "1.170.32",
     "@tanstack/react-router-ssr-query": "1.167.2",
     "@tanstack/react-start": "1.168.49",
+    "@tanstack/react-table": "^9.2.4",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "cn": "0.2.6",

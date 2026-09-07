@@ -1,11 +1,11 @@
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import type { Dataset, ImportStatus, Snapshot } from "../lib/model";
+import type { Dataset, ImportStatus, RepoSync, Snapshot } from "../lib/model";
 
 export const idleStatus: ImportStatus = {
   state: "idle",
-  message: "Choose repositories to import your activity.",
+  message: "Add repositories in Projects.",
   completed: 0,
   total: 0,
   startedAt: null,
@@ -20,7 +20,7 @@ export class ActivityStore {
       "PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS snapshots (repo TEXT PRIMARY KEY, payload TEXT NOT NULL);",
     );
     const status = this.read<ImportStatus>("status");
-    if (status?.state === "running")
+    if (status?.state === "running") {
       this.setStatus({
         ...status,
         state: "error",
@@ -28,6 +28,31 @@ export class ActivityStore {
           "The app stopped during import. Completed repositories are saved. Run the import again to finish.",
         finishedAt: new Date().toISOString(),
       });
+      const sync = this.sync();
+      for (const row of Object.values(sync)) {
+        if (row.state === "syncing")
+          this.setSync(row.fullName, {
+            state: "error",
+            error: "The app stopped while fetching this repository.",
+            lastAttemptAt: new Date().toISOString(),
+          });
+      }
+    }
+  }
+  sync(): Record<string, RepoSync> {
+    return this.read<Record<string, RepoSync>>("sync") ?? {};
+  }
+  setSync(repo: string, patch: Partial<RepoSync>) {
+    const all = this.sync();
+    const previous = all[repo] ?? {
+      fullName: repo,
+      state: "idle" as const,
+      error: null,
+      lastSuccessAt: null,
+      lastAttemptAt: null,
+    };
+    all[repo] = { ...previous, ...patch, fullName: repo };
+    this.write("sync", all);
   }
   read<T>(key: string): T | null {
     const row = this.db
@@ -65,6 +90,12 @@ export class ActivityStore {
       .prepare("SELECT payload FROM snapshots WHERE repo = ?")
       .get(repo) as { payload: string } | undefined;
     return row ? (JSON.parse(row.payload) as Snapshot) : null;
+  }
+  remove(repo: string) {
+    this.db.prepare("DELETE FROM snapshots WHERE repo = ?").run(repo);
+    const all = this.sync();
+    delete all[repo];
+    this.write("sync", all);
   }
   dataset(): Dataset {
     const rows = this.db

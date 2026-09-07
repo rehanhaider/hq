@@ -16,6 +16,23 @@ export function monthsBefore(to: string, months: number) {
   date.setUTCDate(Math.min(last, end.getUTCDate()));
   return date.toISOString().slice(0, 10);
 }
+export function utcDay(iso: string) {
+  const value = iso.includes("T") ? iso : `${iso}T00:00:00.000Z`;
+  return new Date(value).toLocaleDateString("en-GB", {
+    timeZone: "UTC",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+export function utcStamp(iso: string) {
+  const value = iso.includes("T") ? iso : `${iso}T00:00:00.000Z`;
+  return new Date(value).toLocaleString("en-GB", {
+    timeZone: "UTC",
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
 export function dailyActivity(
   daily: ReturnType<typeof summarize>["daily"],
   from: string,
@@ -46,7 +63,6 @@ export function dailyActivity(
       coverage: complete ? "complete" : overlap ? "partial" : "none",
       commits: record?.commits ?? 0,
       prs: record?.prs ?? 0,
-      mergedPrs: record?.mergedPrs ?? 0,
       lines: (record?.additions ?? 0) + (record?.deletions ?? 0),
     });
   }

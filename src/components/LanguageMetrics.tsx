@@ -1,5 +1,43 @@
 import { Button } from "@/components/ui/button";
-import type { summarize } from "@/lib/metrics";
+import { groupLanguages, type summarize } from "@/lib/metrics";
+
+function share(part: number, total: number) {
+  return total ? (part / total) * 100 : 0;
+}
+
+function shareLabel(part: number, total: number) {
+  return `${share(part, total).toFixed(1)}%`;
+}
+
+function sliceColor(index: number, rest: boolean) {
+  if (rest) return "var(--chart-6)";
+  return `var(--chart-${(index % 5) + 1})`;
+}
+
+function ShareBar({
+  pct,
+  color,
+  className,
+}: {
+  pct: number;
+  color?: string;
+  className?: string;
+}) {
+  return (
+    <div
+      className={`h-2 w-full min-w-0 rounded-full bg-foreground/12 ${className ?? ""}`}
+    >
+      <div
+        className="h-full rounded-full bg-primary/70"
+        style={{
+          width: `${Math.min(100, Math.max(0, pct))}%`,
+          ...(color ? { background: color } : {}),
+        }}
+      />
+    </div>
+  );
+}
+
 export function LanguageMetrics({
   data,
   mode,
@@ -13,31 +51,19 @@ export function LanguageMetrics({
     (n, r) => n + r.additions + r.deletions,
     0,
   );
-  const positive = data.languages.filter((r) => r.additions + r.deletions > 0);
-  const slices = positive
-    .slice(0, 5)
-    .map((r) => ({
-      name: r.name,
-      additions: r.additions,
-      deletions: r.deletions,
-    }));
-  if (positive.length > 5)
-    slices.push({
-      name: `Remaining ${positive.length - 5} file types`,
-      additions: positive.slice(5).reduce((n, r) => n + r.additions, 0),
-      deletions: positive.slice(5).reduce((n, r) => n + r.deletions, 0),
-    });
+  const slices = groupLanguages(data.languages);
+  const leftover = slices.some((row) => row.remaining) ? 1 : 0;
   let offset = 0;
   const gradient = slices
     .map((r, i) => {
       const start = offset;
-      offset += ((r.additions + r.deletions) / total) * 100;
-      return `var(--chart-${i + 1}) ${start}% ${offset}%`;
+      offset += share(r.additions + r.deletions, total);
+      return `${sliceColor(i, leftover > 0 && i === slices.length - 1)} ${start}% ${offset}%`;
     })
     .join(", ");
   return (
     <section className="panel min-w-0 p-5" aria-label="Language metrics">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <h2 className="font-semibold">Languages</h2>
         <div
           role="group"
@@ -57,71 +83,58 @@ export function LanguageMetrics({
           ))}
         </div>
       </div>
-      <p className="mt-1 text-xs text-muted-foreground">
-        Share of lines added + deleted. Includes documentation, configuration,
-        and lockfiles.
-      </p>
-      {(data.breakdown.Unclassified.additions > 0 ||
-        data.breakdown.Unclassified.deletions > 0) && (
-        <p className="mt-3 text-xs text-muted-foreground">
-          Unclassified lines preserve GitHub commit totals where file details
-          are incomplete or inconsistent. Their language and category are
-          unknown.
-        </p>
-      )}
-      {data.missingLanguageCommits > 0 && (
-        <p role="status" className="mt-3 text-sm">
-          Refresh imports to collect language details for{" "}
-          {data.missingLanguageCommits} commits. These commits are excluded from
-          this view.
-        </p>
-      )}
       {mode === "pie" ? (
         total > 0 ? (
-          <div className="mt-6 grid items-center gap-8 md:grid-cols-[minmax(180px,280px)_minmax(0,1fr)]">
+          <div className="mt-6 grid items-center gap-6 lg:grid-cols-[18rem_minmax(0,1fr)] lg:gap-10">
             <div
-              className="relative mx-auto aspect-square w-full max-w-64 rounded-full"
+              className="relative mx-auto aspect-square w-full max-w-64 rounded-full sm:max-w-72"
               style={{ background: `conic-gradient(${gradient})` }}
               role="img"
-              aria-label={`Language distribution: ${slices.map((r) => `${r.name} ${(((r.additions + r.deletions) / total) * 100).toFixed(1)}%`).join(", ")}`}
+              aria-label={`Language distribution: ${slices.map((r) => `${r.name} ${shareLabel(r.additions + r.deletions, total)}`).join(", ")}`}
             >
               <div className="absolute inset-[22%] flex flex-col items-center justify-center rounded-full bg-card text-center">
-                <span className="font-mono text-xl font-medium">
+                <span className="font-mono text-2xl font-medium tabular-nums">
                   {total.toLocaleString("en-US")}
                 </span>
-                <span className="mt-1 text-[11px] text-muted-foreground">
+                <span className="mt-1 text-xs text-muted-foreground">
                   lines changed
                 </span>
               </div>
             </div>
-            <div>
-              <ul className="space-y-4" aria-label="Language chart legend">
-                {slices.map((r, i) => (
-                  <li key={r.name} className="flex items-center gap-3">
-                    <span
-                      className="size-2.5 shrink-0 rounded-full"
-                      style={{ background: `var(--chart-${i + 1})` }}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <span className="text-sm">{r.name}</span>
-                      <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">
+            <div className="min-w-0 flex-1">
+              <ul className="space-y-3" aria-label="Language chart legend">
+                {slices.map((r, i) => {
+                  const pct = share(r.additions + r.deletions, total);
+                  const color = sliceColor(
+                    i,
+                    leftover > 0 && i === slices.length - 1,
+                  );
+                  return (
+                    <li
+                      key={r.name}
+                      className="grid grid-cols-[0.625rem_minmax(0,1fr)_3.25rem] sm:grid-cols-[0.625rem_minmax(6rem,1fr)_3.25rem_minmax(4rem,1fr)] items-start gap-x-3"
+                    >
+                      <span
+                        className="mt-1.5 size-2.5 rounded-full"
+                        style={{ background: color }}
+                      />
+                      <span className="min-w-0 break-words text-sm">{r.name}</span>
+                      <span className="pt-px text-right font-mono text-sm tabular-nums">
+                        {pct.toFixed(1)}%
+                      </span>
+                      <ShareBar
+                        className="mt-1.5 hidden sm:block"
+                        pct={pct}
+                        color={color}
+                      />
+                      <span className="col-start-2 font-mono text-xs text-muted-foreground">
                         +{r.additions.toLocaleString("en-US")} / −
                         {r.deletions.toLocaleString("en-US")}
-                      </div>
-                    </div>
-                    <span className="font-mono text-sm">
-                      {(((r.additions + r.deletions) / total) * 100).toFixed(1)}
-                      %
-                    </span>
-                  </li>
-                ))}
+                      </span>
+                    </li>
+                  );
+                })}
               </ul>
-              {positive.length > 5 && (
-                <p className="mt-5 text-xs text-muted-foreground">
-                  Top five file types shown individually. Open Table for the
-                  full breakdown.
-                </p>
-              )}
             </div>
           </div>
         ) : (
@@ -131,46 +144,46 @@ export function LanguageMetrics({
         )
       ) : data.languages.length ? (
         <div className="mt-4 overflow-x-auto">
-          <p className="mb-3 text-xs text-muted-foreground">
-            A commit touching multiple languages counts once in each.
-          </p>
           <table className="w-full text-left text-sm">
             <thead className="text-xs text-muted-foreground">
               <tr>
-                {[
-                  "Language / file type",
-                  "Added",
-                  "Deleted",
-                  "Commits",
-                  "Projects",
-                  "Share of changes",
-                ].map((t) => (
-                  <th key={t} className="whitespace-nowrap p-2">
-                    {t}
-                  </th>
-                ))}
+                <th className="py-2 pr-4 font-normal">Language / file type</th>
+                <th className="w-full py-2 pr-4 font-normal">Share</th>
+                <th className="py-2 pr-4 text-right font-normal">Added</th>
+                <th className="py-2 pr-4 text-right font-normal">Deleted</th>
+                <th className="py-2 pr-4 text-right font-normal">Commits</th>
+                <th className="py-2 text-right font-normal">Repositories</th>
               </tr>
             </thead>
             <tbody>
-              {data.languages.map((r) => (
-                <tr key={r.name} className="border-t">
-                  <td className="p-2">{r.name}</td>
-                  <td className="p-2 font-mono text-positive">
-                    +{r.additions.toLocaleString()}
-                  </td>
-                  <td className="p-2 font-mono text-negative">
-                    −{r.deletions.toLocaleString()}
-                  </td>
-                  <td className="p-2 font-mono">{r.commits}</td>
-                  <td className="p-2 font-mono">{r.projects}</td>
-                  <td className="p-2 font-mono">
-                    {total
-                      ? (((r.additions + r.deletions) / total) * 100).toFixed(1)
-                      : "0"}
-                    %
-                  </td>
-                </tr>
-              ))}
+              {slices.map((r) => {
+                const pct = share(r.additions + r.deletions, total);
+                return (
+                  <tr key={r.name} className="border-t">
+                    <td className="whitespace-nowrap py-2.5 pr-4">{r.name}</td>
+                    <td className="py-2.5 pr-4">
+                      <div className="flex items-center gap-3">
+                        <ShareBar pct={pct} />
+                        <span className="w-12 shrink-0 text-right font-mono tabular-nums">
+                          {pct.toFixed(1)}%
+                        </span>
+                      </div>
+                    </td>
+                    <td className="w-[1%] whitespace-nowrap py-2.5 pr-4 text-right font-mono tabular-nums text-positive">
+                      +{r.additions.toLocaleString()}
+                    </td>
+                    <td className="w-[1%] whitespace-nowrap py-2.5 pr-4 text-right font-mono tabular-nums text-negative">
+                      −{r.deletions.toLocaleString()}
+                    </td>
+                    <td className="w-[1%] whitespace-nowrap py-2.5 pr-4 text-right font-mono tabular-nums">
+                      {r.commits ?? "—"}
+                    </td>
+                    <td className="w-[1%] whitespace-nowrap py-2.5 text-right font-mono tabular-nums">
+                      {r.projects ?? "—"}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

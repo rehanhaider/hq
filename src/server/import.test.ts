@@ -1,7 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ActivityStore } from "./db";
 import { GithubClient } from "./github";
-import { importRepository } from "./import";
+import {
+  importRepository,
+  importWindowStart,
+  mergeSnapshot,
+  refreshIntervalMs,
+  refreshSince,
+} from "./import";
+import type { Commit, PullRequest, Snapshot } from "../lib/model";
 
 let store: ActivityStore;
 afterEach(() => {
@@ -89,6 +96,32 @@ describe("repository import", () => {
       () => {},
     );
     expect(result.prs).toHaveLength(1);
+  });
+  it("excludes other authors even when the account merged their PR", async () => {
+    const { client } = fixture();
+    const response = await client.pulls(repo.fullName, null);
+    vi.mocked(client.pulls).mockResolvedValue({
+      ...response,
+      nodes: [
+        ...response.nodes,
+        {
+          ...response.nodes[0]!,
+          number: 2,
+          author: { login: "other" },
+          mergedBy: { login: "me" },
+        },
+      ],
+    });
+    const result = await importRepository(
+      client,
+      store,
+      repo.fullName,
+      "me",
+      since,
+      until,
+      () => {},
+    );
+    expect(result.prs.map((pr) => pr.number)).toEqual([1]);
   });
   it("pins pagination, reads all file pages, and retains PR authorship separately", async () => {
     const { client, request } = fixture();
@@ -317,5 +350,114 @@ describe("GitHub response handling", () => {
       "GitHub request limit reached",
     );
     expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+});
+
+function commit(sha: string, date: string): Commit {
+  return {
+    sha,
+    title: sha,
+    url: `https://github.com/me/app/commit/${sha}`,
+    date,
+    merge: false,
+    additions: 1,
+    deletions: 0,
+    categories: { Code: { additions: 1, deletions: 0 } },
+  };
+}
+
+function pr(number: number): PullRequest {
+  return {
+    number,
+    title: `PR ${number}`,
+    url: `https://github.com/me/app/pull/${number}`,
+    author: "me",
+    mergedBy: "me",
+    createdAt: "2026-08-01T00:00:00.000Z",
+    mergedAt: "2026-08-02T00:00:00.000Z",
+    additions: 10,
+    deletions: 1,
+  };
+}
+
+describe("delta refresh", () => {
+  const previous: Snapshot = {
+    repo,
+    commits: [commit("old", "2026-01-02T00:00:00.000Z")],
+    prs: [pr(1)],
+    since: "2026-01-01T00:00:00.000Z",
+    until: "2026-08-01T00:00:00.000Z",
+    importedAt: "2026-08-01T00:00:00.000Z",
+  };
+
+  it("keeps earlier history when a refresh only returns recent work", () => {
+    const incoming: Snapshot = {
+      ...previous,
+      commits: [commit("new", "2026-09-06T00:00:00.000Z")],
+      prs: [pr(2)],
+      since: "2026-09-05T00:00:00.000Z",
+      until: "2026-09-07T12:00:00.000Z",
+      importedAt: "2026-09-07T12:00:00.000Z",
+    };
+    const merged = mergeSnapshot(previous, incoming);
+    expect(merged.commits.map((item) => item.sha)).toEqual(["old", "new"]);
+    expect(merged.prs.map((item) => item.number)).toEqual([1, 2]);
+    expect(merged.since).toBe(previous.since);
+    expect(merged.until).toBe(incoming.until);
+    expect(merged.importedAt).toBe(incoming.importedAt);
+  });
+
+  it("lets the newer snapshot win for the same commit or pull request", () => {
+    const incoming: Snapshot = {
+      ...previous,
+      commits: [
+        { ...commit("old", "2026-01-02T00:00:00.000Z"), title: "Updated" },
+      ],
+      prs: [{ ...pr(1), title: "Renamed" }],
+      until: "2026-09-07T12:00:00.000Z",
+    };
+    const merged = mergeSnapshot(previous, incoming);
+    expect(merged.commits).toHaveLength(1);
+    expect(merged.commits[0]?.title).toBe("Updated");
+    expect(merged.prs[0]?.title).toBe("Renamed");
+  });
+
+  it("asks GitHub for two days of overlap unless the snapshot is younger", () => {
+    const now = new Date("2026-09-07T12:00:00.000Z");
+    expect(refreshSince("2020-01-01T00:00:00.000Z", now)).toBe(
+      "2026-09-05T12:00:00.000Z",
+    );
+    expect(refreshSince("2026-09-06T18:00:00.000Z", now)).toBe(
+      "2026-09-06T18:00:00.000Z",
+    );
+  });
+
+  it("uses the requested date only for a first import or an earlier backfill", () => {
+    const now = new Date("2026-09-07T12:00:00.000Z");
+    const stored = "2026-06-09T00:00:00.000Z";
+    expect(
+      importWindowStart("manual", undefined, "2025-01-01T00:00:00.000Z", now),
+    ).toBe("2025-01-01T00:00:00.000Z");
+    expect(
+      importWindowStart("manual", stored, "2026-06-09T00:00:00.000Z", now),
+    ).toBe("2026-09-05T12:00:00.000Z");
+    expect(
+      importWindowStart("manual", stored, "2025-01-01T00:00:00.000Z", now),
+    ).toBe("2025-01-01T00:00:00.000Z");
+    expect(
+      importWindowStart("refresh", stored, "1970-01-01T00:00:00.000Z", now),
+    ).toBe("2026-09-05T12:00:00.000Z");
+  });
+
+  it("treats an empty HQ_REFRESH_MS as fifteen minutes and 0 as off", () => {
+    const previousMs = process.env.HQ_REFRESH_MS;
+    delete process.env.HQ_REFRESH_MS;
+    expect(refreshIntervalMs()).toBe(15 * 60 * 1000);
+    process.env.HQ_REFRESH_MS = "0";
+    expect(refreshIntervalMs()).toBe(0);
+    process.env.HQ_REFRESH_MS = "120000";
+    expect(refreshIntervalMs()).toBe(120000);
+    if (previousMs === undefined) delete process.env.HQ_REFRESH_MS;
+    else process.env.HQ_REFRESH_MS = previousMs;
   });
 });

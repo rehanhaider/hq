@@ -39,4 +39,32 @@ describe("SQLite storage", () => {
     expect(() => store.assertAccount("another")).toThrow("belongs to @ME");
     expect(store.dataset().login).toBe("ME");
   });
+  it("records per-repository sync state", () => {
+    store = new ActivityStore(":memory:");
+    store.setSync("me/app", { state: "ok", lastSuccessAt: snapshot.importedAt });
+    expect(store.sync()["me/app"]?.state).toBe("ok");
+    store.setSync("me/app", {
+      state: "error",
+      error: "unavailable",
+      lastAttemptAt: "2026-09-07T13:00:00.000Z",
+    });
+    expect(store.sync()["me/app"]).toMatchObject({
+      state: "error",
+      error: "unavailable",
+      lastSuccessAt: snapshot.importedAt,
+    });
+  });
+  it("removes a repository snapshot and its sync record", () => {
+    store = new ActivityStore(":memory:");
+    store.save(snapshot);
+    store.save({
+      ...snapshot,
+      repo: { ...snapshot.repo, id: 2, fullName: "me/other" },
+    });
+    store.setSync("me/app", { state: "ok" });
+    store.remove("me/app");
+    expect(store.snapshot("me/app")).toBeNull();
+    expect(store.sync()["me/app"]).toBeUndefined();
+    expect(store.snapshot("me/other")).toBeTruthy();
+  });
 });

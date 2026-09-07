@@ -1,9 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Link } from "@tanstack/react-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
-  Activity,
-  ArrowDownToLine,
   ArrowRight,
   ArrowUpRight,
   BookOpen,
@@ -15,63 +13,47 @@ import {
   FolderGit2,
   GitCommitHorizontal,
   GitMerge,
-  History,
-  LayoutDashboard,
-  LockKeyhole,
-  Moon,
   Plus,
   RefreshCw,
-  Sun,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { Route } from "@/routes/index";
-import { Button } from "@/components/ui/button";
+import { Route } from "@/routes/github";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { LanguageMetrics } from "./LanguageMetrics";
 import { ActivityFilters } from "./ActivityFilters";
 import { ActivityChart } from "./ActivityChart";
-import { ImportPanel } from "./ImportPanel";
+import { Connections } from "./Connections";
 import { dashboardQuery, statusQuery } from "@/queries/dashboard";
-import { useUI } from "@/store/ui";
 import { categories } from "@/lib/model";
+import { utcDay, utcStamp } from "@/lib/activity";
+import { cn } from "@/lib/utils";
 import type { Filters } from "@/lib/model";
 import type { getDashboard } from "@/server/fns";
 
 type Data = Awaited<ReturnType<typeof getDashboard>>;
 const number = (n: number) => n.toLocaleString("en-US");
-const nav: { view: Filters["view"]; title: string; icon: LucideIcon }[] = [
-  { view: "overview", title: "Overview", icon: LayoutDashboard },
-  { view: "projects", title: "Projects", icon: FolderGit2 },
-  { view: "history", title: "Activity history", icon: History },
-];
-
 export function Dashboard() {
   const filters = Route.useSearch();
   const navigate = Route.useNavigate();
-  const queryClient = useQueryClient();
-  const dashboard = useQuery(dashboardQuery(filters));
+  const dashboard = useQuery({
+    ...dashboardQuery(filters),
+    enabled: filters.view !== "connections" && filters.view !== "projects",
+  });
   const status = useQuery(statusQuery);
   const data = dashboard.data;
-  const [showImport, setShowImport] = useState(
-    () => !data?.repositories.length,
-  );
-  const ui = useUI();
   useEffect(() => {
-    ui.hydrate();
-  }, [ui.hydrate]);
-  useEffect(() => {
-    if (status.data)
-      void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-  }, [
-    status.data?.state,
-    status.data?.completed,
-    status.data?.finishedAt,
-    queryClient,
-  ]);
+    if (filters.view !== "connections") return;
+    void navigate({
+      search: (previous) => ({ ...previous, view: "projects" }),
+      replace: true,
+    });
+  }, [filters.view, navigate]);
   const setFilters = (patch: Partial<Filters>) => {
     void navigate({
       search: (previous) => ({ ...previous, page: 1, ...patch }),
+      resetScroll: false,
     });
   };
   const importing = status.data?.state === "running";
@@ -79,171 +61,77 @@ export function Dashboard() {
   const title =
     filters.view === "overview"
       ? "Activity overview"
-      : filters.view === "projects"
-        ? "Your projects"
+      : filters.view === "projects" || filters.view === "connections"
+        ? "Repositories"
         : "Activity history";
-  const lastImported = data?.projects
-    .map((p) => p.importedAt)
-    .sort()
-    .at(-1);
 
   return (
-    <div className="min-h-dvh lg:grid lg:grid-cols-[216px_minmax(0,1fr)]">
-      <a
-        href="#main"
-        className="sr-only fixed left-4 top-4 z-50 rounded-lg bg-primary px-4 py-2 text-primary-foreground focus:not-sr-only"
-      >
-        Skip to content
-      </a>
-      <aside className="border-b bg-sidebar lg:sticky lg:top-0 lg:flex lg:h-dvh lg:flex-col lg:border-r lg:border-b-0">
-        <div className="flex h-16 items-center gap-3 px-5">
-          <span className="flex size-8 items-center justify-center rounded-lg bg-primary font-mono text-xs font-bold text-primary-foreground">
-            hq
-          </span>
-          <span className="font-semibold tracking-tight">GitHub activity</span>
-        </div>
-        <div className="hidden px-5 pb-3 pt-5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground lg:block">
-          Workspace
-        </div>
-        <nav
-          aria-label="Main navigation"
-          className="flex gap-1 overflow-x-auto px-3 pb-3 lg:flex-col"
-        >
-          {nav.map((item) => (
-            <Link
-              key={item.view}
-              to="/"
-              search={{ ...filters, view: item.view, page: 1 }}
-              aria-current={filters.view === item.view ? "page" : undefined}
-              className={`flex min-h-9 shrink-0 items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${filters.view === item.view ? "bg-sidebar-accent font-medium text-foreground" : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground"}`}
-            >
-              <item.icon className="size-4" />
-              {item.title}
-              {filters.view === item.view && (
-                <span className="ml-auto hidden size-1.5 rounded-full bg-primary lg:block" />
-              )}
-            </Link>
-          ))}
-        </nav>
-        <div className="mx-5 mt-auto hidden border-t py-5 lg:block">
-          <div className="flex items-center gap-2.5">
-            <span className="flex size-8 items-center justify-center rounded-full border bg-background font-mono text-xs">
-              {data?.login?.slice(0, 2).toUpperCase() ?? "GH"}
+    <div className="space-y-5">
+      <nav aria-label="GitHub views" className="section-tabs">
+        {[
+          { view: "overview" as const, label: "Overview" },
+          { view: "history" as const, label: "Activity history" },
+          { view: "projects" as const, label: "Repositories" },
+        ].map(({ view, label }) => (
+          <Link
+            key={view}
+            to="/github"
+            search={{ ...filters, view, page: 1 }}
+            aria-current={
+              filters.view === view ||
+              (view === "projects" && filters.view === "connections")
+                ? "page"
+                : undefined
+            }
+            className="section-tab"
+          >
+            {label}
+          </Link>
+        ))}
+      </nav>
+      {status.data &&
+        status.data.state !== "idle" &&
+        status.data.state !== "complete" && (
+          <div
+            className={`flex flex-wrap items-center gap-3 rounded-lg border px-4 py-3 text-xs ${status.data.state === "error" ? "border-negative/30 bg-negative/5" : "bg-card"}`}
+            role={status.data.state === "error" ? "alert" : "status"}
+          >
+            {importing ? (
+              <RefreshCw className="size-3.5 shrink-0 animate-spin text-primary" />
+            ) : status.data.state === "error" ? (
+              <CircleAlert className="size-4 shrink-0 text-negative" />
+            ) : (
+              <Check className="size-4 shrink-0 text-positive" />
+            )}
+            <span className="min-w-0 flex-1 break-words">
+              {status.data.message}
             </span>
-            <div className="min-w-0">
-              <p className="truncate text-xs font-medium">
-                {data?.login ? `@${data.login}` : "Your workspace"}
-              </p>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">
-                Personal activity
-              </p>
-            </div>
-          </div>
-          <p className="mt-4 flex items-center gap-2 text-[10px] text-muted-foreground">
-            <LockKeyhole className="size-3" />
-            Stored on this device
-          </p>
-        </div>
-      </aside>
-      <div className="min-w-0">
-        <header className="flex h-12 items-center justify-between border-b px-4 sm:px-6">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span>Workspace</span>
-            <span className="text-border">/</span>
-            <span className="text-foreground">
-              {nav.find((n) => n.view === filters.view)?.title}
+            <span className="font-mono text-muted-foreground">
+              {status.data.completed}/{status.data.total}
             </span>
+            {importing && (
+              <Progress
+                aria-label="Repositories imported"
+                value={
+                  status.data.total
+                    ? (status.data.completed / status.data.total) * 100
+                    : 0
+                }
+                className="w-24"
+              />
+            )}
           </div>
-          <div className="flex items-center gap-3">
-            <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-              <span className="size-1.5 rounded-full bg-positive" />
-              Local
-            </span>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label={
-                ui.theme === "dark"
-                  ? "Switch to light theme"
-                  : "Switch to dark theme"
-              }
-              onClick={ui.toggleTheme}
-            >
-              {ui.theme === "dark" ? <Sun /> : <Moon />}
-            </Button>
-          </div>
-        </header>
-        <main
-          id="main"
-          className="mx-auto max-w-[1440px] space-y-5 px-4 py-6 sm:px-6 lg:py-7"
-        >
+        )}
+
+      {filters.view === "connections" || filters.view === "projects" ? (
+        <Connections importing={importing} />
+      ) : (
+        <>
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <div className="mb-2 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-                <Activity className="size-3" />
-                GitHub / Personal analytics
-              </div>
               <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
-              <p className="mt-1.5 text-sm text-muted-foreground">
-                {filters.view === "overview"
-                  ? "Commits, code changes, and the work you shipped."
-                  : filters.view === "projects"
-                    ? "See where your work is happening across repositories."
-                    : "Trace every total back to the original work."}
-              </p>
             </div>
-            <Button
-              size="lg"
-              variant={hasData ? "ghost" : "default"}
-              onClick={() => setShowImport(!showImport)}
-              aria-expanded={showImport}
-            >
-              <ArrowDownToLine />
-              {importing ? "Import settings" : "Import activity"}
-            </Button>
           </div>
-
-          {showImport && (
-            <ImportPanel
-              defaultSince={filters.from}
-              imported={data?.repositories.map((r) => r.fullName) ?? []}
-              busy={importing}
-              onClose={() => setShowImport(false)}
-            />
-          )}
-          {status.data &&
-            status.data.state !== "idle" &&
-            status.data.state !== "complete" && (
-              <div
-                className={`flex flex-wrap items-center gap-3 rounded-lg border px-4 py-3 text-xs ${status.data.state === "error" ? "border-negative/30 bg-negative/5" : "bg-card"}`}
-                role={status.data.state === "error" ? "alert" : "status"}
-              >
-                {importing ? (
-                  <RefreshCw className="size-3.5 shrink-0 animate-spin text-primary" />
-                ) : status.data.state === "error" ? (
-                  <CircleAlert className="size-4 shrink-0 text-negative" />
-                ) : (
-                  <Check className="size-4 shrink-0 text-positive" />
-                )}
-                <span className="min-w-0 flex-1 break-words">
-                  {status.data.message}
-                </span>
-                <span className="font-mono text-muted-foreground">
-                  {status.data.completed}/{status.data.total}
-                </span>
-                {importing && (
-                  <Progress
-                    aria-label="Repositories imported"
-                    value={
-                      status.data.total
-                        ? (status.data.completed / status.data.total) * 100
-                        : 0
-                    }
-                    className="w-24"
-                  />
-                )}
-              </div>
-            )}
 
           <ActivityFilters
             filters={filters}
@@ -280,28 +168,6 @@ export function Dashboard() {
           ) : (
             data && (
               <>
-                {hasData && (
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                    <span>
-                      {lastImported
-                        ? `Last imported ${new Date(lastImported).toLocaleString("en-GB", { timeZone: "UTC", dateStyle: "medium", timeStyle: "short" })} UTC`
-                        : "No import yet"}
-                    </span>
-                    {dashboard.isFetching && (
-                      <RefreshCw className="size-3 animate-spin" />
-                    )}
-                  </div>
-                )}
-                {hasData && data.incomplete.length > 0 && (
-                  <p className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground">
-                    <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
-                    <span>
-                      Some dates have partial coverage. Totals include imported
-                      history only, through the last import. See Projects for
-                      date coverage.
-                    </span>
-                  </p>
-                )}
                 {!hasData ? (
                   <div className="panel flex min-h-64 flex-col items-center justify-center px-5 py-10 text-center">
                     <span className="mb-4 flex size-12 items-center justify-center rounded-xl border bg-muted">
@@ -309,23 +175,22 @@ export function Dashboard() {
                     </span>
                     <h2 className="font-semibold">Your activity starts here</h2>
                     <p className="mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">
-                      Choose the repositories you work on and import their
-                      history. Your real numbers will appear here.
+                      Connect repositories once. New commits land on their own
+                      after that.
                     </p>
-                    <span className="mt-5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                      Commits · Merged requests · Code changes
-                    </span>
+                    <Link
+                      to="/github"
+                      search={{ ...filters, view: "projects" }}
+                      className={cn(buttonVariants({ size: "lg" }), "mt-5")}
+                    >
+                      Open repositories
+                    </Link>
                   </div>
                 ) : filters.view === "overview" ? (
                   <Overview
                     data={data}
                     filters={filters}
                     setFilters={setFilters}
-                  />
-                ) : filters.view === "projects" ? (
-                  <Projects
-                    data={data}
-                    onSelect={(repo) => setFilters({ repo, view: "overview" })}
                   />
                 ) : (
                   <HistoryList
@@ -334,46 +199,11 @@ export function Dashboard() {
                     setFilters={setFilters}
                   />
                 )}
-                <details className="rounded-lg border border-dashed px-4 py-3 text-xs text-muted-foreground">
-                  <summary className="cursor-pointer font-medium text-foreground">
-                    How these numbers are counted
-                  </summary>
-                  <div className="mt-3 grid gap-3 leading-relaxed md:grid-cols-2">
-                    <p>
-                      Commits are attributed by GitHub to your account on each
-                      imported default branch, dated by commit time in UTC.
-                      Squashed commits count once; unmerged branch work and
-                      local commits are outside this view.
-                    </p>
-                    <p>
-                      Lines added and deleted come from non-merge commits.
-                      Repeated edits count each time. Generated files and
-                      dependencies remain in totals and have their own category.
-                      File categories use path and extension rules.
-                    </p>
-                    <p>
-                      “Your requests merged” counts requests you authored that
-                      merged during the selected dates. “Merged by you” counts
-                      requests you merged, including other authors. Pull-request
-                      line changes are never added to commit totals.
-                    </p>
-                    <p>
-                      Median merge time runs from request creation to merge,
-                      including draft time. Active days contain an authored
-                      commit or an authored request that merged. These are
-                      activity measures, not a code-quality score.
-                    </p>
-                  </div>
-                </details>
               </>
             )
           )}
-          <footer className="flex flex-wrap justify-between gap-2 border-t pt-4 font-mono text-[10px] text-muted-foreground">
-            <span>HQ · Your work, on your machine</span>
-            <span>GitHub data · UTC dates</span>
-          </footer>
-        </main>
-      </div>
+        </>
+      )}
     </div>
   );
 }
@@ -388,22 +218,22 @@ function Metric({
   label: string;
   value: number;
   icon: LucideIcon;
-  note: string;
+  note?: string;
   tone?: "positive" | "negative";
 }) {
   return (
-    <div className="panel p-4 sm:p-5">
+    <div className="min-w-0 border-l-2 border-border py-1 pl-4 sm:pl-5">
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs text-muted-foreground">{label}</span>
         <Icon className="size-4 text-muted-foreground" />
       </div>
       <p
-        className={`mt-4 font-mono text-2xl font-medium tracking-tight xl:text-3xl ${tone === "positive" ? "text-positive" : tone === "negative" ? "text-negative" : ""}`}
+        className={`mt-4 font-mono text-base font-medium tracking-tight sm:text-2xl xl:text-3xl ${tone === "positive" ? "text-positive" : tone === "negative" ? "text-negative" : ""}`}
       >
         {tone === "positive" ? "+" : tone === "negative" ? "−" : ""}
         {number(value)}
       </p>
-      <p className="mt-2 text-[11px] text-muted-foreground">{note}</p>
+      {note && <p className="mt-2 text-xs text-muted-foreground">{note}</p>}
     </div>
   );
 }
@@ -420,7 +250,7 @@ function Overview({
   const changes = data.total.additions + data.total.deletions;
   return (
     <>
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Metric
           label="Commits"
           value={data.total.commits}
@@ -431,24 +261,21 @@ function Overview({
           label="Your requests merged"
           value={data.total.authoredPrs}
           icon={GitMerge}
-          note={`${data.total.mergedPrs} requests merged by you`}
         />
         <Metric
           label="Lines added"
           value={data.total.additions}
           icon={Plus}
-          note="Non-merge commits"
           tone="positive"
         />
         <Metric
           label="Lines deleted"
           value={data.total.deletions}
           icon={Code2}
-          note="Non-merge commits"
           tone="negative"
         />
       </div>
-      <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
+      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_17.5rem]">
         <ActivityChart
           projects={data.projects}
           metric={filters.metric}
@@ -462,10 +289,7 @@ function Overview({
               from,
               to,
               view: "history",
-              kind:
-                filters.metric === "prs" || filters.metric === "mergedPrs"
-                  ? "pr"
-                  : "commit",
+              kind: filters.metric === "prs" ? "pr" : "commit",
             })
           }
         />
@@ -481,20 +305,19 @@ function Overview({
             {categories.map((category) => {
               const value = data.breakdown[category];
               const count = value.additions + value.deletions;
+              const pct = changes ? Math.round((count / changes) * 100) : 0;
               return (
                 <div key={category}>
-                  <div className="mb-1.5 flex items-center justify-between gap-2 text-xs">
+                  <div className="mb-1.5 flex items-baseline gap-2 text-xs">
                     <span>{category}</span>
-                    <span className="font-mono text-muted-foreground">
-                      {changes ? Math.round((count / changes) * 100) : 0}%
+                    <span className="font-mono tabular-nums text-muted-foreground">
+                      {pct}%
                     </span>
                   </div>
                   <div className="h-1 rounded-full bg-muted">
                     <div
                       className="h-full rounded-full bg-primary/70"
-                      style={{
-                        width: `${changes ? (count / changes) * 100 : 0}%`,
-                      }}
+                      style={{ width: `${pct}%` }}
                     />
                   </div>
                 </div>
@@ -508,11 +331,11 @@ function Overview({
         mode={filters.languages}
         onModeChange={(languages) => setFilters({ languages })}
       />
-      <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
+      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_17.5rem]">
         <Projects
           data={data}
           limit={5}
-          onSelect={(repo) => setFilters({ repo, view: "projects" })}
+          onSelect={(repo) => setFilters({ repo })}
           onAll={() => setFilters({ view: "projects" })}
         />
         <section className="panel flex flex-col p-5">
@@ -532,17 +355,6 @@ function Overview({
               Median time from opening to merge
             </p>
           </div>
-          <div className="my-5 border-t" />
-          <div className="flex justify-between text-xs">
-            <span className="text-muted-foreground">
-              Requests merged by you
-            </span>
-            <span className="font-mono">{number(data.total.mergedPrs)}</span>
-          </div>
-          <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-            Includes requests from other authors. Your authored and merged
-            counts can overlap.
-          </p>
           <Button
             className="mt-auto self-start pt-4"
             variant="link"
@@ -571,9 +383,7 @@ function Projects({
     <section className="panel min-w-0 overflow-hidden">
       <div className="flex items-center justify-between gap-2 p-5">
         <div>
-          <h2 className="font-semibold">
-            {limit ? "Most active projects" : "Repository activity"}
-          </h2>
+          <h2 className="font-semibold">Most active</h2>
           <p className="mt-1 text-xs text-muted-foreground">
             Ordered by your commit count
           </p>
@@ -589,8 +399,8 @@ function Projects({
           <thead className="border-y bg-muted/40 text-muted-foreground">
             <tr>
               <th className="px-5 py-2.5 font-normal">Repository</th>
-              <th className="px-3 py-2.5 text-right font-normal">Commits</th>
-              <th className="px-3 py-2.5 text-right font-normal">
+              <th className="px-5 py-2.5 text-right font-normal">Commits</th>
+              <th className="px-5 py-2.5 text-right font-normal">
                 Your PRs merged
               </th>
               <th className="px-5 py-2.5 text-right font-normal">
@@ -609,28 +419,29 @@ function Projects({
                       onClick={() => onSelect(project.fullName)}
                     >
                       <FolderGit2 className="size-4 shrink-0 text-muted-foreground" />
-                      <span className="max-w-72 truncate">
-                        {project.fullName}
-                      </span>
+                      <span>{project.fullName}</span>
                     </button>
-                    <p className="mt-1 pl-6 text-[10px] text-muted-foreground">
+                    <p className="mt-1 pl-6 text-xs text-muted-foreground">
                       {project.language ?? "Unclassified"} ·{" "}
                       {project.private ? "Private" : "Public"}
                     </p>
                     {!limit && (
-                      <p className="mt-2 max-w-80 pl-6 text-[10px] leading-relaxed text-muted-foreground">
-                        Coverage {project.since.slice(0, 10)} through{" "}
-                        {project.until.slice(0, 16).replace("T", " ")} UTC
+                      <p className="mt-2 max-w-80 pl-6 text-xs leading-relaxed text-muted-foreground">
+                        History {utcDay(project.since)} through{" "}
+                        {utcStamp(project.until)} UTC
+                        {project.importedAt
+                          ? ` · Fetched ${utcStamp(project.importedAt)} UTC`
+                          : ""}
                       </p>
                     )}
                   </td>
-                  <td className="px-3 py-3 text-right font-mono">
+                  <td className="px-5 py-3 text-right font-mono tabular-nums">
                     {number(project.commits)}
                   </td>
-                  <td className="px-3 py-3 text-right font-mono">
+                  <td className="px-5 py-3 text-right font-mono tabular-nums">
                     {number(project.authoredPrs)}
                   </td>
-                  <td className="whitespace-nowrap px-5 py-3 text-right font-mono">
+                  <td className="whitespace-nowrap px-5 py-3 text-right font-mono tabular-nums">
                     <span className="text-positive">
                       +{number(project.additions)}
                     </span>
@@ -719,7 +530,7 @@ function HistoryList({
                 <span className="break-words">{row.title}</span>
                 <ArrowUpRight className="mt-0.5 size-3 shrink-0 text-muted-foreground" />
               </a>
-              <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+              <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
                 <span className="break-all">{row.repo}</span>
                 <span>{row.detail}</span>
                 <time dateTime={row.date}>

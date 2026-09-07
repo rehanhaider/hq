@@ -10,33 +10,87 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as DeenRouteImport } from './routes/deen'
+import { Route as GithubRouteImport } from './routes/github'
+import { Route as DeenIndexRouteImport } from './routes/deen/index'
+import { Route as DeenHistoryRouteImport } from './routes/deen/history'
+import { Route as DeenSettingsRouteImport } from './routes/deen/settings'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DeenRoute = DeenRouteImport.update({
+  id: '/deen',
+  path: '/deen',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GithubRoute = GithubRouteImport.update({
+  id: '/github',
+  path: '/github',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DeenIndexRoute = DeenIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => DeenRoute,
+} as any)
+const DeenHistoryRoute = DeenHistoryRouteImport.update({
+  id: '/history',
+  path: '/history',
+  getParentRoute: () => DeenRoute,
+} as any)
+const DeenSettingsRoute = DeenSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => DeenRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/deen': typeof DeenRouteWithChildren
+  '/github': typeof GithubRoute
+  '/deen/history': typeof DeenHistoryRoute
+  '/deen/settings': typeof DeenSettingsRoute
+  '/deen/': typeof DeenIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/github': typeof GithubRoute
+  '/deen/history': typeof DeenHistoryRoute
+  '/deen/settings': typeof DeenSettingsRoute
+  '/deen': typeof DeenIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/deen': typeof DeenRouteWithChildren
+  '/github': typeof GithubRoute
+  '/deen/history': typeof DeenHistoryRoute
+  '/deen/settings': typeof DeenSettingsRoute
+  '/deen/': typeof DeenIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    '/' | '/deen' | '/github' | '/deen/history' | '/deen/settings' | '/deen/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/github' | '/deen/history' | '/deen/settings' | '/deen'
+  id:
+    | '__root__'
+    | '/'
+    | '/deen'
+    | '/github'
+    | '/deen/history'
+    | '/deen/settings'
+    | '/deen/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  DeenRoute: typeof DeenRouteWithChildren
+  GithubRoute: typeof GithubRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +102,62 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/deen': {
+      id: '/deen'
+      path: '/deen'
+      fullPath: '/deen'
+      preLoaderRoute: typeof DeenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/github': {
+      id: '/github'
+      path: '/github'
+      fullPath: '/github'
+      preLoaderRoute: typeof GithubRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/deen/': {
+      id: '/deen/'
+      path: '/'
+      fullPath: '/deen/'
+      preLoaderRoute: typeof DeenIndexRouteImport
+      parentRoute: typeof DeenRoute
+    }
+    '/deen/history': {
+      id: '/deen/history'
+      path: '/history'
+      fullPath: '/deen/history'
+      preLoaderRoute: typeof DeenHistoryRouteImport
+      parentRoute: typeof DeenRoute
+    }
+    '/deen/settings': {
+      id: '/deen/settings'
+      path: '/settings'
+      fullPath: '/deen/settings'
+      preLoaderRoute: typeof DeenSettingsRouteImport
+      parentRoute: typeof DeenRoute
+    }
   }
 }
 
+interface DeenRouteChildren {
+  DeenHistoryRoute: typeof DeenHistoryRoute
+  DeenSettingsRoute: typeof DeenSettingsRoute
+  DeenIndexRoute: typeof DeenIndexRoute
+}
+
+const DeenRouteChildren: DeenRouteChildren = {
+  DeenHistoryRoute: DeenHistoryRoute,
+  DeenSettingsRoute: DeenSettingsRoute,
+  DeenIndexRoute: DeenIndexRoute,
+}
+
+const DeenRouteWithChildren = DeenRoute._addFileChildren(DeenRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  DeenRoute: DeenRouteWithChildren,
+  GithubRoute: GithubRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

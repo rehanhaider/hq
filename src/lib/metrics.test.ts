@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { categorize, summarize } from "./metrics";
+import { categorize, summarize, groupLanguages } from "./metrics";
 import { daySchema, importSchema, searchSchema } from "./model";
 import type { Dataset, Snapshot } from "./model";
 
@@ -97,7 +97,6 @@ describe("activity accounting", () => {
       additions: 100,
       deletions: 20,
       authoredPrs: 1,
-      mergedPrs: 2,
     });
     expect(result.breakdown.Code).toEqual({ additions: 80, deletions: 20 });
     expect(result.languages).toEqual([
@@ -109,10 +108,10 @@ describe("activity accounting", () => {
         projects: 1,
       },
     ]);
-    expect(result.daily[0]?.mergedPrs).toBe(2);
+    expect(result.daily[0]?.prs).toBe(1);
     expect(result.activeDays).toBe(1);
     expect(result.medianHours).toBe(24);
-    expect(result.history).toHaveLength(4);
+    expect(result.history).toHaveLength(3);
     expect(result.incomplete).toEqual([]);
   });
   it("filters repositories without leaking their counts into charts or history", () => {
@@ -141,7 +140,9 @@ describe("activity accounting", () => {
       filters,
     );
     expect(result.activeDays).toBe(0);
-    expect(result.total.mergedPrs).toBe(1);
+    expect(result.total.authoredPrs).toBe(0);
+    expect(result.history).toEqual([]);
+    expect(result.daily).toEqual([]);
   });
 });
 describe("file categories", () => {
@@ -171,4 +172,69 @@ describe("boundary validation", () => {
     ).toBe(false);
     expect(searchSchema.parse({ page: -1, view: "bad" }).page).toBe(1);
   });
+});
+
+it("counts authored PRs regardless of who merged them", () => {
+  const result = summarize(
+    {
+      ...data,
+      snapshots: [
+        {
+          ...snapshot,
+          prs: [{ ...snapshot.prs[0]!, mergedBy: "other" }, snapshot.prs[1]!],
+        },
+      ],
+    },
+    filters,
+  );
+  expect(result.total.authoredPrs).toBe(1);
+  expect(result.daily[0]?.prs).toBe(1);
+  expect(
+    result.history.filter((row) => row.kind === "pr").map((row) => row.title),
+  ).toEqual(["My PR"]);
+});
+
+it("filters combinations of repositories across organizations and allows none", () => {
+  const snapshots = ["me/app", "team/api", "team/web"].map(
+    (fullName, index) => ({
+      ...snapshot,
+      repo: { ...snapshot.repo, id: index + 1, fullName },
+    }),
+  );
+  const result = summarize(
+    { ...data, snapshots },
+    { ...filters, repo: ["me/app", "team/api"] },
+  );
+  expect(result.projects.map((row) => row.fullName)).toEqual([
+    "me/app",
+    "team/api",
+  ]);
+  expect(result.total.commits).toBe(4);
+  expect(result.daily[0]?.commits).toBe(4);
+  expect(result.languages[0]?.additions).toBe(200);
+  expect(new Set(result.history.map((row) => row.repo))).toEqual(
+    new Set(["me/app", "team/api"]),
+  );
+  expect(
+    summarize({ ...data, snapshots }, { ...filters, repo: [] }).history,
+  ).toEqual([]);
+});
+
+it("groups shares at or below one percent exactly once and last in both language views", () => {
+  const rows = [970, 11, 10, 9, 0].map((additions, index) => ({
+    name: String(index),
+    additions,
+    deletions: 0,
+    commits: 1,
+    projects: 1,
+  }));
+  const grouped = groupLanguages(rows);
+  expect(grouped.map((row) => row.name)).toEqual([
+    "0",
+    "1",
+    "Remaining 2 file types",
+  ]);
+  expect(grouped.at(-1)?.additions).toBe(19);
+  expect(grouped.reduce((sum, row) => sum + row.additions, 0)).toBe(1000);
+  expect(groupLanguages([])).toEqual([]);
 });

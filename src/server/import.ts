@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { languageOf } from "../lib/languages";
 import { categorize } from "../lib/metrics";
+import { isFatalImportError } from "../lib/connections";
 import type {
   Changes,
   Commit,
@@ -135,11 +136,7 @@ export async function importRepository(
       if (!pr.mergedAt) continue;
       const mergedAt = new Date(pr.mergedAt).toISOString();
       if (mergedAt < since || mergedAt > until) continue;
-      if (
-        pr.author?.login.toLowerCase() !== login.toLowerCase() &&
-        pr.mergedBy?.login.toLowerCase() !== login.toLowerCase()
-      )
-        continue;
+      if (pr.author?.login.toLowerCase() !== login.toLowerCase()) continue;
       prs.push({
         number: pr.number,
         title: pr.title,
@@ -174,8 +171,104 @@ export async function importRepository(
   };
 }
 
+export const refreshOverlapMs = 48 * 60 * 60 * 1000;
+
+export function refreshIntervalMs() {
+  const raw = process.env.HQ_REFRESH_MS;
+  if (raw === undefined || raw === "") return 15 * 60 * 1000;
+  const value = Number(raw);
+  return Number.isFinite(value) && value >= 0 ? value : 15 * 60 * 1000;
+}
+
+export function refreshSince(
+  previousSince: string,
+  now: Date,
+  overlapMs = refreshOverlapMs,
+) {
+  const overlap = new Date(now.getTime() - overlapMs).toISOString();
+  return previousSince > overlap ? previousSince : overlap;
+}
+
+export function importWindowStart(
+  mode: "manual" | "refresh",
+  previousSince: string | undefined,
+  requestedSince: string,
+  until: Date,
+) {
+  if (!previousSince) return requestedSince;
+  if (mode === "refresh" || requestedSince >= previousSince)
+    return refreshSince(previousSince, until);
+  return requestedSince;
+}
+
+export function mergeSnapshot(
+  previous: Snapshot | null,
+  incoming: Snapshot,
+): Snapshot {
+  if (!previous) return incoming;
+  return {
+    repo: incoming.repo,
+    commits: [
+      ...new Map(
+        [...previous.commits, ...incoming.commits].map((commit) => [
+          commit.sha,
+          commit,
+        ]),
+      ).values(),
+    ],
+    prs: [
+      ...new Map(
+        [...previous.prs, ...incoming.prs].map((pr) => [pr.number, pr]),
+      ).values(),
+    ],
+    since: previous.since < incoming.since ? previous.since : incoming.since,
+    until: previous.until > incoming.until ? previous.until : incoming.until,
+    importedAt: incoming.importedAt,
+  };
+}
+
 let running = false;
-export async function startImport(input: ImportInput) {
+const globalRefresh = globalThis as typeof globalThis & {
+  hqRefreshTimer?: ReturnType<typeof setInterval>;
+};
+
+export function ensureRefreshLoop() {
+  if (process.env.VITEST) return;
+  if (refreshIntervalMs() <= 0) return;
+  void tickRefresh();
+  if (globalRefresh.hqRefreshTimer) return;
+  globalRefresh.hqRefreshTimer = setInterval(
+    () => void tickRefresh(),
+    Math.min(refreshIntervalMs(), 60_000),
+  );
+}
+
+export function tickRefresh() {
+  if (running) return;
+  if (!process.env.GITHUB_TOKEN) return;
+  const interval = refreshIntervalMs();
+  if (interval <= 0) return;
+  const dataset = getStore().dataset();
+  if (!dataset.snapshots.length) return;
+  if (dataset.status.state === "running") return;
+  const finished = dataset.status.finishedAt;
+  if (finished && Date.now() - Date.parse(finished) < interval) return;
+  void startRefresh();
+}
+
+export async function startRefresh() {
+  const names = getStore()
+    .dataset()
+    .snapshots.map((snapshot) => snapshot.repo.fullName);
+  if (!names.length)
+    return { ok: false as const, error: "Import repositories once first." };
+  return startImport({ repositories: names, since: "1970-01-01" }, "refresh");
+}
+
+export async function startImport(
+  input: ImportInput,
+  mode: "manual" | "refresh" = "manual",
+) {
   if (running)
     return { ok: false as const, error: "An import is already running." };
   running = true;
@@ -189,7 +282,7 @@ export async function startImport(input: ImportInput) {
     const since = `${input.since}T00:00:00.000Z`;
     const status: ImportStatus = {
       state: "running",
-      message: "Starting import…",
+      message: mode === "refresh" ? "Refreshing activity…" : "Starting import…",
       completed: 0,
       total: names.length,
       startedAt: until,
@@ -197,28 +290,89 @@ export async function startImport(input: ImportInput) {
     };
     store.setStatus(status);
     void (async () => {
+      const failures: string[] = [];
       try {
         for (const name of names) {
-          store.setStatus({ ...status, message: `Reading ${name}…` });
-          const snapshot = await importRepository(
-            client,
-            store,
-            name,
-            user.login,
+          const previous = store.snapshot(name);
+          const windowStart = importWindowStart(
+            mode,
+            previous?.since,
             since,
-            until,
-            (message) => store.setStatus({ ...status, message }),
+            new Date(until),
           );
-          store.save(snapshot);
-          status.completed++;
-          store.setStatus({ ...status, message: `${name} imported` });
+          store.setSync(name, {
+            state: "syncing",
+            error: null,
+            lastAttemptAt: until,
+          });
+          store.setStatus({
+            ...status,
+            message:
+              mode === "refresh" ? `Refreshing ${name}…` : `Reading ${name}…`,
+          });
+          try {
+            const snapshot = await importRepository(
+              client,
+              store,
+              name,
+              user.login,
+              windowStart,
+              until,
+              (message) => store.setStatus({ ...status, message }),
+            );
+            const savedAt = new Date().toISOString();
+            store.save(mergeSnapshot(previous, snapshot));
+            store.setSync(name, {
+              state: "ok",
+              error: null,
+              lastSuccessAt: savedAt,
+              lastAttemptAt: savedAt,
+            });
+            status.completed++;
+            store.setStatus({
+              ...status,
+              message:
+                mode === "refresh" ? `${name} refreshed` : `${name} imported`,
+            });
+          } catch (error) {
+            const message =
+              error instanceof Error
+                ? error.message
+                : "Could not fetch this repository.";
+            store.setSync(name, {
+              state: "error",
+              error: message,
+              lastAttemptAt: new Date().toISOString(),
+            });
+            failures.push(name);
+            if (isFatalImportError(message)) throw error;
+            store.setStatus({
+              ...status,
+              message: `${name} failed. Continuing…`,
+            });
+          }
         }
-        store.setStatus({
-          ...status,
-          state: "complete",
-          message: `${status.completed} ${status.completed === 1 ? "repository" : "repositories"} imported.`,
-          finishedAt: new Date().toISOString(),
-        });
+        if (failures.length) {
+          store.setStatus({
+            ...status,
+            state: "error",
+            message:
+              status.completed === 0
+                ? `Could not fetch ${failures.length} ${failures.length === 1 ? "repository" : "repositories"}. Open Projects.`
+                : `Fetched ${status.completed} of ${names.length}. ${failures.length} failed. Open Projects.`,
+            finishedAt: new Date().toISOString(),
+          });
+        } else {
+          store.setStatus({
+            ...status,
+            state: "complete",
+            message:
+              mode === "refresh"
+                ? `Caught up ${status.completed} ${status.completed === 1 ? "repository" : "repositories"}.`
+                : `${status.completed} ${status.completed === 1 ? "repository" : "repositories"} imported.`,
+            finishedAt: new Date().toISOString(),
+          });
+        }
       } catch (error) {
         store.setStatus({
           ...status,

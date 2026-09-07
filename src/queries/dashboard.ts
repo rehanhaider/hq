@@ -1,7 +1,8 @@
-import { queryOptions } from "@tanstack/react-query";
+import { keepPreviousData, queryOptions } from "@tanstack/react-query";
 import type { Filters } from "@/lib/model";
 import {
   getConnection,
+  getConnections,
   getDashboard,
   getImportStatus,
   getRepositories,
@@ -10,6 +11,7 @@ import {
 export const dashboardQuery = (filters: Filters) =>
   queryOptions({
     queryKey: ["dashboard", filters],
+    placeholderData: keepPreviousData,
     queryFn: () => getDashboard({ data: filters }),
     staleTime: 15000,
   });
@@ -22,6 +24,11 @@ export const repositoriesQuery = queryOptions({
   queryKey: ["repositories"],
   queryFn: () => getRepositories(),
   staleTime: 60000,
+});
+export const connectionsQuery = queryOptions({
+  queryKey: ["connections"],
+  queryFn: () => getConnections(),
+  staleTime: 5000,
 });
 export const statusQuery = queryOptions({
   queryKey: ["import-status"],
