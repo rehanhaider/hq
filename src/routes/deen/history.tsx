@@ -59,30 +59,35 @@ function HistoryPage() {
 
       {nothingLogged ? (
         <p className="max-w-prose text-sm leading-6 text-muted-foreground">
-          Nothing is logged yet. Set your cycle start date in{" "}
-          <Link to="/deen/settings" className="text-primary underline">
-            Settings
-          </Link>
-          , then log a day on Today.
-        </p>
-      ) : emptyWindow ? (
-        <p className="max-w-prose text-sm leading-6 text-muted-foreground">
-          {settings.cycle_start_date
-            ? "Nothing is logged in this cycle yet. Earlier records fall outside it."
-            : "Nothing is logged in the last 40 days. Earlier records are still stored."}
+          {settings.cycle_start_date ? (
+            "Nothing is logged yet. Log a day on Today."
+          ) : (
+            <>
+              Nothing is logged yet. Set your cycle start date in{" "}
+              <Link to="/deen/settings" className="text-primary underline">
+                Settings
+              </Link>
+              , then log a day on Today.
+            </>
+          )}
         </p>
       ) : (
         <>
           <div className="flex flex-wrap items-end gap-x-12 gap-y-6">
-            <div>
-              <p className="section-label">Fajr on time</p>
-              <p className="mt-2 flex items-baseline gap-2">
-                <span className="display">
-                  {adherence.fajr_ontime?.percentage ?? 0}
-                </span>
-                <span className="display-unit">% of days</span>
-              </p>
-            </div>
+            {/* Adherence is windowed; an empty window has no percentage to show. */}
+            {!emptyWindow && (
+              <div>
+                <p className="section-label">Fajr on time</p>
+                <p className="mt-2 flex items-baseline gap-2">
+                  <span className="display">
+                    {adherence.fajr_ontime?.percentage ?? 0}
+                  </span>
+                  <span className="display-unit">% of days</span>
+                </p>
+              </div>
+            )}
+            {/* The streak runs over the full history, so it stays visible even
+                when the window is empty — Today and Home both show it. */}
             <div>
               <p className="section-label">Fajr streak</p>
               <p className="mt-2 text-2xl font-semibold tabular-nums tracking-tight">
@@ -94,6 +99,13 @@ function HistoryPage() {
             </div>
           </div>
 
+          {emptyWindow ? (
+            <p className="max-w-prose text-sm leading-6 text-muted-foreground">
+              {settings.cycle_start_date
+                ? "Nothing is logged in this cycle yet. Earlier records fall outside it."
+                : "Nothing is logged in the last 40 days. Earlier records are still stored."}
+            </p>
+          ) : (
           <div className="grid items-start gap-8 lg:grid-cols-2 lg:gap-12">
             <section aria-label="Salah progress" className="space-y-4">
               <h2 className="section-title">Salah</h2>
@@ -127,6 +139,7 @@ function HistoryPage() {
               />
             </section>
           </div>
+          )}
         </>
       )}
 
