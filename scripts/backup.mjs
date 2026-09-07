@@ -65,10 +65,12 @@ function sources() {
   // otherwise put both in one backup directory and let each prune the other.
   const byLabel = new Map();
   for (const path of [...found].sort()) {
-    let label = basename(path, ".sqlite");
-    if (byLabel.has(label)) {
-      for (let n = 2; byLabel.has(`${label}-${n}`); n++) label = `${label}-${n}`;
-    }
+    // The base has to stay fixed while the suffix advances. Growing the label
+    // itself walks away from the names actually in use, so the loop exits on a
+    // free name like "foo-2-3" and then overwrites whatever holds "foo-2".
+    const base = basename(path, ".sqlite");
+    let label = base;
+    for (let n = 2; byLabel.has(label); n++) label = `${base}-${n}`;
     byLabel.set(label, path);
   }
   return byLabel;

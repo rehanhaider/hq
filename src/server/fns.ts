@@ -40,8 +40,14 @@ function deenSummary() {
     days,
     cycleDay,
     cycleDays,
+    // How much of the window is actually logged, so the pages can tell an empty
+    // window apart from an empty history rather than inferring it from zeroes.
+    loggedInWindow: windowed.length,
     cycleComplete: isCycleComplete(cycleDay),
-    fajrStreak: fajrOnTimeStreak(windowed, today),
+    // Deliberately not windowed. A streak has no denominator, so it never had
+    // the mismatch the window exists to fix, and it runs to today: past day 40
+    // the window ends before today, which would report every live streak as 0.
+    fajrStreak: fajrOnTimeStreak(days, today),
     adherence: calculateAdherence(
       windowed,
       cycleDays,

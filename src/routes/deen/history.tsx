@@ -29,6 +29,7 @@ function HistoryPage() {
     cycleDay,
     cycleDays,
     cycleComplete,
+    loggedInWindow,
     adherence,
     overall,
     fajrStreak,
@@ -37,9 +38,10 @@ function HistoryPage() {
     ? cycleDatesForDay(settings.cycle_start_date)
     : [];
   const dayMap = new Map(days.map((d) => [d.date, d]));
-  const nothingLogged =
-    !settings.cycle_start_date &&
-    Object.values(adherence).every((value) => value.percentage === 0);
+  // Zero adherence means nothing was logged *in the window*, which is not the
+  // same as having no history: records older than the window read as all-zero.
+  const nothingLogged = days.length === 0;
+  const emptyWindow = !nothingLogged && loggedInWindow === 0;
 
   return (
     <div className="space-y-8">
@@ -62,6 +64,12 @@ function HistoryPage() {
             Settings
           </Link>
           , then log a day on Today.
+        </p>
+      ) : emptyWindow ? (
+        <p className="max-w-prose text-sm leading-6 text-muted-foreground">
+          {settings.cycle_start_date
+            ? "Nothing is logged in this cycle yet. Earlier records fall outside it."
+            : "Nothing is logged in the last 40 days. Earlier records are still stored."}
         </p>
       ) : (
         <>

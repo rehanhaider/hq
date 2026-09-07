@@ -5,6 +5,7 @@ import {
   overallAdherence,
 } from "./adherence";
 import { emptyDay } from "./schemas";
+import { fajrOnTimeStreak } from "./streaks";
 import type { DeenDay } from "./schemas";
 
 function makeDay(date: string, overrides: Partial<DeenDay> = {}): DeenDay {
@@ -154,5 +155,23 @@ describe("daysInCycleWindow", () => {
     const windowed = daysInCycleWindow(days, null, "2026-09-08");
     expect(windowed.map((d) => d.date)).not.toContain("2026-07-01");
     expect(windowed).toHaveLength(4);
+  });
+});
+
+describe("streaks against the adherence window", () => {
+  // A streak has no denominator, so it never had the mismatch the window
+  // exists to fix, and it must run to today. Past cycle day 40 the window
+  // ends before today, which would report every live streak as zero.
+  const days = ["2026-09-05", "2026-09-06", "2026-09-07", "2026-09-08"].map(
+    (date) => makeDay(date, { fajr: "ontime" }),
+  );
+
+  it("reports a live streak past day 40 of a cycle", () => {
+    const today = "2026-09-08";
+    const cycleStart = "2026-07-28"; // day 43 on today; window ends 2026-09-05
+    const windowed = daysInCycleWindow(days, cycleStart, today);
+    expect(windowed.at(-1)!.date).toBe("2026-09-05");
+    expect(fajrOnTimeStreak(windowed, today).current).toBe(0);
+    expect(fajrOnTimeStreak(days, today).current).toBe(4);
   });
 });

@@ -134,6 +134,30 @@ describe("backup", () => {
     expect(listed("deen", "daily")).toHaveLength(1);
   });
 
+  it("keeps every database when basenames collide across directories", () => {
+    // Regression: the suffix loop grew `label` itself, so a duplicate exited on
+    // a free name like foo-2-3 and then overwrote the entry holding foo-2 —
+    // silently dropping a database from the run.
+    const a = join(dir, "one", "deen.sqlite");
+    const b = join(dir, "two", "deen.sqlite");
+    makeDb(a, "one");
+    makeDb(b, "two");
+    rmSync(join(dataDir(), "deen.sqlite"));
+    run({ HQ_DEEN_DATABASE: a, HQ_BACKUP_DATA: join(dir, "two") });
+    expect(listed("deen", "daily")).toHaveLength(1);
+    expect(listed("deen-2", "daily")).toHaveLength(1);
+    const tables = ["deen", "deen-2"].map((label) => {
+      const db = new DatabaseSync(
+        join(backupDir(), label, "daily", listed(label, "daily")[0]),
+        { readOnly: true },
+      );
+      const t = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").get().name;
+      db.close();
+      return t;
+    });
+    expect(tables.sort()).toEqual(["one", "two"]);
+  });
+
   it("fails loudly when there is nothing to back up", () => {
     rmSync(dataDir(), { recursive: true });
     expect(() => run()).toThrow();
