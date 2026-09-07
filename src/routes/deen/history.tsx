@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { deenQuery } from "@/queries/deen";
 import {
@@ -36,69 +36,96 @@ function HistoryPage() {
     ? cycleDatesForDay(settings.cycle_start_date)
     : [];
   const dayMap = new Map(days.map((d) => [d.date, d]));
+  const nothingLogged =
+    !settings.cycle_start_date &&
+    Object.values(adherence).every((value) => value.percentage === 0);
 
   return (
-    <div className="max-w-4xl space-y-8">
-      <header className="flex flex-wrap items-end justify-between gap-4">
+    <div className="space-y-8">
+      <header className="page-header">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Progress</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Adherence across the 40-day cycle.
-          </p>
+          <h1 className="page-title">Progress</h1>
+          <p className="page-description">Adherence across the 40-day cycle.</p>
         </div>
         {cycleDay !== null && (
-          <span className="rounded-md bg-primary/10 px-2 py-1 text-xs text-primary">
+          <span className="text-sm text-muted-foreground">
             {cycleComplete ? "Cycle complete" : `Day ${cycleDay} / 40`}
           </span>
         )}
       </header>
-      <section aria-label="Salah progress" className="space-y-4">
-        <h2 className="font-semibold">Salah</h2>
-        <div className="grid grid-cols-2 gap-4">
-          <Stat
-            label="Fajr on time"
-            value={`${adherence.fajr_ontime?.percentage ?? 0}%`}
-          />
-          <Stat
-            label="Fajr streak"
-            value={String(fajrStreak.current)}
-            sub={`best ${fajrStreak.longest}`}
-          />
-        </div>
-        <Breakdown
-          adherence={adherence}
-          items={[
-            ["fajr", "Fajr"],
-            ["dhuhr", "Dhuhr"],
-            ["asr", "Asr"],
-            ["maghrib", "Maghrib"],
-            ["isha", "Isha"],
-          ]}
-        />
-      </section>
-      <section
-        aria-label="Other practices progress"
-        className="space-y-4 border-t pt-6"
-      >
-        <h2 className="font-semibold">Adhkar and other practices</h2>
-        <Breakdown
-          adherence={adherence}
-          items={[
-            ["morning_adhkar", "Morning adhkar"],
-            ["evening_adhkar", "Evening adhkar"],
-            ["night_ayat_kursi", "Ayat al-Kursi"],
-            ["night_baqarah", "Al-Baqarah"],
-            ["night_three_suras", "Three surahs"],
-            ["ruqyah", "Ruqyah"],
-            ["istighfar", "Istighfar"],
-          ]}
-        />
-      </section>
+
+      {nothingLogged ? (
+        <p className="max-w-prose text-sm leading-6 text-muted-foreground">
+          Nothing is logged yet. Set your cycle start date in{" "}
+          <Link to="/deen/settings" className="text-primary underline">
+            Settings
+          </Link>
+          , then log a day on Today.
+        </p>
+      ) : (
+        <>
+          <div className="flex flex-wrap items-end gap-x-12 gap-y-6">
+            <div>
+              <p className="section-label">Fajr on time</p>
+              <p className="mt-2 flex items-baseline gap-2">
+                <span className="display">
+                  {adherence.fajr_ontime?.percentage ?? 0}
+                </span>
+                <span className="display-unit">% of days</span>
+              </p>
+            </div>
+            <div>
+              <p className="section-label">Fajr streak</p>
+              <p className="mt-2 text-2xl font-semibold tabular-nums tracking-tight">
+                {fajrStreak.current}
+                <span className="ml-2 text-sm font-normal text-muted-foreground">
+                  best {fajrStreak.longest}
+                </span>
+              </p>
+            </div>
+          </div>
+
+          <div className="grid items-start gap-8 lg:grid-cols-2 lg:gap-12">
+            <section aria-label="Salah progress" className="space-y-4">
+              <h2 className="section-title">Salah</h2>
+              <Breakdown
+                adherence={adherence}
+                items={[
+                  ["fajr", "Fajr"],
+                  ["dhuhr", "Dhuhr"],
+                  ["asr", "Asr"],
+                  ["maghrib", "Maghrib"],
+                  ["isha", "Isha"],
+                ]}
+              />
+            </section>
+            <section
+              aria-label="Other practices progress"
+              className="hairline space-y-4 pt-8 lg:border-t-0 lg:pt-0"
+            >
+              <h2 className="section-title">Adhkar and other practices</h2>
+              <Breakdown
+                adherence={adherence}
+                items={[
+                  ["morning_adhkar", "Morning adhkar"],
+                  ["evening_adhkar", "Evening adhkar"],
+                  ["night_ayat_kursi", "Ayat al-Kursi"],
+                  ["night_baqarah", "Al-Baqarah"],
+                  ["night_three_suras", "Three surahs"],
+                  ["ruqyah", "Ruqyah"],
+                  ["istighfar", "Istighfar"],
+                ]}
+              />
+            </section>
+          </div>
+        </>
+      )}
+
       {calDates.length > 0 && (
         <section className="space-y-3">
           <h2 className="section-title">Fajr calendar</h2>
           <div className="panel p-3">
-            <div className="grid grid-cols-8 gap-1.5 sm:grid-cols-10">
+            <div className="grid grid-cols-8 gap-1.5 sm:grid-cols-10 lg:grid-cols-[repeat(20,minmax(0,1fr))]">
               {calDates.map((date, i) => {
                 const d = dayMap.get(date);
                 const fajr = d?.fajr ?? null;
@@ -118,7 +145,7 @@ function HistoryPage() {
                   <div
                     key={date}
                     title={`${date} — ${fajr ?? "not logged"}`}
-                    className={`flex aspect-square items-center justify-center rounded-md font-mono text-xs font-medium tabular-nums ${tone}`}
+                    className={`flex aspect-square items-center justify-center rounded-md text-xs font-medium tabular-nums ${tone}`}
                   >
                     {i + 1}
                   </div>
@@ -140,28 +167,6 @@ function HistoryPage() {
   );
 }
 
-function Stat({
-  label,
-  value,
-  sub,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-}) {
-  return (
-    <div className="border-l-2 py-1 pl-4">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="mt-2 font-mono text-2xl font-semibold tabular-nums tracking-tight">
-        {value}
-      </p>
-      {sub && (
-        <p className="mt-0.5 font-mono text-xs text-muted-foreground">{sub}</p>
-      )}
-    </div>
-  );
-}
-
 function Breakdown({
   adherence,
   items,
@@ -170,11 +175,11 @@ function Breakdown({
   items: [string, string][];
 }) {
   return (
-    <div className="panel divide-y">
+    <div className="list">
       {items.map(([key, label]) => {
         const value = adherence[key]!;
         return (
-          <div key={key} className="flex items-center gap-4 px-4 py-3">
+          <div key={key} className="list-row">
             <span className="w-32 shrink-0 text-sm">{label}</span>
             <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
               <div
@@ -182,7 +187,7 @@ function Breakdown({
                 style={{ width: `${value.percentage}%` }}
               />
             </div>
-            <span className="w-10 shrink-0 text-right font-mono text-xs tabular-nums text-muted-foreground">
+            <span className="w-10 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
               {value.percentage}%
             </span>
           </div>

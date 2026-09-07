@@ -9,14 +9,11 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleAlert,
-  Code2,
   FolderGit2,
   GitCommitHorizontal,
   GitMerge,
-  Plus,
   RefreshCw,
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 import { Route } from "@/routes/github";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -127,12 +124,9 @@ export function Dashboard() {
         <Connections importing={importing} />
       ) : (
         <>
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
-            </div>
+          <div className="page-header">
+            <h1 className="page-title">{title}</h1>
           </div>
-
           <ActivityFilters
             filters={filters}
             repositories={data?.repositories ?? []}
@@ -169,7 +163,7 @@ export function Dashboard() {
             data && (
               <>
                 {!hasData ? (
-                  <div className="panel flex min-h-64 flex-col items-center justify-center px-5 py-10 text-center">
+                  <div className="hairline flex min-h-64 flex-col items-center justify-center px-5 py-12 text-center">
                     <span className="mb-4 flex size-12 items-center justify-center rounded-xl border bg-muted">
                       <FolderGit2 className="size-5 text-muted-foreground" />
                     </span>
@@ -211,29 +205,21 @@ export function Dashboard() {
 function Metric({
   label,
   value,
-  icon: Icon,
-  note,
   tone,
 }: {
   label: string;
   value: number;
-  icon: LucideIcon;
-  note?: string;
   tone?: "positive" | "negative";
 }) {
   return (
-    <div className="min-w-0 border-l-2 border-border py-1 pl-4 sm:pl-5">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-xs text-muted-foreground">{label}</span>
-        <Icon className="size-4 text-muted-foreground" />
-      </div>
+    <div className="min-w-0">
+      <span className="section-label">{label}</span>
       <p
-        className={`mt-4 font-mono text-base font-medium tracking-tight sm:text-2xl xl:text-3xl ${tone === "positive" ? "text-positive" : tone === "negative" ? "text-negative" : ""}`}
+        className={`mt-1.5 text-2xl font-semibold tracking-tight tabular-nums ${tone === "positive" ? "text-positive" : tone === "negative" ? "text-negative" : ""}`}
       >
         {tone === "positive" ? "+" : tone === "negative" ? "−" : ""}
         {number(value)}
       </p>
-      {note && <p className="mt-2 text-xs text-muted-foreground">{note}</p>}
     </div>
   );
 }
@@ -250,32 +236,31 @@ function Overview({
   const changes = data.total.additions + data.total.deletions;
   return (
     <>
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Metric
-          label="Commits"
-          value={data.total.commits}
-          icon={GitCommitHorizontal}
-          note={`${data.activeDays} active ${data.activeDays === 1 ? "day" : "days"}`}
-        />
-        <Metric
-          label="Your requests merged"
-          value={data.total.authoredPrs}
-          icon={GitMerge}
-        />
-        <Metric
-          label="Lines added"
-          value={data.total.additions}
-          icon={Plus}
-          tone="positive"
-        />
-        <Metric
-          label="Lines deleted"
-          value={data.total.deletions}
-          icon={Code2}
-          tone="negative"
-        />
+      <div className="flex flex-wrap items-end justify-between gap-x-12 gap-y-8">
+        <div className="min-w-0">
+          <p className="flex flex-wrap items-baseline gap-x-2">
+            <span className="display">{number(data.total.commits)}</span>
+            <span className="display-unit">commits</span>
+          </p>
+          <p className="mt-2.5 text-sm text-muted-foreground">
+            {data.activeDays} active {data.activeDays === 1 ? "day" : "days"}
+          </p>
+        </div>
+        <div className="grid min-w-0 grid-cols-2 gap-x-10 gap-y-6 sm:grid-cols-3">
+          <Metric label="PRs merged" value={data.total.authoredPrs} />
+          <Metric
+            label="Lines added"
+            value={data.total.additions}
+            tone="positive"
+          />
+          <Metric
+            label="Lines deleted"
+            value={data.total.deletions}
+            tone="negative"
+          />
+        </div>
       </div>
-      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_17.5rem]">
+      <div className="hairline grid min-w-0 gap-6 pt-6 lg:grid-cols-[minmax(0,1fr)_17.5rem] lg:gap-8">
         <ActivityChart
           projects={data.projects}
           metric={filters.metric}
@@ -293,15 +278,12 @@ function Overview({
             })
           }
         />
-        <section className="panel p-5">
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold">Code composition</h2>
-            <Code2 className="size-4 text-muted-foreground" />
-          </div>
+        <section className="min-w-0">
+          <h2 className="section-title">Code composition</h2>
           <p className="mt-1 text-xs text-muted-foreground">
             Share of additions + deletions
           </p>
-          <div className="mt-6 space-y-4">
+          <div className="mt-5 space-y-4">
             {categories.map((category) => {
               const value = data.breakdown[category];
               const count = value.additions + value.deletions;
@@ -310,7 +292,7 @@ function Overview({
                 <div key={category}>
                   <div className="mb-1.5 flex items-baseline gap-2 text-xs">
                     <span>{category}</span>
-                    <span className="font-mono tabular-nums text-muted-foreground">
+                    <span className="tabular-nums text-muted-foreground">
                       {pct}%
                     </span>
                   </div>
@@ -331,20 +313,20 @@ function Overview({
         mode={filters.languages}
         onModeChange={(languages) => setFilters({ languages })}
       />
-      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_17.5rem]">
+      <div className="hairline grid min-w-0 gap-8 pt-6 lg:grid-cols-[minmax(0,1fr)_17.5rem] lg:gap-10">
         <Projects
           data={data}
           limit={5}
           onSelect={(repo) => setFilters({ repo })}
           onAll={() => setFilters({ view: "projects" })}
         />
-        <section className="panel flex flex-col p-5">
-          <h2 className="font-semibold">Delivery</h2>
+        <section className="flex min-w-0 flex-col">
+          <h2 className="section-title">Delivery</h2>
           <p className="mt-1 text-xs text-muted-foreground">
             Your merged pull requests
           </p>
-          <div className="mt-6">
-            <span className="font-mono text-3xl font-medium">
+          <div className="mt-5">
+            <span className="text-2xl font-semibold tracking-tight tabular-nums">
               {data.medianHours === null
                 ? "—"
                 : data.medianHours >= 24
@@ -356,7 +338,7 @@ function Overview({
             </p>
           </div>
           <Button
-            className="mt-auto self-start pt-4"
+            className="mt-auto -ml-2.5 self-start pt-4"
             variant="link"
             onClick={() => setFilters({ view: "history", kind: "pr" })}
           >
@@ -380,10 +362,10 @@ function Projects({
   limit?: number;
 }) {
   return (
-    <section className="panel min-w-0 overflow-hidden">
-      <div className="flex items-center justify-between gap-2 p-5">
+    <section className="min-w-0">
+      <div className="flex items-center justify-between gap-2">
         <div>
-          <h2 className="font-semibold">Most active</h2>
+          <h2 className="section-title">Most active</h2>
           <p className="mt-1 text-xs text-muted-foreground">
             Ordered by your commit count
           </p>
@@ -394,16 +376,16 @@ function Projects({
           </Button>
         )}
       </div>
-      <div className="overflow-x-auto">
+      <div className="mt-4 overflow-x-auto">
         <table className="w-full text-left text-xs">
-          <thead className="border-y bg-muted/40 text-muted-foreground">
+          <thead className="border-y text-muted-foreground">
             <tr>
-              <th className="px-5 py-2.5 font-normal">Repository</th>
-              <th className="px-5 py-2.5 text-right font-normal">Commits</th>
-              <th className="px-5 py-2.5 text-right font-normal">
-                Your PRs merged
+              <th className="py-2.5 pr-4 font-normal">Repository</th>
+              <th className="py-2.5 pl-4 text-right font-normal">Commits</th>
+              <th className="py-2.5 pl-4 text-right font-normal">
+                PRs merged
               </th>
-              <th className="px-5 py-2.5 text-right font-normal">
+              <th className="py-2.5 pl-4 text-right font-normal">
                 Lines + / −
               </th>
             </tr>
@@ -413,7 +395,7 @@ function Projects({
               .slice(0, limit ?? data.projects.length)
               .map((project) => (
                 <tr key={project.id} className="hover:bg-muted/30">
-                  <td className="px-5 py-3">
+                  <td className="py-3 pr-4">
                     <button
                       className="flex items-center gap-2 text-left font-medium hover:text-primary"
                       onClick={() => onSelect(project.fullName)}
@@ -435,13 +417,13 @@ function Projects({
                       </p>
                     )}
                   </td>
-                  <td className="px-5 py-3 text-right font-mono tabular-nums">
+                  <td className="py-3 pl-4 text-right tabular-nums">
                     {number(project.commits)}
                   </td>
-                  <td className="px-5 py-3 text-right font-mono tabular-nums">
+                  <td className="py-3 pl-4 text-right tabular-nums">
                     {number(project.authoredPrs)}
                   </td>
-                  <td className="whitespace-nowrap px-5 py-3 text-right font-mono tabular-nums">
+                  <td className="whitespace-nowrap py-3 pl-4 text-right tabular-nums">
                     <span className="text-positive">
                       +{number(project.additions)}
                     </span>
@@ -454,7 +436,7 @@ function Projects({
           </tbody>
         </table>
         {!data.projects.length && (
-          <p className="p-5 text-muted-foreground">
+          <p className="py-6 text-muted-foreground">
             No imported repository matches this filter.
           </p>
         )}
@@ -479,10 +461,10 @@ function HistoryList({
   const page = Math.min(filters.page, pages);
   const visible = records.slice((page - 1) * 30, page * 30);
   return (
-    <section className="panel min-w-0 overflow-hidden">
-      <div className="flex flex-wrap items-center justify-between gap-3 p-5">
+    <section className="hairline min-w-0 pt-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="font-semibold">Recorded activity</h2>
+          <h2 className="section-title">Recorded activity</h2>
           <p className="mt-1 text-xs text-muted-foreground">
             {number(records.length)} records · newest first
           </p>
@@ -505,11 +487,11 @@ function HistoryList({
           </select>
         </div>
       </div>
-      <ul className="divide-y border-t">
+      <ul className="list mt-4">
         {visible.map((row) => (
           <li
             key={`${row.repo}-${row.id}`}
-            className="flex items-start gap-3 px-4 py-4 sm:px-5"
+            className="flex items-start gap-3 py-4"
           >
             <span
               className={`mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg bg-muted ${row.kind === "pr" ? "text-primary" : "text-muted-foreground"}`}
@@ -537,12 +519,12 @@ function HistoryList({
                   {row.date.slice(0, 16).replace("T", " ")} UTC
                 </time>
               </p>
-              <p className="mt-2 flex gap-3 font-mono text-xs sm:hidden">
+              <p className="mt-2 flex gap-3 text-xs tabular-nums sm:hidden">
                 <span className="text-positive">+{number(row.additions)}</span>
                 <span className="text-negative">−{number(row.deletions)}</span>
               </p>
             </div>
-            <div className="hidden shrink-0 gap-3 pt-1 font-mono text-xs sm:flex">
+            <div className="hidden shrink-0 gap-3 pt-1 text-xs tabular-nums sm:flex">
               <span className="text-positive">+{number(row.additions)}</span>
               <span className="text-negative">−{number(row.deletions)}</span>
             </div>
@@ -550,7 +532,7 @@ function HistoryList({
         ))}
       </ul>
       {!visible.length && (
-        <div className="p-10 text-center">
+        <div className="py-12 text-center">
           <BookOpen className="mx-auto size-6 text-muted-foreground" />
           <p className="mt-3 font-medium">No activity in this view</p>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -558,7 +540,7 @@ function HistoryList({
           </p>
         </div>
       )}
-      <div className="flex items-center justify-between border-t px-5 py-3">
+      <div className="hairline flex items-center justify-between py-3">
         <span className="text-xs text-muted-foreground">
           Page {page} of {pages}
         </span>

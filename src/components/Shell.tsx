@@ -166,20 +166,6 @@ export function Shell() {
           <Button
             variant="ghost"
             size="icon-sm"
-            className={`${expanded ? "hidden md:inline-flex" : "hidden"} shrink-0`}
-            aria-label={sidebarOpen ? "Collapse sidebar" : "Pin sidebar open"}
-            title={
-              sidebarOpen
-                ? "Collapse sidebar (Ctrl+B)"
-                : "Pin sidebar open (Ctrl+B)"
-            }
-            onClick={toggleSidebar}
-          >
-            {sidebarOpen ? <PanelLeftClose /> : <PanelLeftOpen />}
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
             className="md:hidden"
             aria-label="Close sidebar"
             onClick={() => setMobileOpen(false)}
@@ -248,15 +234,18 @@ export function Shell() {
             aria-label={
               sidebarOpen ? "Collapse navigation" : "Expand navigation"
             }
+            title={
+              sidebarOpen
+                ? "Collapse navigation (Ctrl+B)"
+                : "Expand navigation (Ctrl+B)"
+            }
             aria-expanded={sidebarOpen}
             aria-controls="sidebar-navigation"
             onClick={toggleSidebar}
           >
             {sidebarOpen ? <PanelLeftClose /> : <PanelLeftOpen />}
           </Button>
-          <span className="text-xs text-muted-foreground">Workspace</span>
-          <span className="text-xs text-muted-foreground">/</span>
-          <span className="text-sm">
+          <span className="text-sm font-medium">
             {pathname.startsWith("/github")
               ? "GitHub"
               : pathname.startsWith("/deen")

@@ -66,6 +66,14 @@ function TodayPage() {
   const logged = prayers.filter(
     ({ key }) => (day?.[key] ?? null) !== null,
   ).length;
+  const readableDate = selected
+    ? new Date(`${selected}T12:00:00Z`).toLocaleDateString("en-GB", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        timeZone: "UTC",
+      })
+    : "";
   function patch(values: Parameters<typeof updateDeenDay>[0]["data"]) {
     update.mutate({ data: values });
   }
@@ -78,8 +86,8 @@ function TodayPage() {
     patch({ date: selected, [key]: cycle[(idx + 1) % cycle.length] });
   }
   return (
-    <div className="max-w-4xl space-y-8">
-      <header className="flex flex-wrap items-end justify-between gap-4">
+    <div className="space-y-8">
+      <header className="page-header">
         <div className="flex items-center gap-2">
           <Button
             variant="ghost"
@@ -91,11 +99,11 @@ function TodayPage() {
             <ChevronLeft />
           </Button>
           <div>
-            <h1 className="text-xl font-semibold tracking-tight">
+            <h1 className="page-title">
               {isToday ? "Today" : "Previous day"}
             </h1>
-            <p className="mt-1 font-mono text-xs text-muted-foreground">
-              {selected}
+            <p className="mt-1 text-sm text-muted-foreground">
+              {readableDate}
             </p>
           </div>
           <Button
@@ -107,18 +115,6 @@ function TodayPage() {
           >
             <ChevronRight />
           </Button>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          {data?.cycleDay !== null && data?.cycleDay !== undefined && (
-            <span className="rounded-md bg-primary/10 px-2 py-1 text-primary">
-              {data.cycleComplete
-                ? "Cycle complete"
-                : `Day ${data.cycleDay} / 40`}
-            </span>
-          )}
-          <span className="rounded-md bg-muted px-2 py-1 text-muted-foreground">
-            {data?.fajrStreak.current ?? 0}d Fajr streak
-          </span>
         </div>
       </header>
 
@@ -134,96 +130,135 @@ function TodayPage() {
       )}
       <fieldset
         disabled={update.isPending || dayQuery.isPending || dayQuery.isError}
-        className="min-w-0 space-y-8 disabled:opacity-60"
+        className="min-w-0 disabled:opacity-60"
       >
-        <section className="space-y-3">
-          <div className="flex items-baseline justify-between">
-            <h2 className="section-title">Salah</h2>
-            <span className="font-mono text-xs text-muted-foreground">
-              {logged}/5 logged
-            </span>
-          </div>
-          <div className="panel divide-y">
-            {prayers.map(({ key, label }) => {
-              const value = (day?.[key] ?? null) as PrayerStatus;
-              return (
-                <div key={key} className="flex items-center">
-                  <button
-                    type="button"
-                    onClick={() => togglePrayer(key, value)}
-                    className="flex min-h-11 flex-1 items-center justify-between px-4 py-3 text-left"
-                  >
-                    <span className="text-sm font-medium">{label}</span>
-                    <span
-                      className={`rounded-md px-2 py-0.5 text-xs ${statusTone(value)}`}
-                    >
-                      {statusLabel(value)}
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => patch({ date: selected, [key]: null })}
-                    disabled={value === null}
-                    aria-label={`Clear ${label}`}
-                    className="px-3 py-3 text-sm text-muted-foreground disabled:opacity-0"
-                  >
-                    ×
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </section>
+        <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] lg:gap-12">
+          <div className="min-w-0 space-y-10">
+            <section className="space-y-4">
+              <h2 className="section-title">Salah</h2>
+              <p className="flex items-baseline gap-2">
+                <span className="display">{logged}</span>
+                <span className="display-unit">/ 5 logged</span>
+              </p>
+              <div className="list">
+                {prayers.map(({ key, label }) => {
+                  const value = (day?.[key] ?? null) as PrayerStatus;
+                  return (
+                    <div key={key} className="list-row">
+                      <button
+                        type="button"
+                        onClick={() => togglePrayer(key, value)}
+                        className="flex flex-1 items-center justify-between gap-4 text-left"
+                      >
+                        <span className="text-sm font-medium">{label}</span>
+                        <span
+                          className={`rounded-md px-2 py-0.5 text-xs ${statusTone(value)}`}
+                        >
+                          {statusLabel(value)}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => patch({ date: selected, [key]: null })}
+                        disabled={value === null}
+                        aria-label={`Clear ${label}`}
+                        className="shrink-0 px-2 text-sm text-muted-foreground disabled:opacity-0"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
 
-        <section className="space-y-3">
-          <div className="flex items-baseline justify-between gap-4">
-            <h2 className="section-title">Daily practices</h2>
-            <span className="text-xs text-muted-foreground">
-              Open a row for the recitation
-            </span>
+            <section className="space-y-4">
+              <div className="flex items-baseline justify-between gap-4">
+                <h2 className="section-title">Daily practices</h2>
+                <span className="text-xs text-muted-foreground">
+                  Open a row for the recitation
+                </span>
+              </div>
+              <div className="list">
+                {boolItems.map(({ key, itemKey }) => (
+                  <PracticeDisclosure
+                    key={key}
+                    itemKey={itemKey}
+                    complete={day?.[key] ?? false}
+                    items={(data?.content ?? []).filter(
+                      (item) => item.item_key === itemKey,
+                    )}
+                    onToggle={() =>
+                      patch({ date: selected, [key]: !(day?.[key] ?? false) })
+                    }
+                  />
+                ))}
+                <NightDisclosure
+                  day={day}
+                  items={(data?.content ?? []).filter(
+                    (item) => item.item_key === "night_ayat",
+                  )}
+                  onToggle={(key, value) =>
+                    patch({ date: selected, [key]: !value })
+                  }
+                />
+              </div>
+            </section>
           </div>
-          <div className="space-y-2">
-            {boolItems.map(({ key, itemKey }) => (
-              <PracticeDisclosure
-                key={key}
-                itemKey={itemKey}
-                complete={day?.[key] ?? false}
+
+          <div className="min-w-0 space-y-8">
+            <section className="space-y-4">
+              <GuideHeading
+                label="Istighfar"
+                itemKey="istighfar"
                 items={(data?.content ?? []).filter(
-                  (item) => item.item_key === itemKey,
+                  (item) => item.item_key === "istighfar",
                 )}
-                onToggle={() =>
-                  patch({ date: selected, [key]: !(day?.[key] ?? false) })
+              />
+              <IstighfarCounter
+                count={day?.istighfar_count ?? 0}
+                target={data?.settings.istighfar_target ?? 100}
+                onUpdate={(count) =>
+                  patch({ date: selected, istighfar_count: count })
                 }
               />
-            ))}
-            <NightDisclosure
-              day={day}
-              items={(data?.content ?? []).filter(
-                (item) => item.item_key === "night_ayat",
+            </section>
+            <div className="list">
+              {data?.cycleDay !== null && data?.cycleDay !== undefined && (
+                <div className="list-row">
+                  <span className="section-label">Cycle</span>
+                  {data.cycleComplete ? (
+                    <span className="text-sm font-medium">Cycle complete</span>
+                  ) : (
+                    <span className="text-2xl font-semibold tabular-nums">
+                      {data.cycleDay}
+                      <span className="text-sm font-normal text-muted-foreground">
+                        {" "}
+                        / 40
+                      </span>
+                    </span>
+                  )}
+                </div>
               )}
-              onToggle={(key, value) =>
-                patch({ date: selected, [key]: !value })
-              }
-            />
+              <div className="list-row">
+                <span className="section-label">Fajr streak</span>
+                {data?.fajrStreak.current ? (
+                  <span className="text-2xl font-semibold tabular-nums">
+                    {data.fajrStreak.current}
+                    <span className="text-sm font-normal text-muted-foreground">
+                      {" "}
+                      days
+                    </span>
+                  </span>
+                ) : (
+                  <span className="text-sm text-muted-foreground">
+                    No streak yet
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
-        </section>
-
-        <section className="space-y-3">
-          <GuideHeading
-            label="Istighfar"
-            itemKey="istighfar"
-            items={(data?.content ?? []).filter(
-              (item) => item.item_key === "istighfar",
-            )}
-          />
-          <IstighfarCounter
-            count={day?.istighfar_count ?? 0}
-            target={data?.settings.istighfar_target ?? 100}
-            onUpdate={(count) =>
-              patch({ date: selected, istighfar_count: count })
-            }
-          />
-        </section>
+        </div>
       </fieldset>
     </div>
   );
@@ -257,34 +292,45 @@ function PracticeDisclosure({
   const [open, setOpen] = useState(false);
   const guide = DEEN_GUIDES[itemKey];
   return (
-    <article
-      className={`panel overflow-hidden ${complete ? "border-positive/30" : ""}`}
-    >
-      <div className="flex min-h-14 items-stretch">
+    <div>
+      <div className="list-row items-start">
+        <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-3">
+          <input
+            type="checkbox"
+            className="peer sr-only"
+            checked={complete}
+            aria-label={`${complete ? "Mark incomplete" : "Mark complete"}: ${guide.title}`}
+            onChange={onToggle}
+          />
+          <span className="mt-0.5 inline-flex shrink-0 rounded-[6px] peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ring">
+            <CheckMark complete={complete} />
+          </span>
+          <span className="min-w-0">
+            <span
+              className={`block text-sm font-medium ${complete ? "text-positive" : ""}`}
+            >
+              {guide.title}
+            </span>
+            <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">
+              {guide.window}
+            </span>
+          </span>
+        </label>
         <button
           type="button"
           aria-expanded={open}
           onClick={() => setOpen((value) => !value)}
-          className="flex min-w-0 flex-1 items-center justify-between gap-4 px-4 py-3 text-left"
+          className="shrink-0 text-xs font-medium text-primary"
         >
-          <span className="min-w-0">
-            <span className="block text-sm font-medium">{guide.title}</span>
-            <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-              {guide.window}
-            </span>
-          </span>
-        </button>
-        <button
-          type="button"
-          onClick={onToggle}
-          aria-label={`${complete ? "Mark incomplete" : "Mark complete"}: ${guide.title}`}
-          className="flex w-16 shrink-0 items-center justify-center border-l"
-        >
-          <CheckMark complete={complete} />
+          {open ? "Hide guide" : "Open guide"}
         </button>
       </div>
-      {open && <PracticeGuide itemKey={itemKey} items={items} />}
-    </article>
+      {open && (
+        <div className="pb-4">
+          <PracticeGuide itemKey={itemKey} items={items} />
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -320,30 +366,33 @@ function NightDisclosure({
   ];
   const completed = checks.filter((check) => check.value).length;
   return (
-    <article
-      className={`panel overflow-hidden ${completed === 3 ? "border-positive/30" : ""}`}
-    >
+    <div>
       <button
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
-        className="flex min-h-14 w-full items-center justify-between gap-4 px-4 py-3 text-left"
+        className="list-row w-full items-start text-left"
       >
-        <span>
-          <span className="text-sm font-medium">
+        <span className="min-w-0">
+          <span
+            className={`text-sm font-medium ${completed === 3 ? "text-positive" : ""}`}
+          >
             Night recitation{" "}
-            <span className="font-mono text-xs text-muted-foreground">
+            <span className="text-xs tabular-nums text-muted-foreground">
               {completed}/3
             </span>
           </span>
-          <span className="mt-0.5 block text-xs text-muted-foreground">
+          <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">
             At bedtime · tracked in three parts
           </span>
         </span>
+        <span className="shrink-0 text-xs font-medium text-primary">
+          {open ? "Hide guide" : "Open guide"}
+        </span>
       </button>
       {open && (
-        <div className="border-t">
-          <div className="grid gap-2 p-3 sm:grid-cols-3">
+        <div className="pb-4">
+          <div className="grid gap-2 pb-3 sm:grid-cols-3">
             {checks.map((check) => (
               <button
                 key={check.key}
@@ -359,7 +408,7 @@ function NightDisclosure({
           <PracticeGuide itemKey="night_ayat" items={items} nested />
         </div>
       )}
-    </article>
+    </div>
   );
 }
 
@@ -402,7 +451,7 @@ function PracticeGuide({
 }) {
   const guide = DEEN_GUIDES[itemKey];
   return (
-    <div className={`${nested ? "" : "border-t"} bg-muted/30 px-4 pb-5 pt-4`}>
+    <div className={`rounded-xl bg-muted/30 px-4 pb-5 pt-4 ${nested ? "mt-1" : ""}`}>
       <p className="text-xs font-medium text-primary">{guide.window}</p>
       <p className="mt-1 text-sm leading-6 text-muted-foreground">
         {guide.summary}
@@ -432,7 +481,7 @@ function ContentEntry({ item, number }: { item: DeenContent; number: number }) {
     <li className="panel p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 gap-3">
-          <span className="font-mono text-xs text-muted-foreground">
+          <span className="text-xs tabular-nums text-muted-foreground">
             {String(number).padStart(2, "0")}
           </span>
           <h3 className="text-sm font-semibold leading-5">{item.title}</h3>
@@ -514,10 +563,10 @@ function IstighfarCounter({
   return (
     <div className="panel p-5">
       <div className="flex items-end justify-between">
-        <span className="font-mono text-4xl font-semibold tabular-nums tracking-tight">
+        <span className="text-3xl font-semibold tabular-nums tracking-tight">
           {count}
         </span>
-        <span className="font-mono text-xs text-muted-foreground">
+        <span className="text-xs tabular-nums text-muted-foreground">
           {pct}% of {target}
         </span>
       </div>
@@ -531,8 +580,8 @@ function IstighfarCounter({
         {[1, 10, 33].map((step) => (
           <Button
             key={step}
-            variant="secondary"
-            className="min-h-11 flex-1 font-mono"
+            variant={step === 1 ? "default" : "secondary"}
+            className="min-h-11 flex-1 tabular-nums"
             onClick={() => onUpdate(count + step)}
           >
             +{step}
@@ -540,7 +589,7 @@ function IstighfarCounter({
         ))}
         <Button
           variant="ghost"
-          className="min-h-11 font-mono"
+          className="min-h-11 tabular-nums"
           disabled={count === 0}
           aria-label="Decrement istighfar count"
           onClick={() => onUpdate(Math.max(0, count - 1))}

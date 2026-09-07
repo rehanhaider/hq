@@ -5,9 +5,15 @@ import type { summarize } from "@/lib/metrics";
 import type { Filters } from "@/lib/model";
 const labels = {
   commits: "Commits",
-  prs: "Your PRs merged",
-  lines: "Line changes",
+  prs: "PRs merged",
+  lines: "LOCs",
 };
+function monthName(day: string) {
+  return new Date(`${day}T12:00:00Z`).toLocaleDateString("en-US", {
+    month: "short",
+    timeZone: "UTC",
+  });
+}
 export function ActivityChart({
   daily,
   from,
@@ -40,8 +46,8 @@ export function ActivityChart({
   });
   const selected = active === null ? undefined : rows[active];
   return (
-    <section className="panel min-w-0 p-5" aria-label="Activity over time">
-      <h2 className="font-semibold">Activity over time</h2>
+    <section className="panel min-w-0 p-5" aria-label="Activity">
+      <h2 className="section-title">Activity</h2>
       <div className="my-3 flex flex-wrap items-center gap-3">
         <div
           role="group"
@@ -52,6 +58,7 @@ export function ActivityChart({
             <Button
               key={key}
               size="sm"
+              className="w-28"
               variant={metric === key ? "default" : "outline"}
               aria-pressed={metric === key}
               onClick={() => onChange({ metric: key as Filters["metric"] })}
@@ -69,6 +76,7 @@ export function ActivityChart({
             <Button
               key={mode}
               size="sm"
+              className="w-28"
               variant={chart === mode ? "default" : "outline"}
               aria-pressed={chart === mode}
               onClick={() => onChange({ chart: mode })}
@@ -80,7 +88,7 @@ export function ActivityChart({
       </div>
       <div className="overflow-x-auto">
         <svg
-          viewBox="0 0 900 220"
+          viewBox="0 0 900 236"
           className="mt-4 w-full"
           role="img"
           aria-label={`${labels[metric]}: ${chart === "daily" ? "daily bars" : "cumulative line"}`}
@@ -161,12 +169,24 @@ export function ActivityChart({
                 i === rows.length - 1) && (
                 <text
                   x={x(i)}
-                  y="212"
+                  y="210"
                   textAnchor="middle"
                   fontSize="10"
                   className="fill-muted-foreground hidden sm:block"
                 >
-                  {row.day}
+                  {row.day.slice(8)}
+                </text>
+              )}
+              {(i === 0 || row.day.slice(5, 7) !== rows[i - 1]?.day.slice(5, 7)) && (
+                <text
+                  x={i === 0 ? 30 : x(i) - 420 / rows.length}
+                  y="230"
+                  textAnchor="start"
+                  fontSize="10"
+                  fontWeight="500"
+                  className="fill-foreground hidden sm:block"
+                >
+                  {monthName(row.day)}
                 </text>
               )}
             </g>
@@ -177,10 +197,7 @@ export function ActivityChart({
         <span>{from}</span>
         <span>{to}</span>
       </div>
-      <p
-        aria-live="polite"
-        className="mt-2 min-h-8 text-xs text-muted-foreground"
-      >
+      <p aria-live="polite" className="sr-only">
         {selected
           ? `${selected.day}: ${values[active!] === null ? "Not imported" : `${values[active!]!.toLocaleString()} ${labels[metric]}`}`
           : ""}

@@ -62,9 +62,9 @@ export function LanguageMetrics({
     })
     .join(", ");
   return (
-    <section className="panel min-w-0 p-5" aria-label="Language metrics">
-      <div className="flex flex-wrap items-center gap-3">
-        <h2 className="font-semibold">Languages</h2>
+    <section className="hairline min-w-0 pt-6" aria-label="Language metrics">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="section-title">Languages</h2>
         <div
           role="group"
           aria-label="Language view"
@@ -85,15 +85,15 @@ export function LanguageMetrics({
       </div>
       {mode === "pie" ? (
         total > 0 ? (
-          <div className="mt-6 grid items-center gap-6 lg:grid-cols-[18rem_minmax(0,1fr)] lg:gap-10">
+          <div className="mt-5 grid items-center gap-6 lg:grid-cols-[18rem_minmax(0,1fr)] lg:gap-10">
             <div
               className="relative mx-auto aspect-square w-full max-w-64 rounded-full sm:max-w-72"
               style={{ background: `conic-gradient(${gradient})` }}
               role="img"
               aria-label={`Language distribution: ${slices.map((r) => `${r.name} ${shareLabel(r.additions + r.deletions, total)}`).join(", ")}`}
             >
-              <div className="absolute inset-[22%] flex flex-col items-center justify-center rounded-full bg-card text-center">
-                <span className="font-mono text-2xl font-medium tabular-nums">
+              <div className="absolute inset-[22%] flex flex-col items-center justify-center rounded-full bg-background text-center">
+                <span className="text-2xl font-semibold tracking-tight tabular-nums">
                   {total.toLocaleString("en-US")}
                 </span>
                 <span className="mt-1 text-xs text-muted-foreground">
@@ -112,24 +112,37 @@ export function LanguageMetrics({
                   return (
                     <li
                       key={r.name}
-                      className="grid grid-cols-[0.625rem_minmax(0,1fr)_3.25rem] sm:grid-cols-[0.625rem_minmax(6rem,1fr)_3.25rem_minmax(4rem,1fr)] items-start gap-x-3"
+                      className="group grid grid-cols-[0.625rem_minmax(0,1fr)_3.25rem] items-center gap-x-3 gap-y-1 sm:grid-cols-[0.625rem_minmax(6rem,10rem)_minmax(0,1fr)_3.25rem]"
                     >
                       <span
-                        className="mt-1.5 size-2.5 rounded-full"
+                        className="size-2.5 rounded-full"
                         style={{ background: color }}
                       />
-                      <span className="min-w-0 break-words text-sm">{r.name}</span>
-                      <span className="pt-px text-right font-mono text-sm tabular-nums">
+                      <span className="min-w-0 truncate text-sm">{r.name}</span>
+                      <span className="relative hidden min-w-0 sm:block">
+                        <ShareBar pct={pct} color={color} />
+                        <span
+                          aria-hidden
+                          className="absolute -inset-y-2 right-0 flex translate-x-2 items-center gap-3 bg-background pl-3 text-xs tabular-nums opacity-0 transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none group-hover:translate-x-0 group-hover:opacity-100"
+                        >
+                          <span className="text-positive">
+                            +{r.additions.toLocaleString("en-US")}
+                          </span>
+                          <span className="text-negative">
+                            −{r.deletions.toLocaleString("en-US")}
+                          </span>
+                        </span>
+                      </span>
+                      <span className="text-right text-sm tabular-nums">
                         {pct.toFixed(1)}%
                       </span>
-                      <ShareBar
-                        className="mt-1.5 hidden sm:block"
-                        pct={pct}
-                        color={color}
-                      />
-                      <span className="col-start-2 font-mono text-xs text-muted-foreground">
-                        +{r.additions.toLocaleString("en-US")} / −
-                        {r.deletions.toLocaleString("en-US")}
+                      <span className="col-start-2 flex gap-3 text-xs tabular-nums sm:hidden">
+                        <span className="text-positive">
+                          +{r.additions.toLocaleString("en-US")}
+                        </span>
+                        <span className="text-negative">
+                          −{r.deletions.toLocaleString("en-US")}
+                        </span>
                       </span>
                     </li>
                   );
@@ -164,21 +177,21 @@ export function LanguageMetrics({
                     <td className="py-2.5 pr-4">
                       <div className="flex items-center gap-3">
                         <ShareBar pct={pct} />
-                        <span className="w-12 shrink-0 text-right font-mono tabular-nums">
+                        <span className="w-12 shrink-0 text-right tabular-nums">
                           {pct.toFixed(1)}%
                         </span>
                       </div>
                     </td>
-                    <td className="w-[1%] whitespace-nowrap py-2.5 pr-4 text-right font-mono tabular-nums text-positive">
+                    <td className="w-[1%] whitespace-nowrap py-2.5 pr-4 text-right tabular-nums text-positive">
                       +{r.additions.toLocaleString()}
                     </td>
-                    <td className="w-[1%] whitespace-nowrap py-2.5 pr-4 text-right font-mono tabular-nums text-negative">
+                    <td className="w-[1%] whitespace-nowrap py-2.5 pr-4 text-right tabular-nums text-negative">
                       −{r.deletions.toLocaleString()}
                     </td>
-                    <td className="w-[1%] whitespace-nowrap py-2.5 pr-4 text-right font-mono tabular-nums">
+                    <td className="w-[1%] whitespace-nowrap py-2.5 pr-4 text-right tabular-nums">
                       {r.commits ?? "—"}
                     </td>
-                    <td className="w-[1%] whitespace-nowrap py-2.5 text-right font-mono tabular-nums">
+                    <td className="w-[1%] whitespace-nowrap py-2.5 text-right tabular-nums">
                       {r.projects ?? "—"}
                     </td>
                   </tr>

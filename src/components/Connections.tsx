@@ -131,10 +131,10 @@ export function Connections({ importing }: { importing: boolean }) {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Repositories</h1>
-          <p className="mt-1.5 text-sm text-muted-foreground">
+      <div className="page-header">
+        <div className="min-w-0">
+          <h1 className="page-title">Repositories</h1>
+          <p className="page-description">
             Add or remove repositories. See fetch status and how much is stored.
           </p>
         </div>
@@ -149,18 +149,18 @@ export function Connections({ importing }: { importing: boolean }) {
         </Button>
       </div>
 
-      <section className="rounded-lg border px-4 py-3">
-        <h2 className="text-sm font-medium">GitHub account</h2>
+      <section className="list-row hairline flex-wrap pt-3">
+        <h2 className="section-label">GitHub account</h2>
         {github.isPending ? (
-          <p className="mt-2 text-sm text-muted-foreground">Checking token…</p>
+          <p className="text-sm text-muted-foreground">Checking token…</p>
         ) : github.data?.connected ? (
-          <p className="mt-2 flex items-center gap-2 text-sm">
+          <p className="flex items-center gap-2 text-sm">
             <Check className="size-3.5 text-positive" />
             Connected as @{github.data.login}
           </p>
         ) : (
           <p
-            className="mt-2 flex items-start gap-2 text-sm text-negative"
+            className="flex min-w-0 items-start gap-2 text-sm text-negative"
             role="alert"
           >
             <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
@@ -187,7 +187,7 @@ export function Connections({ importing }: { importing: boolean }) {
           {connections.error.message}
         </p>
       ) : !rows.length ? (
-        <div className="panel flex min-h-48 flex-col items-center justify-center px-5 py-10 text-center">
+        <div className="hairline flex min-h-48 flex-col items-center justify-center px-5 py-12 text-center">
           <span className="mb-4 flex size-12 items-center justify-center rounded-xl border bg-muted">
             <FolderGit2 className="size-5 text-muted-foreground" />
           </span>
@@ -241,8 +241,8 @@ function ProjectTable({
     meta: { busy },
   });
   return (
-    <section className="panel overflow-hidden">
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-b px-5 py-3">
+    <section className="min-w-0">
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 pb-3">
         <div className="flex items-center gap-2">
           <Label
             htmlFor="org-filter"
@@ -303,7 +303,7 @@ function ProjectTable({
       <DataTable
         table={table}
         empty={
-          <p className="p-5 text-muted-foreground">No repositories match.</p>
+          <p className="py-6 text-muted-foreground">No repositories match.</p>
         }
       />
     </section>

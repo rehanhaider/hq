@@ -55,102 +55,106 @@ function SettingsPage() {
   }
 
   return (
-    <div className="max-w-3xl space-y-8">
-      <header>
-        <h1 className="text-xl font-semibold tracking-tight">Settings</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Targets, dates, and the clock everything is measured against.
-        </p>
+    <div className="space-y-8">
+      <header className="page-header">
+        <div>
+          <h1 className="page-title">Settings</h1>
+          <p className="page-description">
+            Targets, dates, and the clock everything is measured against.
+          </p>
+        </div>
       </header>
-      <form
-        className="space-y-6"
-        onSubmit={(event) => {
-          event.preventDefault();
-          save.mutate({
-            data: {
-              timezone,
-              cycle_start_date: cycleStart || null,
-              istighfar_target: Number(target),
-            },
-          });
-        }}
-      >
-        <div className="panel divide-y">
-          <Row label="Timezone" hint="e.g. Asia/Kolkata, America/New_York">
-            <Input
-              value={timezone}
-              onChange={(event) => setTimezone(event.target.value)}
-            />
-          </Row>
-          <Row label="40-day cycle start">
-            <Input
-              type="date"
-              value={cycleStart}
-              onChange={(event) => setCycleStart(event.target.value)}
-            />
-          </Row>
-          <Row label="Istighfar daily target">
-            <Input
-              type="number"
-              min="1"
-              className="font-mono"
-              value={target}
-              onChange={(event) => setTarget(event.target.value)}
-            />
-          </Row>
+      <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] lg:gap-12">
+        <form
+          className="space-y-6"
+          onSubmit={(event) => {
+            event.preventDefault();
+            save.mutate({
+              data: {
+                timezone,
+                cycle_start_date: cycleStart || null,
+                istighfar_target: Number(target),
+              },
+            });
+          }}
+        >
+          <div className="panel divide-y">
+            <Row label="Timezone" hint="e.g. Asia/Kolkata, America/New_York">
+              <Input
+                value={timezone}
+                onChange={(event) => setTimezone(event.target.value)}
+              />
+            </Row>
+            <Row label="40-day cycle start">
+              <Input
+                type="date"
+                value={cycleStart}
+                onChange={(event) => setCycleStart(event.target.value)}
+              />
+            </Row>
+            <Row label="Istighfar daily target">
+              <Input
+                type="number"
+                min="1"
+                className="tabular-nums"
+                value={target}
+                onChange={(event) => setTarget(event.target.value)}
+              />
+            </Row>
+          </div>
+          <div className="flex items-center gap-3">
+            <Button type="submit" disabled={save.isPending}>
+              {save.isPending ? "Saving…" : "Save settings"}
+            </Button>
+            {save.isSuccess && (
+              <span className="text-xs text-positive">Saved.</span>
+            )}
+          </div>
+        </form>
+        <div className="space-y-8">
+          <section className="space-y-2">
+            <h2 className="section-label">Data</h2>
+            <div className="list">
+              <button
+                type="button"
+                className="list-row w-full text-left"
+                onClick={() => download.mutate({ data: { format: "json" } })}
+              >
+                <span>
+                  <span className="block text-sm font-medium">
+                    Full JSON export
+                  </span>
+                  <span className="block text-xs text-muted-foreground">
+                    Practice history and settings
+                  </span>
+                </span>
+                <span className="text-xs text-muted-foreground">json</span>
+              </button>
+              <button
+                type="button"
+                className="list-row w-full text-left"
+                onClick={() => download.mutate({ data: { format: "csv" } })}
+              >
+                <span>
+                  <span className="block text-sm font-medium">
+                    Daily practices
+                  </span>
+                  <span className="block text-xs text-muted-foreground">
+                    Salah, adhkar and istighfar records
+                  </span>
+                </span>
+                <span className="text-xs text-muted-foreground">csv</span>
+              </button>
+            </div>
+          </section>
+          <ResetSection
+            onDone={async () => {
+              await queryClient.invalidateQueries({ queryKey: deenKeys.all });
+              await queryClient.invalidateQueries({ queryKey: deenKeys.home });
+            }}
+          />
         </div>
-        <div className="flex items-center gap-3">
-          <Button type="submit" disabled={save.isPending}>
-            {save.isPending ? "Saving…" : "Save settings"}
-          </Button>
-          {save.isSuccess && (
-            <span className="text-xs text-positive">Saved.</span>
-          )}
-        </div>
-      </form>
-      <section className="space-y-3">
-        <h2 className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
-          Data
-        </h2>
-        <div className="panel divide-y">
-          <button
-            type="button"
-            className="flex w-full items-center justify-between px-4 py-4 text-left"
-            onClick={() => download.mutate({ data: { format: "json" } })}
-          >
-            <span>
-              <span className="block text-sm font-medium">
-                Full JSON export
-              </span>
-              <span className="block text-xs text-muted-foreground">
-                Practice history and settings
-              </span>
-            </span>
-            <span className="font-mono text-xs text-muted-foreground">
-              json
-            </span>
-          </button>
-          <button
-            type="button"
-            className="flex w-full items-center justify-between px-4 py-4 text-left"
-            onClick={() => download.mutate({ data: { format: "csv" } })}
-          >
-            <span>
-              <span className="block text-sm font-medium">Daily practices</span>
-              <span className="block text-xs text-muted-foreground">
-                Salah, adhkar and istighfar records
-              </span>
-            </span>
-            <span className="font-mono text-xs text-muted-foreground">csv</span>
-          </button>
-        </div>
-      </section>
-      <ResetSection
-        onDone={async () => {
-          await queryClient.invalidateQueries({ queryKey: deenKeys.all });
-          await queryClient.invalidateQueries({ queryKey: deenKeys.home });
-        }}
-      />
+      </div>
     </div>
   );
 }
@@ -167,48 +171,47 @@ function ResetSection({ onDone }: { onDone: () => Promise<void> }) {
   if (reset.isSuccess) {
     const cleared = Object.entries(reset.data.deleted).filter(([, n]) => n > 0);
     return (
-      <section className="space-y-3">
-        <h2 className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
-          Danger zone
-        </h2>
-        <div className="panel space-y-3 px-4 py-3.5">
-          <p className="text-sm font-medium">Reset complete.</p>
-          <p className="text-xs text-muted-foreground">
-            {cleared.length === 0
-              ? "There was nothing logged to delete."
-              : cleared
-                  .map(([table, n]) => `${table.replace(/_/g, " ")}: ${n}`)
-                  .join(" · ")}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            Backup written to{" "}
-            <code className="font-mono">{reset.data.backup_path}</code>.
-          </p>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              setConfirming(false);
-              setTyped("");
-              reset.reset();
-            }}
-          >
-            Done
-          </Button>
+      <section className="space-y-2">
+        <h2 className="section-label">Danger zone</h2>
+        <div className="list">
+          <div className="list-row flex-col items-start gap-2 py-4">
+            <p className="text-sm font-medium">Reset complete.</p>
+            <p className="text-xs text-muted-foreground">
+              {cleared.length === 0
+                ? "There was nothing logged to delete."
+                : cleared
+                    .map(([table, n]) => `${table.replace(/_/g, " ")}: ${n}`)
+                    .join(" · ")}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Backup written to{" "}
+              <code className="font-mono">{reset.data.backup_path}</code>.
+            </p>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="-ml-3"
+              onClick={() => {
+                setConfirming(false);
+                setTyped("");
+                reset.reset();
+              }}
+            >
+              Done
+            </Button>
+          </div>
         </div>
       </section>
     );
   }
   return (
-    <section className="space-y-3">
-      <h2 className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
-        Danger zone
-      </h2>
-      <div className="panel space-y-3 px-4 py-3.5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+    <section className="space-y-2">
+      <h2 className="section-label">Danger zone</h2>
+      <div className="list">
+        <div className="list-row">
           <span>
             <span className="block text-sm font-medium">Reset all data</span>
-            <span className="block text-xs text-muted-foreground">
+            <span className="block text-xs leading-5 text-muted-foreground">
               Deletes all practice history. Settings stay.
             </span>
           </span>
@@ -223,7 +226,7 @@ function ResetSection({ onDone }: { onDone: () => Promise<void> }) {
           )}
         </div>
         {confirming && (
-          <div className="space-y-3 border-t pt-3">
+          <div className="space-y-3 py-4">
             <p className="text-xs text-muted-foreground">
               A backup is written first. Type RESET to confirm.
             </p>

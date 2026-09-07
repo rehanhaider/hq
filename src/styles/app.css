@@ -155,10 +155,28 @@
     @apply flex flex-wrap items-end justify-between gap-4;
   }
   .page-title {
-    @apply text-xl font-semibold tracking-tight;
+    @apply text-3xl font-semibold leading-tight tracking-tight text-balance sm:text-[2rem];
   }
   .page-description {
     @apply mt-2 max-w-prose text-sm leading-6 text-muted-foreground;
+  }
+  .display {
+    @apply text-5xl font-semibold leading-none tracking-tight tabular-nums;
+  }
+  .display-unit {
+    @apply text-lg font-normal text-muted-foreground;
+  }
+  .section-label {
+    @apply text-xs font-medium uppercase tracking-wide text-muted-foreground;
+  }
+  .list {
+    @apply divide-y divide-border;
+  }
+  .list-row {
+    @apply flex min-h-11 items-center justify-between gap-4 py-3;
+  }
+  .hairline {
+    @apply border-t border-border;
   }
   .section-tabs {
     @apply flex gap-5 overflow-x-auto border-b;
@@ -170,7 +188,7 @@
     @apply border-primary font-medium text-foreground;
   }
   .section-title {
-    @apply text-sm font-semibold;
+    @apply text-base font-semibold tracking-tight;
   }
 }
 

@@ -60,13 +60,10 @@ export function ImportPanel({
     (mutation.data && !mutation.data.ok ? mutation.data.error : "") ||
     mutation.error?.message;
   return (
-    <section
-      className="panel border-primary/30 p-5"
-      aria-labelledby="import-heading"
-    >
+    <section className="panel p-5" aria-labelledby="import-heading">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 id="import-heading" className="font-semibold">
+          <h2 id="import-heading" className="section-title">
             {imported.length ? "Add repositories" : "Import your activity"}
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
