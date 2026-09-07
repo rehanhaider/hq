@@ -13,16 +13,14 @@
 // neither prune nor suppress the backups of another.
 
 import { DatabaseSync } from "node:sqlite";
+import { spawnSync } from "node:child_process";
 import {
   existsSync,
-  linkSync,
   mkdirSync,
-  readFileSync,
   readdirSync,
   renameSync,
   rmSync,
   statSync,
-  writeFileSync,
 } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -32,122 +30,55 @@ const backupDir = process.env.HQ_BACKUP_DIR ?? join(root, "backups");
 
 const KEEP = { daily: 7, weekly: 4 };
 
+const LOCK_CONFLICT = 75;
+
 /**
- * Identity of a lock holder. A bare pid is not enough: the lock file outlives a
- * reboot while pid allocation restarts, so a long-lived process inheriting the
- * number would look alive forever and silently suppress every backup while the
- * unit still reported success. The boot id catches the reboot case and the
- * process start time catches reuse within one boot.
+ * Runs the real work under a kernel advisory lock, by re-executing this script
+ * inside flock(1).
+ *
+ * A lock file guarded by hand cannot be made airtight: judging a lock stale and
+ * then removing it is a check followed by an act, and the file can be replaced
+ * in between, so a recovering process can delete a lock another has just
+ * legitimately acquired. Three rounds of review found a different instance of
+ * that same shape. flock has no staleness to recover from — the kernel drops
+ * the lock when the holder dies — so the class of bug does not exist.
+ *
+ * Re-executing, rather than putting flock in the unit, keeps the guarantee
+ * however the script is invoked: an ad-hoc `node scripts/backup.mjs` alongside
+ * the timer is exactly the overlap the lock is for.
+ *
+ * Returns an exit code for the parent, or null if this process should do the
+ * work itself — either because it is already inside the lock, or because flock
+ * is unavailable and running unlocked beats not running.
  */
-function self() {
-  return { pid: process.pid, boot: bootId(), start: startTime(process.pid) };
-}
-
-function bootId() {
-  try {
-    return readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
-  } catch {
-    return null; // not Linux; fall back to the pid check alone
-  }
-}
-
-function startTime(pid) {
-  try {
-    const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
-    // Skip past the comm field, which may itself contain spaces and brackets.
-    return stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19] ?? null;
-  } catch {
+function runUnderFlock() {
+  if (process.env.HQ_BACKUP_LOCKED === "1") return null;
+  mkdirSync(backupDir, { recursive: true });
+  const result = spawnSync(
+    "flock",
+    [
+      "--nonblock",
+      `--conflict-exit-code=${LOCK_CONFLICT}`,
+      join(backupDir, ".lock"),
+      process.execPath,
+      fileURLToPath(import.meta.url),
+    ],
+    {
+      stdio: "inherit",
+      env: { ...process.env, HQ_BACKUP_LOCKED: "1" },
+    },
+  );
+  if (result.error?.code === "ENOENT") {
+    console.error("flock is unavailable; running without a lock.");
     return null;
   }
-}
-
-function heldBy(holder) {
-  if (!holder?.pid) return false;
-  const boot = bootId();
-  if (holder.boot && boot && holder.boot !== boot) return false; // earlier boot
-  if (!alive(holder.pid)) return false;
-  const start = startTime(holder.pid);
-  if (holder.start && start && holder.start !== start) return false; // pid reused
-  return true;
-}
-
-/**
- * Serialises runs. Two processes — the timer and a manual invocation — would
- * otherwise both find the weekly tier due, both write a snapshot, and burn two
- * of the four weekly slots on the same day; their prunes would race too.
- * Returns null when another live run holds the lock; a lock left behind by a
- * killed run, or by a previous boot, is taken over.
- */
-function acquireLock() {
-  const path = join(backupDir, ".lock");
-  mkdirSync(backupDir, { recursive: true });
-  const mine = JSON.stringify(self());
-  const staging = `${path}.${process.pid}`;
-
-  for (let attempt = 0; attempt < 3; attempt++) {
-    // Fill the file before it is visible under the lock name. Creating it with
-    // "wx" and writing afterwards leaves a window where a contender reads an
-    // empty file, fails to parse it, and concludes the lock is stale. link()
-    // publishes a complete file and fails with EEXIST if one already exists.
-    rmSync(staging, { force: true });
-    writeFileSync(staging, mine);
-    try {
-      linkSync(staging, path);
-      rmSync(staging, { force: true });
-      // A contender that judged this lock stale a moment ago may still unlink
-      // it and put its own in place. Reading back what is actually there
-      // settles who owns it, and the loser backs off rather than running too.
-      try {
-        if (readFileSync(path, "utf8") !== mine) return null;
-      } catch {
-        return null;
-      }
-      return () => {
-        try {
-          if (readFileSync(path, "utf8") === mine) rmSync(path, { force: true });
-        } catch {
-          // Already gone, or taken over; either way not ours to remove.
-        }
-      };
-    } catch (error) {
-      rmSync(staging, { force: true });
-      if (error.code !== "EEXIST") throw error;
-    }
-
-    let holder = null;
-    try {
-      holder = JSON.parse(readFileSync(path, "utf8"));
-    } catch {
-      // Released between our link and this read, or written by an older
-      // version that stored a bare pid. Retry rather than assume.
-      continue;
-    }
-    if (heldBy(holder)) return null;
-
-    // Take the stale lock away by renaming it, which is atomic: of two
-    // processes recovering the same stale lock exactly one rename succeeds and
-    // the other gets ENOENT. A stat-then-unlink pair cannot promise that — the
-    // file can be replaced in between, and the unlink would then destroy a
-    // lock someone else had legitimately acquired.
-    try {
-      const taken = `${path}.stale.${process.pid}`;
-      renameSync(path, taken);
-      rmSync(taken, { force: true });
-    } catch (error) {
-      if (error.code !== "ENOENT") throw error;
-      // Another process cleared it first; loop round and contend for the claim.
-    }
+  if (result.error) throw result.error;
+  if (result.status === LOCK_CONFLICT) {
+    // Not a failure: the run holding the lock is doing the same work.
+    console.log("Another backup run is in progress; skipping.");
+    return 0;
   }
-  return null;
-}
-
-function alive(pid) {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return error.code === "EPERM"; // running, just not ours to signal
-  }
+  return result.status ?? 1;
 }
 
 // Whole days since the epoch, in local time, matching how stamp() names files.
@@ -335,6 +266,9 @@ function snapshot(sourcePath, label, tier, at) {
   prune(label, tier, KEEP[tier]);
 }
 
+const relayed = runUnderFlock();
+if (relayed !== null) process.exit(relayed);
+
 const now = new Date();
 let byLabel;
 let missing;
@@ -346,7 +280,7 @@ try {
 }
 
 let failed = 0;
-// Reported before the lock, so a run that can do nothing else still says why.
+// Reported even when nothing else can be done, so the run says why it failed.
 for (const { env, path } of missing) {
   failed++;
   console.error(`FAILED ${env}: ${path} does not exist`);
@@ -357,28 +291,17 @@ if (!byLabel.size) {
   process.exit(1);
 }
 
-const release = acquireLock();
-if (!release) {
-  // Not a failure: the run that holds the lock is doing the same work.
-  console.log("Another backup run is in progress; skipping.");
-  process.exit(0);
-}
-
-try {
-  for (const [label, path] of byLabel) {
-    const tiers = weeklyIsDue(label, now) ? ["daily", "weekly"] : ["daily"];
-    console.log(`${label} <- ${path} (${tiers.join(", ")})`);
-    for (const tier of tiers) {
-      try {
-        snapshot(path, label, tier, now);
-      } catch (error) {
-        failed++;
-        console.error(`  FAILED ${label}/${tier}: ${error.message}`);
-      }
+for (const [label, path] of byLabel) {
+  const tiers = weeklyIsDue(label, now) ? ["daily", "weekly"] : ["daily"];
+  console.log(`${label} <- ${path} (${tiers.join(", ")})`);
+  for (const tier of tiers) {
+    try {
+      snapshot(path, label, tier, now);
+    } catch (error) {
+      failed++;
+      console.error(`  FAILED ${label}/${tier}: ${error.message}`);
     }
   }
-} finally {
-  release();
 }
 
 process.exit(failed ? 1 : 0);
