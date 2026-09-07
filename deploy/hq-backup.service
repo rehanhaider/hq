@@ -1,0 +1,13 @@
+[Unit]
+Description=HQ SQLite Backup
+After=hq.service
+
+[Service]
+Type=oneshot
+# Must match hq.service, or backups become root-owned and the app user can
+# neither prune nor restore them.
+User=rehan
+Group=rehan
+WorkingDirectory=/home/rehan/Apps/hq
+# VACUUM INTO reads through a live WAL, so the app keeps serving during this.
+ExecStart=/usr/bin/node /home/rehan/Apps/hq/scripts/backup.mjs

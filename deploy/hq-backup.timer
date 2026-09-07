@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily HQ SQLite Backup
+
+[Timer]
+OnCalendar=*-*-* 02:00:00
+# Catch up after downtime; a Pi that was off at 02:00 still gets its backup.
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

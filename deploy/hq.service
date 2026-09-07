@@ -1,0 +1,24 @@
+[Unit]
+Description=HQ Personal Dashboard
+After=network.target avahi-daemon.service
+
+[Service]
+Type=simple
+User=rehan
+Group=rehan
+WorkingDirectory=/home/rehan/Apps/hq
+Environment=NODE_ENV=production
+# Databases resolve relative to WorkingDirectory: data/deen.sqlite, data/activity.sqlite.
+# Optional overrides (HQ_DEEN_DATABASE, HQ_DATABASE) and GITHUB_TOKEN go in the
+# env file. Leading "-" so a missing file is not a startup failure.
+EnvironmentFile=-/home/rehan/Apps/hq/.env
+# Port 80 is privileged; this grants just that bind, so the app still runs as rehan.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+# The .bin shim sets the NODE_PATH that pnpm's nested layout needs.
+ExecStart=/home/rehan/Apps/hq/node_modules/.bin/srvx serve --prod --dir . --entry dist/server/server.js --static dist/client --host 0.0.0.0 --port 80
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
