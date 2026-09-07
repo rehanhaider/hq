@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -141,59 +142,32 @@ describe("backup", () => {
     expect(listed("deen", "daily")).toHaveLength(1);
   });
 
-  it("keeps every database when basenames collide across directories", () => {
-    // Regression: the suffix loop grew `label` itself, so a duplicate exited on
-    // a free name like foo-2-3 and then overwrote the entry holding foo-2 —
-    // silently dropping a database from the run.
+  it("refuses an ambiguous configuration instead of inventing names", () => {
+    // A backup directory is named after its database, so two databases sharing
+    // a filename would share a directory and prune each other. Guessing a
+    // distinct name is what previously dropped a database from a run and let
+    // one steal another's history, so this is refused before anything is
+    // written rather than worked around.
     const a = join(dir, "one", "deen.sqlite");
     const b = join(dir, "two", "deen.sqlite");
     makeDb(a, "one");
     makeDb(b, "two");
     rmSync(join(dataDir(), "deen.sqlite"));
-    run({ HQ_DEEN_DATABASE: a, HQ_BACKUP_DATA: join(dir, "two") });
 
-    // Colliding basenames are disambiguated by directory, so both survive.
-    const labels = readdirSync(backupDir()).filter((d) => d.startsWith("deen-"));
-    expect(labels).toHaveLength(2);
-    const tables = labels.map((label) => {
-      expect(listed(label, "daily")).toHaveLength(1);
-      const db = new DatabaseSync(
-        join(backupDir(), label, "daily", listed(label, "daily")[0]),
-        { readOnly: true },
-      );
-      const t = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").get().name;
-      db.close();
-      return t;
-    });
-    expect(tables.sort()).toEqual(["one", "two"]);
-  });
-
-  it("does not hand an existing label to a database discovered later", () => {
-    // Regression: labels were numbered by discovery order, so adding a
-    // same-basename database that sorts earlier stole the existing label — its
-    // snapshots landed in the other database's directory and pruned its copies.
-    const kept = join(dir, "zzz", "deen.sqlite");
-    makeDb(kept, "kept");
-    rmSync(join(dataDir(), "deen.sqlite"));
-    run({ HQ_DEEN_DATABASE: kept });
-    expect(listed("deen", "daily")).toHaveLength(1);
-
-    // A newcomer sorting before it must not take over backups/deen.
-    const newcomer = join(dir, "aaa", "deen.sqlite");
-    makeDb(newcomer, "newcomer");
-    run({ HQ_DEEN_DATABASE: kept, HQ_BACKUP_DATA: join(dir, "aaa") });
-    expect(listed("deen", "daily")).toHaveLength(1);
-
-    const dirs = readdirSync(backupDir()).filter((d) => d.startsWith("deen"));
-    expect(dirs).toHaveLength(3); // deen, plus one hashed label per collision
-    for (const label of dirs.filter((d) => d !== "deen")) {
-      expect(listed(label, "daily")).toHaveLength(1);
+    let failure;
+    try {
+      run({ HQ_DEEN_DATABASE: a, HQ_BACKUP_DATA: join(dir, "two") });
+    } catch (error) {
+      failure = error;
     }
-
-    // Labels are a function of path, so a repeat run reuses the same ones.
-    run({ HQ_DEEN_DATABASE: kept, HQ_BACKUP_DATA: join(dir, "aaa") });
-    expect(readdirSync(backupDir()).filter((d) => d.startsWith("deen")).sort())
-      .toEqual(dirs.sort());
+    expect(failure).toBeDefined();
+    expect(failure.status).toBe(1);
+    const stderr = String(failure.stderr);
+    expect(stderr).toContain('Two databases are both named "deen"');
+    expect(stderr).toContain(a);
+    expect(stderr).toContain(b);
+    // It refuses before taking the lock, so nothing at all is written.
+    expect(existsSync(backupDir())).toBe(false);
   });
 
   it("skips a run while another holds the lock", () => {
