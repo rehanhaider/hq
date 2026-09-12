@@ -90,8 +90,8 @@ function calendarDay(ms) {
 /**
  * Resolves the databases the app actually opens.
  *
- * `src/server/deen.ts` and `src/server/db.ts` read HQ_DEEN_DATABASE and
- * HQ_DATABASE, so a scan of `data/` alone would back up whatever happened to
+ * The server stores read HQ_DEEN_DATABASE, HQ_DATABASE, and HQ_NOTES_DATABASE,
+ * so a scan of `data/` alone would back up whatever happened to
  * be left in the default location while the live databases went untouched —
  * and still report success. Both units set the same WorkingDirectory, so
  * resolving relative paths the way the app does keeps the two in step.
@@ -103,6 +103,7 @@ function sources() {
   const configured = [
     { env: "HQ_DEEN_DATABASE", fallback: "data/deen.sqlite" },
     { env: "HQ_DATABASE", fallback: "data/activity.sqlite" },
+    { env: "HQ_NOTES_DATABASE", fallback: "data/notes.sqlite" },
   ].map(({ env, fallback }) => ({
     env,
     explicit: Boolean(process.env[env]),

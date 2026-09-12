@@ -88,6 +88,21 @@ describe("backup", () => {
     db.close();
   });
 
+  it("backs up Notes when its configured path is outside the other database directories", () => {
+    const notes = join(dir, "notes-volume", "notes.sqlite");
+    makeDb(notes, "pages");
+    run({ HQ_NOTES_DATABASE: notes });
+    const file = listed("notes", "daily")[0];
+    expect(file).toBeDefined();
+    const db = new DatabaseSync(join(backupDir(), "notes", "daily", file), {
+      readOnly: true,
+    });
+    expect(
+      db.prepare("SELECT name FROM sqlite_master WHERE type='table'").get().name,
+    ).toBe("pages");
+    db.close();
+  });
+
   it("keeps 7 daily copies", () => {
     for (let i = 0; i < 9; i++) run();
     expect(listed("deen", "daily")).toHaveLength(7);
