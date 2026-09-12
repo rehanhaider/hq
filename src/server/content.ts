@@ -305,6 +305,40 @@ export class ContentStore {
     );
   }
 
+  /**
+   * Every property a write refers to, checked before any of it is applied. A
+   * transaction body that returns a failure still reaches COMMIT, so rejecting
+   * halfway through — a tag removed and its replacement then found missing —
+   * would report a failed move and keep the damage.
+   */
+  private unknownProperty(input: {
+    statusId?: string;
+    typeId?: string | null;
+    addTagId?: string;
+  }) {
+    if (input.statusId !== undefined && !this.propertyExists("status", input.statusId))
+      return "unknown-status" as const;
+    if (
+      input.typeId !== undefined &&
+      input.typeId !== null &&
+      !this.propertyExists("type", input.typeId)
+    )
+      return "unknown-type" as const;
+    if (input.addTagId !== undefined && !this.propertyExists("tag", input.addTagId))
+      return "unknown-tag" as const;
+    return null;
+  }
+
+  /** Replaces a page's tags. Tags that no longer exist are dropped. */
+  private setTags(pageId: string, tagIds: string[]) {
+    this.db.prepare("DELETE FROM page_tags WHERE page_id = ?").run(pageId);
+    const link = this.db.prepare(
+      "INSERT OR IGNORE INTO page_tags (page_id, tag_id) VALUES (?, ?)",
+    );
+    for (const tagId of new Set(tagIds))
+      if (this.propertyExists("tag", tagId)) link.run(pageId, tagId);
+  }
+
   properties(): ContentProperties {
     const read = (kind: PropertyKind) =>
       (
@@ -350,6 +384,20 @@ export class ContentStore {
     document = emptyDocument(),
     statusId: string | null = null,
     typeId: string | null = null,
+    tagIds: string[] = [],
+  ): PageDetail {
+    return this.transaction(() =>
+      this.insert(title, parentId, document, statusId, typeId, tagIds),
+    );
+  }
+
+  private insert(
+    title: string,
+    parentId: string | null,
+    document: ContentBlock[],
+    statusId: string | null,
+    typeId: string | null,
+    tagIds: string[],
   ): PageDetail {
     let parent: PageDetail | null = null;
     if (parentId) {
@@ -398,6 +446,7 @@ export class ContentStore {
         type,
         position,
       );
+    if (tagIds.length) this.setTags(id, tagIds);
     return this.get(id)!;
   }
 
@@ -439,24 +488,13 @@ export class ContentStore {
     return this.transaction(() => {
       const page = this.get(input.id);
       if (!page) return { ok: false as const, code: "missing" as const };
-      if (input.statusId !== undefined) {
-        if (!this.propertyExists("status", input.statusId))
-          return { ok: false as const, code: "unknown-status" as const };
+      const unknown = this.unknownProperty(input);
+      if (unknown) return { ok: false as const, code: unknown };
+      if (input.statusId !== undefined)
         this.db.prepare("UPDATE pages SET status_id = ? WHERE id = ?").run(input.statusId, input.id);
-      }
-      if (input.typeId !== undefined) {
-        if (input.typeId !== null && !this.propertyExists("type", input.typeId))
-          return { ok: false as const, code: "unknown-type" as const };
+      if (input.typeId !== undefined)
         this.db.prepare("UPDATE pages SET type_id = ? WHERE id = ?").run(input.typeId, input.id);
-      }
-      if (input.tagIds) {
-        this.db.prepare("DELETE FROM page_tags WHERE page_id = ?").run(input.id);
-        const link = this.db.prepare(
-          "INSERT OR IGNORE INTO page_tags (page_id, tag_id) VALUES (?, ?)",
-        );
-        for (const tagId of new Set(input.tagIds))
-          if (this.propertyExists("tag", tagId)) link.run(input.id, tagId);
-      }
+      if (input.tagIds) this.setTags(input.id, input.tagIds);
       this.db
         .prepare("UPDATE pages SET updated_at = ? WHERE id = ?")
         .run(new Date().toISOString(), input.id);
@@ -474,31 +512,29 @@ export class ContentStore {
     typeId?: string | null;
     addTagId?: string;
     removeTagId?: string;
+    /** The page's whole tag list, for a drop that is not one tag's worth. */
+    tagIds?: string[];
     orderedIds?: string[];
   }) {
     return this.transaction(() => {
       const page = this.get(input.id);
       if (!page) return { ok: false as const, code: "missing" as const };
-      if (input.statusId !== undefined) {
-        if (!this.propertyExists("status", input.statusId))
-          return { ok: false as const, code: "unknown-status" as const };
+      const unknown = this.unknownProperty(input);
+      if (unknown) return { ok: false as const, code: unknown };
+      if (input.statusId !== undefined)
         this.db.prepare("UPDATE pages SET status_id = ? WHERE id = ?").run(input.statusId, input.id);
-      }
-      if (input.typeId !== undefined) {
-        if (input.typeId !== null && !this.propertyExists("type", input.typeId))
-          return { ok: false as const, code: "unknown-type" as const };
+      if (input.typeId !== undefined)
         this.db.prepare("UPDATE pages SET type_id = ? WHERE id = ?").run(input.typeId, input.id);
-      }
-      if (input.removeTagId)
-        this.db
-          .prepare("DELETE FROM page_tags WHERE page_id = ? AND tag_id = ?")
-          .run(input.id, input.removeTagId);
-      if (input.addTagId) {
-        if (!this.propertyExists("tag", input.addTagId))
-          return { ok: false as const, code: "unknown-tag" as const };
-        this.db
-          .prepare("INSERT OR IGNORE INTO page_tags (page_id, tag_id) VALUES (?, ?)")
-          .run(input.id, input.addTagId);
+      if (input.tagIds) this.setTags(input.id, input.tagIds);
+      else {
+        if (input.removeTagId)
+          this.db
+            .prepare("DELETE FROM page_tags WHERE page_id = ? AND tag_id = ?")
+            .run(input.id, input.removeTagId);
+        if (input.addTagId)
+          this.db
+            .prepare("INSERT OR IGNORE INTO page_tags (page_id, tag_id) VALUES (?, ?)")
+            .run(input.id, input.addTagId);
       }
       this.reposition(input.orderedIds ?? []);
       this.db
@@ -544,10 +580,19 @@ export class ContentStore {
         (this.db.prepare(`SELECT count(*) AS total FROM ${table}`).get() as { total: number })
           .total,
       );
+      // After a deletion the positions have a gap, so the count is already
+      // taken. A new entry belongs at the end of the list, past the highest.
+      const position = Number(
+        (
+          this.db
+            .prepare(`SELECT coalesce(max(position), -1) + 1 AS next FROM ${table}`)
+            .get() as { next: number }
+        ).next,
+      );
       const id = randomUUID();
       this.db
         .prepare(`INSERT INTO ${table} (id, name, color, position) VALUES (?, ?, ?, ?)`)
-        .run(id, name, color ?? PROPERTY_COLORS[count % PROPERTY_COLORS.length]!, count);
+        .run(id, name, color ?? PROPERTY_COLORS[count % PROPERTY_COLORS.length]!, position);
       return { ok: true as const, id, created: true as const };
     });
   }
@@ -556,8 +601,16 @@ export class ContentStore {
     return this.transaction(() => {
       if (!this.propertyExists(kind, id)) return { ok: false as const, code: "missing" as const };
       const table = PROPERTY_TABLES[kind];
-      if (changes.name !== undefined)
+      if (changes.name !== undefined) {
+        // Creating reuses a name that already exists, so renaming must not be
+        // able to produce the duplicate that creating refuses to: two columns
+        // reading the same would split pages between them.
+        const clash = this.db
+          .prepare(`SELECT 1 FROM ${table} WHERE lower(name) = lower(?) AND id <> ?`)
+          .get(changes.name, id);
+        if (clash) return { ok: false as const, code: "duplicate" as const };
         this.db.prepare(`UPDATE ${table} SET name = ? WHERE id = ?`).run(changes.name, id);
+      }
       if (changes.color !== undefined)
         this.db.prepare(`UPDATE ${table} SET color = ? WHERE id = ?`).run(changes.color, id);
       return { ok: true as const };

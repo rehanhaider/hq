@@ -307,24 +307,39 @@ export function ContentWorkspace({ trashed }: { trashed: boolean }) {
     const next = { ...current, ...patch, tagIds: patch.tagIds ?? current.tagIds };
     draftRef.current = next;
     setDraft(next);
+    // Only the properties this request set, and only while they are still the
+    // ones on screen. The whole draft cannot be restored: the editor may have
+    // typed since, and putting that text back would hand the pending autosave
+    // an older document to persist.
+    const rollback = () => {
+      const latest = draftRef.current;
+      if (!latest || latest.id !== current.id) return;
+      const restored = { ...latest };
+      if (patch.statusId !== undefined && latest.statusId === next.statusId)
+        restored.statusId = current.statusId;
+      if (patch.typeId !== undefined && latest.typeId === next.typeId)
+        restored.typeId = current.typeId;
+      if (patch.tagIds !== undefined && latest.tagIds.join() === next.tagIds.join())
+        restored.tagIds = current.tagIds;
+      draftRef.current = restored;
+      setDraft(restored);
+      setActionError("The page properties could not be saved.");
+    };
     try {
       const result = await setPageProperties({ data: { id: current.id, ...patch } });
       if (!result.ok) {
-        draftRef.current = current;
-        setDraft(current);
-        setActionError("The page properties could not be saved.");
+        rollback();
         return;
       }
       setActionError("");
+      const editing = draftRef.current?.id === current.id ? draftRef.current : null;
       queryClient.setQueryData(contentKeys.detail(current.id), {
         ...result.page,
-        document: current.document,
+        document: editing?.document ?? current.document,
       });
       await queryClient.invalidateQueries({ queryKey: contentKeys.lists });
     } catch {
-      draftRef.current = current;
-      setDraft(current);
-      setActionError("The page properties could not be saved.");
+      rollback();
     }
   };
 

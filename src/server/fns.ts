@@ -140,6 +140,7 @@ export const createPage = createServerFn({ method: "POST" })
       data.document,
       data.statusId,
       data.typeId,
+      data.tagIds,
     ),
   );
 export const setPageProperties = createServerFn({ method: "POST" })

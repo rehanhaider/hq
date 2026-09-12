@@ -16,7 +16,6 @@ import {
 } from "@dnd-kit/core";
 import {
   SortableContext,
-  arrayMove,
   sortableKeyboardCoordinates,
   useSortable,
   verticalListSortingStrategy,
@@ -35,7 +34,7 @@ import {
   type ContentProperties,
 } from "@/lib/content";
 import { contentKeys, contentPropertiesQuery, pagesQuery } from "@/queries/content";
-import { createPage, movePageCard, setPageProperties } from "@/server/fns";
+import { createPage, movePageCard } from "@/server/fns";
 import { ContentToolbar, type ToolbarPatch } from "./ContentToolbar";
 import { chipClass, Dot, byId } from "./properties";
 
@@ -58,6 +57,7 @@ type MovePatch = {
   typeId?: string | null;
   addTagId?: string;
   removeTagId?: string;
+  tagIds?: string[];
 };
 
 /** The column a drag id belongs to: a column id itself, or a card's column. */
@@ -170,13 +170,19 @@ export function ContentBoard() {
       return;
     }
     const overPage = pageOf(String(over.id));
+    // Placed rather than swapped: a card that crossed columns was already put
+    // where it is being shown by `onDragOver`, and moving it again from there
+    // would land it one place past what the drag preview promised. Lifting it
+    // out and dropping it at the card it is over says the same thing for a
+    // reorder inside one column, and the same thing twice for a crossing.
     const arranged = list.map((bucket) => {
       if (keyOf(bucket) !== target) return bucket;
-      const from = bucket.pages.findIndex((page) => page.id === activeId);
-      const to = bucket.pages.findIndex((page) => page.id === overPage);
-      return from < 0 || to < 0 || from === to
-        ? bucket
-        : { ...bucket, pages: arrayMove(bucket.pages, from, to) };
+      const moving = bucket.pages.find((page) => page.id === activeId);
+      if (!moving) return bucket;
+      const rest = bucket.pages.filter((page) => page.id !== activeId);
+      const at = rest.findIndex((page) => page.id === overPage);
+      rest.splice(at < 0 ? rest.length : at, 0, moving);
+      return { ...bucket, pages: rest };
     });
     setLocal(arranged);
     const column = arranged.find((bucket) => keyOf(bucket) === target)!;
@@ -198,8 +204,14 @@ export function ContentBoard() {
     if (group === "status" && target !== NONE) patch.statusId = target;
     if (group === "type") patch.typeId = target === NONE ? null : target;
     if (group === "tag" && from !== target) {
-      if (from && from !== NONE) patch.removeTagId = from;
-      if (target !== NONE) patch.addTagId = target;
+      // Untagged means no tags at all. Dropping a card there while only
+      // dropping the column it came from would leave it in its other tag
+      // columns and never in the one it was dragged to.
+      if (target === NONE) patch.tagIds = [];
+      else {
+        if (from && from !== NONE) patch.removeTagId = from;
+        patch.addTagId = target;
+      }
     }
     try {
       const result = await movePageCard({ data: patch });
@@ -214,15 +226,17 @@ export function ContentBoard() {
 
   const addCard = async (bucket: ContentGroupBucket) => {
     try {
+      // Created with its column's property, not created and then moved into
+      // it: a second request that fails would leave an untitled, untagged page
+      // behind and report that nothing was created.
       const created = await createPage({
         data: {
           title: "Untitled",
           statusId: group === "status" ? bucket.id : null,
           typeId: group === "type" ? bucket.id : null,
+          tagIds: group === "tag" && bucket.id ? [bucket.id] : [],
         },
       });
-      if (group === "tag" && bucket.id)
-        await setPageProperties({ data: { id: created.id, tagIds: [bucket.id] } });
       queryClient.setQueryData(contentKeys.detail(created.id), created);
       await queryClient.invalidateQueries({ queryKey: contentKeys.lists });
       await navigate({ to: "/content", search: { ...search, page: created.id } });

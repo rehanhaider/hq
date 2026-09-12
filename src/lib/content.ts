@@ -106,6 +106,7 @@ export const createPageSchema = z.object({
   parentId: idSchema.nullable().optional().default(null),
   statusId: idSchema.nullable().optional().default(null),
   typeId: idSchema.nullable().optional().default(null),
+  tagIds: z.array(idSchema).max(60).optional().default([]),
   document: z
     .custom<ContentBlock[]>(validateContentDocument, {
       message: "The page contains unsupported or invalid content.",
@@ -143,6 +144,8 @@ export const movePageCardSchema = z.object({
   typeId: idSchema.nullable().optional(),
   addTagId: idSchema.optional(),
   removeTagId: idSchema.optional(),
+  /** The page's whole tag list, for a drop that is not one tag's worth. */
+  tagIds: z.array(idSchema).max(60).optional(),
   orderedIds: z.array(idSchema).max(1_000).optional().default([]),
 });
 

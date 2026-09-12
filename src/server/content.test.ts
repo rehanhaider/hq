@@ -461,6 +461,28 @@ describe("content properties", () => {
     expect(store.properties().tags).toHaveLength(1);
   });
 
+  it("refuses a rename onto another entry's name, whatever its case", () => {
+    store = new ContentStore(":memory:");
+    const [idea, planned] = store.properties().statuses;
+    expect(store.updateProperty("status", planned!.id, { name: "idea" })).toMatchObject({
+      ok: false,
+      code: "duplicate",
+    });
+    expect(store.properties().statuses[1]!.name).toBe("Planned");
+    // Recasing an entry's own name is still a rename, not a duplicate.
+    expect(store.updateProperty("status", idea!.id, { name: "IDEA" }).ok).toBe(true);
+  });
+
+  it("adds a new property after the last one, even once the list has gaps", () => {
+    store = new ContentStore(":memory:");
+    const types = store.properties().types;
+    expect(store.deleteProperty("type", types[1]!.id).ok).toBe(true);
+    const added = store.createProperty("type", "Newsletter");
+    const list = store.properties().types;
+    expect(list.at(-1)!.id).toBe(added.id);
+    expect(new Set(list.map((entry) => entry.position)).size).toBe(list.length);
+  });
+
   it("reorders property lists", () => {
     store = new ContentStore(":memory:");
     const statuses = store.properties().statuses;
@@ -539,6 +561,35 @@ describe("board moves", () => {
     store.moveCard({ id: last.id, statusId: idea!.id, orderedIds: [last.id, first.id] });
     expect(store.get(hidden.id)!.position).toBe(before);
     expect(store.get(last.id)!.position).toBeLessThan(store.get(first.id)!.position);
+  });
+
+  it("keeps a rejected move whole instead of half-applying it", () => {
+    store = new ContentStore(":memory:");
+    const [, planned] = store.properties().statuses;
+    const tag = store.createProperty("tag", "stream");
+    const page = store.create("Crossover", null, undefined, null, null, [tag.id]);
+    // The destination tag is gone, so nothing about this move may land — least
+    // of all the removal of the tag the card was dragged out of.
+    expect(
+      store.moveCard({
+        id: page.id,
+        statusId: planned!.id,
+        removeTagId: tag.id,
+        addTagId: randomUUID(),
+      }),
+    ).toMatchObject({ ok: false, code: "unknown-tag" });
+    const after = store.get(page.id)!;
+    expect(after.tagIds).toEqual([tag.id]);
+    expect(after.statusId).toBe(store.properties().statuses[0]!.id);
+  });
+
+  it("clears every tag when a card is dropped on Untagged", () => {
+    store = new ContentStore(":memory:");
+    const one = store.createProperty("tag", "stream");
+    const two = store.createProperty("tag", "article");
+    const page = store.create("Crossover", null, undefined, null, null, [one.id, two.id]);
+    expect(store.moveCard({ id: page.id, tagIds: [] }).ok).toBe(true);
+    expect(store.get(page.id)?.tagIds).toEqual([]);
   });
 
   it("rejects a move to a status that does not exist", () => {
