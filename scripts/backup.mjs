@@ -90,7 +90,7 @@ function calendarDay(ms) {
 /**
  * Resolves the databases the app actually opens.
  *
- * The server stores read HQ_DEEN_DATABASE, HQ_DATABASE, and HQ_NOTES_DATABASE,
+ * The server stores read HQ_DEEN_DATABASE, HQ_DATABASE, and HQ_CONTENT_DATABASE,
  * so a scan of `data/` alone would back up whatever happened to
  * be left in the default location while the live databases went untouched —
  * and still report success. Both units set the same WorkingDirectory, so
@@ -101,14 +101,20 @@ function calendarDay(ms) {
  */
 function sources() {
   const configured = [
-    { env: "HQ_DEEN_DATABASE", fallback: "data/deen.sqlite" },
-    { env: "HQ_DATABASE", fallback: "data/activity.sqlite" },
-    { env: "HQ_NOTES_DATABASE", fallback: "data/notes.sqlite" },
-  ].map(({ env, fallback }) => ({
-    env,
-    explicit: Boolean(process.env[env]),
-    path: resolve(process.env[env] ?? fallback),
-  }));
+    { vars: ["HQ_DEEN_DATABASE"], fallback: "data/deen.sqlite" },
+    { vars: ["HQ_DATABASE"], fallback: "data/activity.sqlite" },
+    // HQ_NOTES_DATABASE is the name Content had before it was renamed. It is
+    // still read here, or a Pi that never updated its env file would have its
+    // pages quietly left out of every backup.
+    { vars: ["HQ_CONTENT_DATABASE", "HQ_NOTES_DATABASE"], fallback: "data/content.sqlite" },
+  ].map(({ vars, fallback }) => {
+    const named = vars.find((name) => process.env[name]);
+    return {
+      env: named ?? vars[0],
+      explicit: Boolean(named),
+      path: resolve(named ? process.env[named] : fallback),
+    };
+  });
 
   // A path named explicitly must exist. Skipping it would back up the other
   // database, exit 0, and let the timer report healthy runs indefinitely while

@@ -193,7 +193,7 @@ export function Shell() {
           {[
             { to: "/" as const, title: "Home", icon: House },
             { to: "/deen" as const, title: "Nasr", icon: BookOpen },
-            { to: "/notes" as const, title: "Notes", icon: NotebookPen },
+            { to: "/content" as const, title: "Content", icon: NotebookPen },
             { to: "/github" as const, title: "GitHub", icon: FolderGit2 },
           ].map(({ to, title, icon: Icon }) => (
             <Link
@@ -202,8 +202,8 @@ export function Shell() {
               search={
                 to === "/github"
                   ? defaultFilters()
-                  : to === "/notes"
-                    ? { q: undefined, page: undefined }
+                  : to === "/content"
+                    ? {}
                     : undefined
               }
               title={title}

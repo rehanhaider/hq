@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { notePath, trailFromMatches } from "./breadcrumbs";
-import type { NotePage } from "./notes";
+import { pagePath, trailFromMatches } from "./breadcrumbs";
+import type { ContentPage } from "./content";
 
-const page = (id: string, title: string, parentId: string | null): NotePage => ({
+const page = (id: string, title: string, parentId: string | null): ContentPage => ({
   id,
   title,
   parentId,
@@ -12,6 +12,10 @@ const page = (id: string, title: string, parentId: string | null): NotePage => (
   deletedAt: null,
   revision: 1,
   preview: "",
+  statusId: null,
+  typeId: null,
+  tagIds: [],
+  position: 0,
 });
 
 describe("trailFromMatches", () => {
@@ -21,18 +25,18 @@ describe("trailFromMatches", () => {
         [
           { fullPath: "/", search: {}, staticData: { crumbs: "HQ" } },
           {
-            fullPath: "/notes",
+            fullPath: "/content",
             search: { q: "plan" },
-            staticData: { crumbs: "Notes" },
+            staticData: { crumbs: "Content" },
           },
-          { fullPath: "/notes/", search: { q: "plan" }, staticData: {} },
+          { fullPath: "/content/", search: { q: "plan" }, staticData: {} },
         ],
-        "/notes",
+        "/content",
       ),
     ).toEqual({
       crumbs: [
         { label: "HQ", to: "/", search: {} },
-        { label: "Notes", to: "/notes", search: { q: "plan" } },
+        { label: "Content", to: "/content", search: { q: "plan" } },
       ],
       views: [],
       viewsAt: 0,
@@ -95,7 +99,7 @@ describe("trailFromMatches", () => {
   });
 });
 
-describe("notePath", () => {
+describe("pagePath", () => {
   const pages = [
     page("a", "Plans", null),
     page("b", "2026", "a"),
@@ -104,7 +108,7 @@ describe("notePath", () => {
   ];
 
   it("walks a page up to its root ancestor", () => {
-    expect(notePath(pages, "c").map((item) => item.title)).toEqual([
+    expect(pagePath(pages, "c").map((item) => item.title)).toEqual([
       "Plans",
       "2026",
       "Week 1",
@@ -112,12 +116,12 @@ describe("notePath", () => {
   });
 
   it("stops at a missing parent and on an unknown page", () => {
-    expect(notePath(pages, "d").map((item) => item.title)).toEqual(["Orphan"]);
-    expect(notePath(pages, "nope")).toEqual([]);
+    expect(pagePath(pages, "d").map((item) => item.title)).toEqual(["Orphan"]);
+    expect(pagePath(pages, "nope")).toEqual([]);
   });
 
   it("does not loop on a cycle", () => {
     const cyclic = [page("x", "X", "y"), page("y", "Y", "x")];
-    expect(notePath(cyclic, "x").map((item) => item.title)).toEqual(["Y", "X"]);
+    expect(pagePath(cyclic, "x").map((item) => item.title)).toEqual(["Y", "X"]);
   });
 });

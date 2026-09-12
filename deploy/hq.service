@@ -9,9 +9,10 @@ Group=rehan
 WorkingDirectory=/home/rehan/Apps/hq
 Environment=NODE_ENV=production
 # Databases resolve relative to WorkingDirectory: data/deen.sqlite,
-# data/activity.sqlite, and data/notes.sqlite. Optional overrides
-# (HQ_DEEN_DATABASE, HQ_DATABASE, HQ_NOTES_DATABASE) and GITHUB_TOKEN go in the
-# env file. Leading "-" so a missing file is not a startup failure.
+# data/activity.sqlite, and data/content.sqlite. Optional overrides
+# (HQ_DEEN_DATABASE, HQ_DATABASE, HQ_CONTENT_DATABASE) and GITHUB_TOKEN go in
+# the env file; HQ_NOTES_DATABASE is the deprecated name for the Content path
+# and is still read. Leading "-" so a missing file is not a startup failure.
 EnvironmentFile=-/home/rehan/Apps/hq/.env
 # Port 80 is privileged; this grants just that bind, so the app still runs as rehan.
 AmbientCapabilities=CAP_NET_BIND_SERVICE

@@ -1,4 +1,4 @@
-import type { NotePage } from "@/lib/notes";
+import type { ContentPage } from "@/lib/content";
 
 /**
  * One step of the hierarchy. `to` and `search` default to the route match that
@@ -85,9 +85,9 @@ export function trailFromMatches(
 }
 
 /** The page and its ancestors, outermost first. */
-export function notePath(pages: NotePage[], id: string): NotePage[] {
+export function pagePath(pages: ContentPage[], id: string): ContentPage[] {
   const byId = new Map(pages.map((page) => [page.id, page]));
-  const path: NotePage[] = [];
+  const path: ContentPage[] = [];
   const seen = new Set<string>();
   let page = byId.get(id);
   while (page && !seen.has(page.id)) {
