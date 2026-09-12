@@ -20,6 +20,9 @@ CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 ExecStart=/home/rehan/Apps/hq/node_modules/.bin/srvx serve --prod --dir . --entry dist/server/server.js --static dist/client --host 0.0.0.0 --port 80
 Restart=always
 RestartSec=5
+# srvx does not exit on SIGTERM, so without this every restart waits out the
+# 90s default before systemd kills it.
+TimeoutStopSec=5
 
 [Install]
 WantedBy=multi-user.target
