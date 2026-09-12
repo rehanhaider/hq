@@ -7,6 +7,7 @@ import type { ImportStatus } from "../lib/model";
 import { github } from "./github";
 import { ensureRefreshLoop, startImport } from "./import";
 import { getDeenStore } from "./deen";
+import { getNotesStore } from "./notes";
 import {
   DEEN_CONTENT,
   calculateAdherence,
@@ -22,6 +23,13 @@ import {
   settingsUpdateSchema,
 } from "../lib/deen";
 import { z } from "zod";
+import {
+  changeNoteStateSchema,
+  createNoteSchema,
+  listNotesSchema,
+  noteIdSchema,
+  saveNoteSchema,
+} from "../lib/notes";
 
 function deenSummary() {
   const deen = getDeenStore();
@@ -107,6 +115,25 @@ export const exportDeen = createServerFn({ method: "GET" })
 export const resetDeen = createServerFn({ method: "POST" })
   .validator(resetRequestSchema)
   .handler(() => getDeenStore().reset());
+
+export const getNotes = createServerFn({ method: "GET" })
+  .validator(listNotesSchema)
+  .handler(({ data }) => getNotesStore().list(data));
+export const getNote = createServerFn({ method: "GET" })
+  .validator(noteIdSchema)
+  .handler(({ data }) => getNotesStore().get(data.id));
+export const createNote = createServerFn({ method: "POST" })
+  .validator(createNoteSchema)
+  .handler(({ data }) => getNotesStore().create(data.title, data.parentId));
+export const saveNote = createServerFn({ method: "POST" })
+  .validator(saveNoteSchema)
+  .handler(({ data }) => getNotesStore().save(data));
+export const trashNote = createServerFn({ method: "POST" })
+  .validator(changeNoteStateSchema)
+  .handler(({ data }) => getNotesStore().trash(data.id, data.revision));
+export const restoreNote = createServerFn({ method: "POST" })
+  .validator(changeNoteStateSchema)
+  .handler(({ data }) => getNotesStore().restore(data.id, data.revision));
 
 export const getConnections = createServerFn({ method: "GET" }).handler(() => {
   ensureRefreshLoop();

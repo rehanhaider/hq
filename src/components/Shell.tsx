@@ -9,6 +9,7 @@ import {
   Sun,
   PanelLeftOpen,
   PanelLeftClose,
+  NotebookPen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useUI } from "@/store/ui";
@@ -62,6 +63,13 @@ export function Shell() {
   };
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      const editing = Boolean(
+        target?.closest(
+          'input, textarea, select, [contenteditable="true"], [role="textbox"], .bn-container',
+        ),
+      );
+      if (editing || event.defaultPrevented) return;
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "b") {
         event.preventDefault();
         toggleSidebar();
@@ -184,12 +192,19 @@ export function Shell() {
           {[
             { to: "/" as const, title: "Home", icon: House },
             { to: "/deen" as const, title: "Nasr", icon: BookOpen },
+            { to: "/notes" as const, title: "Notes", icon: NotebookPen },
             { to: "/github" as const, title: "GitHub", icon: FolderGit2 },
           ].map(({ to, title, icon: Icon }) => (
             <Link
               key={to}
               to={to}
-              search={to === "/github" ? defaultFilters() : undefined}
+              search={
+                to === "/github"
+                  ? defaultFilters()
+                  : to === "/notes"
+                    ? { q: undefined, page: undefined }
+                    : undefined
+              }
               title={title}
               aria-label={title}
               aria-current={
@@ -248,6 +263,8 @@ export function Shell() {
           <span className="text-sm font-medium">
             {pathname.startsWith("/github")
               ? "GitHub"
+              : pathname.startsWith("/notes")
+                ? "Notes"
               : pathname.startsWith("/deen")
                 ? "Nasr"
                 : "Home"}
