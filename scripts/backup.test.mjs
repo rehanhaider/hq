@@ -4,6 +4,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   readdirSync,
   rmSync,
   utimesSync,
@@ -19,12 +20,14 @@ let dir;
 
 const dataDir = () => join(dir, "data");
 const backupDir = () => join(dir, "backups");
-// Only finished snapshots: a staged .tmp is deliberately not one.
+// Only finished snapshots: a staged .tmp is deliberately not one. Uploads are
+// copied as a directory rather than vacuumed into a file, so they are named
+// rather than suffixed.
 const listed = (label, tier) => {
+  const finished = (name) =>
+    label === "uploads" ? name.startsWith("uploads-") && !name.endsWith(".tmp") : name.endsWith(".sqlite");
   try {
-    return readdirSync(join(backupDir(), label, tier))
-      .filter((f) => f.endsWith(".sqlite"))
-      .sort();
+    return readdirSync(join(backupDir(), label, tier)).filter(finished).sort();
   } catch {
     return [];
   }
@@ -108,6 +111,42 @@ describe("backup", () => {
     makeDb(legacy, "pages");
     run({ HQ_NOTES_DATABASE: legacy });
     expect(listed("content", "daily")[0]).toBeDefined();
+  });
+
+  it("copies the uploads directory beside the databases", () => {
+    // A page whose pictures are missing is only half a restore, and the files
+    // live in a directory rather than in any of the databases.
+    mkdirSync(join(dataDir(), "uploads"), { recursive: true });
+    writeFileSync(join(dataDir(), "uploads", "abc.png"), "pixels");
+    run();
+    const copy = listed("uploads", "daily")[0];
+    expect(copy).toBeDefined();
+    expect(
+      readFileSync(join(backupDir(), "uploads", "daily", copy, "abc.png"), "utf8"),
+    ).toBe("pixels");
+    expect(listed("uploads", "weekly")).toHaveLength(1);
+  });
+
+  it("follows HQ_UPLOADS_DIR and keeps 7 daily copies of it", () => {
+    const moved = join(dir, "media");
+    mkdirSync(moved, { recursive: true });
+    writeFileSync(join(moved, "abc.png"), "pixels");
+    for (let i = 0; i < 9; i++) run({ HQ_UPLOADS_DIR: moved });
+    expect(listed("uploads", "daily")).toHaveLength(7);
+  });
+
+  it("fails when the configured uploads directory does not exist", () => {
+    let threw = false;
+    try {
+      run({ HQ_UPLOADS_DIR: join(dir, "not-mounted") });
+    } catch (error) {
+      threw = true;
+      expect(error.status).toBe(1);
+      expect(String(error.stderr)).toContain("HQ_UPLOADS_DIR");
+    }
+    expect(threw).toBe(true);
+    // The databases are still backed up: one missing mount is not the run.
+    expect(listed("deen", "daily")).toHaveLength(1);
   });
 
   it("keeps 7 daily copies", () => {

@@ -11,5 +11,5 @@ export const Route = createFileRoute("/content/")({
     ]);
     if (deps.page) await context.queryClient.ensureQueryData(pageQuery(deps.page));
   },
-  component: () => <ContentWorkspace trashed={false} />,
+  component: () => <ContentWorkspace />,
 });

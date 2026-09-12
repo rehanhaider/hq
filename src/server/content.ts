@@ -12,6 +12,7 @@ import {
   type PropertyColor,
   type PropertyKind,
   type SavePageInput,
+  type StoredUpload,
 } from "../lib/content";
 
 const emptyDocument = (): ContentBlock[] => [
@@ -79,6 +80,26 @@ type PageListRow = Omit<PageRow, "document" | "search_text" | "deletion_group"> 
 };
 
 type PropertyRow = { id: string; name: string; color: string; position: number };
+
+type UploadRow = {
+  id: string;
+  page_id: string;
+  name: string;
+  mime: string;
+  size: number;
+  created_at: string;
+};
+
+function uploadFromRow(row: UploadRow): StoredUpload {
+  return {
+    id: row.id,
+    pageId: row.page_id,
+    name: row.name,
+    mime: row.mime,
+    size: Number(row.size),
+    createdAt: row.created_at,
+  };
+}
 
 function normalizeSearch(value: string) {
   return value.normalize("NFC").toLowerCase();
@@ -224,6 +245,16 @@ export class ContentStore {
       );
       CREATE INDEX IF NOT EXISTS page_tags_tag ON page_tags(tag_id);
       CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS uploads (
+        id TEXT NOT NULL,
+        page_id TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        mime TEXT NOT NULL,
+        size INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (id, page_id)
+      );
+      CREATE INDEX IF NOT EXISTS uploads_page ON uploads(page_id);
     `);
 
     const columns = new Set(
@@ -725,6 +756,102 @@ export class ContentStore {
       throw error;
     }
     return { ok: true as const };
+  }
+
+  /**
+   * Links an uploaded file to the page it was inserted into. The id is the
+   * file's content hash, so two pages using the same picture share one row each
+   * and one file on disk.
+   */
+  recordUpload(input: {
+    id: string;
+    pageId: string;
+    name: string;
+    mime: string;
+    size: number;
+  }) {
+    return this.transaction(() => {
+      const page = this.db
+        .prepare("SELECT 1 FROM pages WHERE id = ?")
+        .get(input.pageId);
+      if (!page) return { ok: false as const, code: "missing-page" as const };
+      this.db
+        .prepare(
+          `INSERT INTO uploads (id, page_id, name, mime, size, created_at)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT (id, page_id) DO NOTHING`,
+        )
+        .run(input.id, input.pageId, input.name, input.mime, input.size, new Date().toISOString());
+      return { ok: true as const, upload: this.upload(input.id)! };
+    });
+  }
+
+  /** One stored file, by id. Any row will do: they all describe the same bytes. */
+  upload(id: string): StoredUpload | null {
+    const row = this.db
+      .prepare("SELECT * FROM uploads WHERE id = ? ORDER BY created_at LIMIT 1")
+      .get(id) as UploadRow | undefined;
+    return row ? uploadFromRow(row) : null;
+  }
+
+  uploadsFor(pageId: string): StoredUpload[] {
+    return (
+      this.db
+        .prepare("SELECT * FROM uploads WHERE page_id = ? ORDER BY created_at, id")
+        .all(pageId) as unknown as UploadRow[]
+    ).map(uploadFromRow);
+  }
+
+  /**
+   * Erases a trashed page and everything under it. Trashing never touches
+   * files, because a restore has to bring the page back whole; this is the only
+   * path that lets any of them go, and it reports the files no surviving page
+   * still refers to so the caller can unlink them.
+   */
+  deleteForever(id: string, revision: number) {
+    return this.transaction(() => {
+      const current = this.getAny(id);
+      if (!current || !current.deletedAt || current.revision !== revision)
+        return { ok: false as const, code: "stale" as const, current };
+      return { ok: true as const, orphanedUploads: this.erase([id]) };
+    });
+  }
+
+  /** Erases every trashed page in one go. */
+  emptyTrash() {
+    return this.transaction(() => {
+      const roots = (
+        this.db
+          .prepare("SELECT id FROM pages WHERE deleted_at IS NOT NULL")
+          .all() as unknown as { id: string }[]
+      ).map((row) => row.id);
+      return { ok: true as const, pages: roots.length, orphanedUploads: this.erase(roots) };
+    });
+  }
+
+  /**
+   * Deletes the given pages and their descendants, returning the upload ids no
+   * remaining row references. Called inside a transaction; the files themselves
+   * are unlinked afterwards, because a filesystem cannot be rolled back.
+   */
+  private erase(roots: string[]): string[] {
+    if (!roots.length) return [];
+    const placeholders = roots.map(() => "?").join(", ");
+    const subtree = `WITH RECURSIVE doomed(id) AS (
+        SELECT id FROM pages WHERE id IN (${placeholders})
+        UNION SELECT pages.id FROM pages JOIN doomed ON pages.parent_id = doomed.id
+      )`;
+    const referenced = (
+      this.db
+        .prepare(
+          `${subtree} SELECT DISTINCT id FROM uploads WHERE page_id IN (SELECT id FROM doomed)`,
+        )
+        .all(...roots) as unknown as { id: string }[]
+    ).map((row) => row.id);
+    // The uploads rows go with the pages through ON DELETE CASCADE.
+    this.db.prepare(`${subtree} DELETE FROM pages WHERE id IN (SELECT id FROM doomed)`).run(...roots);
+    const survives = this.db.prepare("SELECT 1 FROM uploads WHERE id = ? LIMIT 1");
+    return referenced.filter((uploadId) => !survives.get(uploadId));
   }
 
   close() {

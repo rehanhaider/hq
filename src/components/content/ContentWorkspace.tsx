@@ -9,15 +9,7 @@ import {
 } from "react";
 import { ClientOnly, useBlocker, useNavigate, useSearch } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  ArrowLeft,
-  ChevronRight,
-  FilePlus2,
-  FileText,
-  RotateCcw,
-  Search,
-  Trash2,
-} from "lucide-react";
+import { ArrowLeft, ChevronRight, FilePlus2, FileText, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -27,7 +19,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import {
   filterPages,
   hasFilters,
@@ -45,12 +36,12 @@ import {
 import {
   createContentProperty,
   createPage,
-  restorePage,
   savePage,
   setPageProperties,
   trashPage,
 } from "@/server/fns";
 import { ContentToolbar, type ToolbarPatch } from "./ContentToolbar";
+import { SearchBox } from "./SearchBox";
 import { PropertyPanel, type PropertyPatch } from "./PropertyPanel";
 
 const ContentEditor = lazy(() =>
@@ -98,18 +89,18 @@ function pageRows(pages: ContentPage[], searching: boolean) {
   return rows;
 }
 
-export function ContentWorkspace({ trashed }: { trashed: boolean }) {
+export function ContentWorkspace() {
   const search = useSearch({ from: "/content" });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const list = useQuery(pagesQuery(search.q, trashed));
+  const list = useQuery(pagesQuery(search.q));
   const propertyQuery = useQuery(contentPropertiesQuery);
   const properties: ContentProperties = propertyQuery.data ?? {
     statuses: [],
     types: [],
     tags: [],
   };
-  const selectedId = trashed ? undefined : search.page;
+  const selectedId = search.page;
   const detail = useQuery(pageQuery(selectedId ?? ""));
   const [draft, setDraft] = useState<PageDetail | null>(null);
   const draftRef = useRef<PageDetail | null>(null);
@@ -277,22 +268,19 @@ export function ContentWorkspace({ trashed }: { trashed: boolean }) {
     },
     enableBeforeUnload: () => hasUnsaved,
     withResolver: true,
-    disabled: trashed,
   });
 
   // The server already searched titles and body text, so only the property
   // filters are applied here. Filtering flattens the tree: a match whose parent
   // was filtered out still has to be reachable.
   const rows = useMemo(() => {
-    const pages = trashed
-      ? (list.data ?? [])
-      : filterPages(list.data ?? [], {
-          status: search.status,
-          type: search.type,
-          tag: search.tag,
-        });
+    const pages = filterPages(list.data ?? [], {
+      status: search.status,
+      type: search.type,
+      tag: search.tag,
+    });
     return pageRows(pages, Boolean(search.q) || hasFilters({ ...search, q: undefined }));
-  }, [list.data, search, trashed]);
+  }, [list.data, search]);
 
   const updateSearch = (patch: ToolbarPatch) =>
     void navigate({
@@ -424,57 +412,6 @@ export function ContentWorkspace({ trashed }: { trashed: boolean }) {
       setRecovering(false);
     }
   };
-
-  if (trashed)
-    return (
-      <section aria-labelledby="trash-heading">
-        <header className="page-header">
-          <div>
-            <h1 id="trash-heading" className="page-title">Trash</h1>
-            <p className="page-description">Restore pages to their original place in the page tree. Trashed pages never appear on the board.</p>
-          </div>
-        </header>
-        <SearchBox value={search.q ?? ""} onChange={(q) => void navigate({ to: "/content/trash", search: { ...search, q: q || undefined, page: undefined }, replace: true })} label="Search trash" />
-        {actionError && <p className="mt-3 rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert">{actionError}</p>}
-        <div className="panel mt-4 divide-y">
-          {list.isPending ? (
-            <p className="p-4 text-muted-foreground">Loading trash…</p>
-          ) : rows.length ? (
-            rows.map(({ page }) => (
-              <div key={page.id} className="flex min-h-14 items-center gap-3 px-4 py-2">
-                <FileText className="size-4 shrink-0 text-muted-foreground" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium">{page.title}</p>
-                  <p className="truncate text-xs text-muted-foreground">{page.preview || "Empty page"}</p>
-                </div>
-                <Button
-                  variant="outline"
-                  onClick={async () => {
-                    try {
-                      const result = await restorePage({ data: { id: page.id, revision: page.revision } });
-                      if (result.ok) {
-                        setActionError("");
-                        await queryClient.invalidateQueries({ queryKey: contentKeys.all });
-                      } else {
-                        setActionError("This page changed before it could be restored. The list has been refreshed.");
-                        void list.refetch();
-                      }
-                    } catch (error) {
-                      setActionError(readableError(error, "The page could not be restored."));
-                    }
-                  }}
-                  aria-label={`Restore ${page.title}`}
-                >
-                  <RotateCcw /> Restore
-                </Button>
-              </div>
-            ))
-          ) : (
-            <p className="p-6 text-center text-muted-foreground">{search.q ? "No trashed pages match your search." : "Trash is empty."}</p>
-          )}
-        </div>
-      </section>
-    );
 
   return (
     <section aria-labelledby="content-heading">
@@ -709,14 +646,5 @@ export function ContentWorkspace({ trashed }: { trashed: boolean }) {
         </DialogContent>
       </Dialog>
     </section>
-  );
-}
-
-function SearchBox({ value, onChange, label }: { value: string; onChange: (value: string) => void; label: string }) {
-  return (
-    <label className="relative m-3 block">
-      <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-      <Input aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} placeholder="Search pages" className="pl-8" />
-    </label>
   );
 }
