@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import { NotesStore } from "./notes";
-import { validateNoteDocument } from "../lib/notes";
+import { createNoteSchema, validateNoteDocument } from "../lib/notes";
 
 let store: NotesStore;
 afterEach(() => {
@@ -156,9 +156,42 @@ describe("notes store", () => {
     const second = store.create("Second");
     expect(first.document[0]?.id).not.toBe(second.document[0]?.id);
   });
+
+  it("creates a populated recovery page in one insert", () => {
+    store = new NotesStore(":memory:");
+    const document = paragraph("Unsaved recovery text");
+    const created = store.create("Recovered", null, document);
+    expect(created).toMatchObject({
+      title: "Recovered",
+      revision: 0,
+      preview: "Unsaved recovery text",
+    });
+    expect(created.document).toEqual(document);
+    expect(store.list({ q: "recovery text" }).map((page) => page.id)).toEqual([
+      created.id,
+    ]);
+  });
 });
 
 describe("note document validation", () => {
+  it("validates recovery content before page creation", () => {
+    expect(
+      createNoteSchema.safeParse({
+        title: "Invalid recovery",
+        parentId: null,
+        document: [
+          {
+            id: randomUUID(),
+            type: "image",
+            props: {},
+            content: undefined,
+            children: [],
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
   it("accepts supported formatting and safe links", () => {
     expect(
       validateNoteDocument([

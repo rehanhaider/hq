@@ -144,7 +144,11 @@ export class NotesStore {
     return row ? fromRow(row) : null;
   }
 
-  create(title = "Untitled", parentId: string | null = null): NoteDetail {
+  create(
+    title = "Untitled",
+    parentId: string | null = null,
+    document = emptyDocument(),
+  ): NoteDetail {
     if (parentId) {
       const parent = this.get(parentId);
       if (!parent || parent.deletedAt) throw new Error("The parent page is not available.");
@@ -162,9 +166,18 @@ export class NotesStore {
       .prepare(
         `INSERT INTO notes
          (id, title, document, search_text, parent_id, display_order, created_at, updated_at, deleted_at, revision, deletion_group)
-         VALUES (?, ?, ?, '', ?, ?, ?, ?, NULL, 0, NULL)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, 0, NULL)`,
       )
-      .run(id, title, JSON.stringify(emptyDocument()), parentId, order, now, now);
+      .run(
+        id,
+        title,
+        JSON.stringify(document),
+        textFromDocument(document),
+        parentId,
+        order,
+        now,
+        now,
+      );
     return this.get(id)!;
   }
 

@@ -124,7 +124,9 @@ export const getNote = createServerFn({ method: "GET" })
   .handler(({ data }) => getNotesStore().get(data.id));
 export const createNote = createServerFn({ method: "POST" })
   .validator(createNoteSchema)
-  .handler(({ data }) => getNotesStore().create(data.title, data.parentId));
+  .handler(({ data }) =>
+    getNotesStore().create(data.title, data.parentId, data.document),
+  );
 export const saveNote = createServerFn({ method: "POST" })
   .validator(saveNoteSchema)
   .handler(({ data }) => getNotesStore().save(data));

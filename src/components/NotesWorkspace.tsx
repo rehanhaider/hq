@@ -96,23 +96,44 @@ export function NotesWorkspace({ trashed }: { trashed: boolean }) {
   const [saveConflict, setSaveConflict] = useState(false);
   const [saveUnavailable, setSaveUnavailable] = useState(false);
   const [recovering, setRecovering] = useState(false);
+  const [editorGeneration, setEditorGeneration] = useState(0);
   const [actionError, setActionError] = useState("");
   const staleRevision = useRef<number | null>(null);
   const recoveringRef = useRef(false);
 
+  const applyFreshDetail = useCallback(
+    (next: NoteDetail) => {
+      if (next.id !== selectedId) return false;
+      const current = draftRef.current;
+      const samePage = loadedId.current === next.id && current?.id === next.id;
+      if (
+        samePage &&
+        (next.revision <= current.revision ||
+          saved.current < changed.current ||
+          drainPromise.current !== null ||
+          recoveringRef.current)
+      )
+        return false;
+      loadedId.current = next.id;
+      draftRef.current = next;
+      setDraft(next);
+      if (samePage) setEditorGeneration((generation) => generation + 1);
+      changed.current = 0;
+      saved.current = 0;
+      staleRevision.current = null;
+      setSaveState("saved");
+      setSaveError("");
+      setSaveConflict(false);
+      setSaveUnavailable(false);
+      return true;
+    },
+    [selectedId],
+  );
+
   useEffect(() => {
-    if (!selectedId || !detail.data || loadedId.current === selectedId) return;
-    loadedId.current = selectedId;
-    draftRef.current = detail.data;
-    setDraft(detail.data);
-    changed.current = 0;
-    saved.current = 0;
-    staleRevision.current = null;
-    setSaveState("saved");
-    setSaveError("");
-    setSaveConflict(false);
-    setSaveUnavailable(false);
-  }, [detail.data, selectedId]);
+    if (!detail.data) return;
+    applyFreshDetail(detail.data);
+  }, [applyFreshDetail, detail.data]);
 
   const drain = useCallback(() => {
     if (recoveringRef.current) return Promise.resolve(false);
@@ -263,33 +284,28 @@ export function NotesWorkspace({ trashed }: { trashed: boolean }) {
     setRecovering(true);
     setSaveState("saving");
     try {
-      const created = await createNote({
-        data: { title: snapshot.title.trim() || "Untitled", parentId: null },
-      });
-      const result = await saveNote({
+      const recovered = await createNote({
         data: {
-          id: created.id,
           title: snapshot.title.trim() || "Untitled",
-          revision: created.revision,
+          parentId: null,
           document: snapshot.document,
         },
       });
-      if (!result.ok) throw new Error("The replacement page could not be saved.");
-      loadedId.current = result.note.id;
-      draftRef.current = result.note;
-      setDraft(result.note);
+      loadedId.current = recovered.id;
+      draftRef.current = recovered;
+      setDraft(recovered);
       saved.current = changed.current;
       staleRevision.current = null;
       setSaveConflict(false);
       setSaveUnavailable(false);
       setSaveError("");
       setSaveState("saved");
-      queryClient.setQueryData(noteKeys.detail(result.note.id), result.note);
+      queryClient.setQueryData(noteKeys.detail(recovered.id), recovered);
       await queryClient.invalidateQueries({ queryKey: ["notes", "list"] });
       if (openCopy)
         await navigate({
           to: "/notes",
-          search: { q: search.q, page: result.note.id },
+          search: { q: search.q, page: recovered.id },
         });
       return true;
     } catch (error) {
@@ -451,14 +467,67 @@ export function NotesWorkspace({ trashed }: { trashed: boolean }) {
                 <Button variant="destructive" size="icon-sm" disabled={recovering} aria-label={`Move ${draft.title} to trash`} onClick={async () => {
                   if (!(await drain())) return;
                   const current = draftRef.current!;
+                  const sourceId = current.id;
+                  const sourceSequence = changed.current;
                   try {
                     const result = await trashNote({ data: { id: current.id, revision: current.revision } });
+                    const sameSource =
+                      selectedId === sourceId && draftRef.current?.id === sourceId;
+                    const sourceChanged = changed.current !== sourceSequence;
                     if (!result.ok) {
-                      setSaveState("error");
-                      setSaveError("This page changed before it could be moved to trash.");
+                      if (result.current) {
+                        queryClient.setQueryData(
+                          noteKeys.detail(sourceId),
+                          result.current,
+                        );
+                        if (
+                          sameSource &&
+                          !sourceChanged &&
+                          applyFreshDetail(result.current)
+                        ) {
+                          setActionError(
+                            "This page changed in another tab. Review it, then try moving it to trash again.",
+                          );
+                        } else if (sameSource && sourceChanged) {
+                          staleRevision.current = result.current.revision;
+                          setSaveConflict(true);
+                          setSaveUnavailable(false);
+                          setSaveState("error");
+                          setSaveError(
+                            "This page changed in another tab. Your unsaved text is still here.",
+                          );
+                        }
+                      } else {
+                        queryClient.setQueryData(noteKeys.detail(sourceId), null);
+                        if (sameSource && sourceChanged) {
+                          staleRevision.current = null;
+                          setSaveConflict(false);
+                          setSaveUnavailable(true);
+                          setSaveState("error");
+                          setSaveError(
+                            "This page is no longer available. Your unsaved text is still here.",
+                          );
+                        } else if (sameSource) {
+                          setActionError("This page is no longer available.");
+                        }
+                      }
+                      await queryClient.invalidateQueries({
+                        queryKey: ["notes", "list"],
+                      });
                       return;
                     }
                     await queryClient.invalidateQueries({ queryKey: noteKeys.all });
+                    if (sameSource && sourceChanged) {
+                      staleRevision.current = null;
+                      setSaveConflict(false);
+                      setSaveUnavailable(true);
+                      setSaveState("error");
+                      setSaveError(
+                        "This page is in the trash. Your unsaved text is still here.",
+                      );
+                      return;
+                    }
+                    if (!sameSource) return;
                     loadedId.current = null;
                     setActionError("");
                     await navigate({ to: "/notes", search: { q: search.q, page: undefined } });
@@ -471,7 +540,7 @@ export function NotesWorkspace({ trashed }: { trashed: boolean }) {
               <ClientOnly fallback={<div className="min-h-[30rem] animate-pulse bg-muted" aria-label="Loading editor" />}>
                 <Suspense fallback={<div className="min-h-[30rem] animate-pulse bg-muted" aria-label="Loading editor" />}>
                   <NotesEditor
-                    key={draft.id}
+                    key={`${draft.id}:${editorGeneration}`}
                     note={draft}
                     editable={!recovering}
                     onDocumentChange={(document: NoteBlock[]) => {

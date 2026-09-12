@@ -41,6 +41,11 @@ export const listNotesSchema = z.object({
 export const createNoteSchema = z.object({
   title: noteTitleSchema.optional().default("Untitled"),
   parentId: idSchema.nullable().optional().default(null),
+  document: z
+    .custom<NoteBlock[]>(validateNoteDocument, {
+      message: "The note contains unsupported or invalid content.",
+    })
+    .optional(),
 });
 
 export const noteIdSchema = z.object({ id: idSchema });
