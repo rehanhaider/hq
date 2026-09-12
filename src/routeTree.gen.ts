@@ -10,9 +10,14 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ContentRouteImport } from './routes/content'
 import { Route as DeenRouteImport } from './routes/deen'
 import { Route as GithubRouteImport } from './routes/github'
 import { Route as NotesRouteImport } from './routes/notes'
+import { Route as ContentIndexRouteImport } from './routes/content/index'
+import { Route as ContentBoardRouteImport } from './routes/content/board'
+import { Route as ContentSettingsRouteImport } from './routes/content/settings'
+import { Route as ContentTrashRouteImport } from './routes/content/trash'
 import { Route as DeenIndexRouteImport } from './routes/deen/index'
 import { Route as DeenHistoryRouteImport } from './routes/deen/history'
 import { Route as DeenSettingsRouteImport } from './routes/deen/settings'
@@ -22,6 +27,11 @@ import { Route as NotesTrashRouteImport } from './routes/notes/trash'
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ContentRoute = ContentRouteImport.update({
+  id: '/content',
+  path: '/content',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DeenRoute = DeenRouteImport.update({
@@ -38,6 +48,26 @@ const NotesRoute = NotesRouteImport.update({
   id: '/notes',
   path: '/notes',
   getParentRoute: () => rootRouteImport,
+} as any)
+const ContentIndexRoute = ContentIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ContentRoute,
+} as any)
+const ContentBoardRoute = ContentBoardRouteImport.update({
+  id: '/board',
+  path: '/board',
+  getParentRoute: () => ContentRoute,
+} as any)
+const ContentSettingsRoute = ContentSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => ContentRoute,
+} as any)
+const ContentTrashRoute = ContentTrashRouteImport.update({
+  id: '/trash',
+  path: '/trash',
+  getParentRoute: () => ContentRoute,
 } as any)
 const DeenIndexRoute = DeenIndexRouteImport.update({
   id: '/',
@@ -67,33 +97,47 @@ const NotesTrashRoute = NotesTrashRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/content': typeof ContentRouteWithChildren
   '/deen': typeof DeenRouteWithChildren
   '/github': typeof GithubRoute
   '/notes': typeof NotesRouteWithChildren
+  '/content/board': typeof ContentBoardRoute
+  '/content/settings': typeof ContentSettingsRoute
+  '/content/trash': typeof ContentTrashRoute
   '/deen/history': typeof DeenHistoryRoute
   '/deen/settings': typeof DeenSettingsRoute
   '/notes/trash': typeof NotesTrashRoute
+  '/content/': typeof ContentIndexRoute
   '/deen/': typeof DeenIndexRoute
   '/notes/': typeof NotesIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/github': typeof GithubRoute
+  '/content/board': typeof ContentBoardRoute
+  '/content/settings': typeof ContentSettingsRoute
+  '/content/trash': typeof ContentTrashRoute
   '/deen/history': typeof DeenHistoryRoute
   '/deen/settings': typeof DeenSettingsRoute
   '/notes/trash': typeof NotesTrashRoute
+  '/content': typeof ContentIndexRoute
   '/deen': typeof DeenIndexRoute
   '/notes': typeof NotesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/content': typeof ContentRouteWithChildren
   '/deen': typeof DeenRouteWithChildren
   '/github': typeof GithubRoute
   '/notes': typeof NotesRouteWithChildren
+  '/content/board': typeof ContentBoardRoute
+  '/content/settings': typeof ContentSettingsRoute
+  '/content/trash': typeof ContentTrashRoute
   '/deen/history': typeof DeenHistoryRoute
   '/deen/settings': typeof DeenSettingsRoute
   '/notes/trash': typeof NotesTrashRoute
+  '/content/': typeof ContentIndexRoute
   '/deen/': typeof DeenIndexRoute
   '/notes/': typeof NotesIndexRoute
 }
@@ -101,38 +145,53 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/content'
     | '/deen'
     | '/github'
     | '/notes'
+    | '/content/board'
+    | '/content/settings'
+    | '/content/trash'
     | '/deen/history'
     | '/deen/settings'
     | '/notes/trash'
+    | '/content/'
     | '/deen/'
     | '/notes/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/github'
+    | '/content/board'
+    | '/content/settings'
+    | '/content/trash'
     | '/deen/history'
     | '/deen/settings'
     | '/notes/trash'
+    | '/content'
     | '/deen'
     | '/notes'
   id:
     | '__root__'
     | '/'
+    | '/content'
     | '/deen'
     | '/github'
     | '/notes'
+    | '/content/board'
+    | '/content/settings'
+    | '/content/trash'
     | '/deen/history'
     | '/deen/settings'
     | '/notes/trash'
+    | '/content/'
     | '/deen/'
     | '/notes/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ContentRoute: typeof ContentRouteWithChildren
   DeenRoute: typeof DeenRouteWithChildren
   GithubRoute: typeof GithubRoute
   NotesRoute: typeof NotesRouteWithChildren
@@ -145,6 +204,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/content': {
+      id: '/content'
+      path: '/content'
+      fullPath: '/content'
+      preLoaderRoute: typeof ContentRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/deen': {
@@ -167,6 +233,34 @@ declare module '@tanstack/react-router' {
       fullPath: '/notes'
       preLoaderRoute: typeof NotesRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/content/': {
+      id: '/content/'
+      path: '/'
+      fullPath: '/content/'
+      preLoaderRoute: typeof ContentIndexRouteImport
+      parentRoute: typeof ContentRoute
+    }
+    '/content/board': {
+      id: '/content/board'
+      path: '/board'
+      fullPath: '/content/board'
+      preLoaderRoute: typeof ContentBoardRouteImport
+      parentRoute: typeof ContentRoute
+    }
+    '/content/settings': {
+      id: '/content/settings'
+      path: '/settings'
+      fullPath: '/content/settings'
+      preLoaderRoute: typeof ContentSettingsRouteImport
+      parentRoute: typeof ContentRoute
+    }
+    '/content/trash': {
+      id: '/content/trash'
+      path: '/trash'
+      fullPath: '/content/trash'
+      preLoaderRoute: typeof ContentTrashRouteImport
+      parentRoute: typeof ContentRoute
     }
     '/deen/': {
       id: '/deen/'
@@ -206,6 +300,23 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface ContentRouteChildren {
+  ContentBoardRoute: typeof ContentBoardRoute
+  ContentSettingsRoute: typeof ContentSettingsRoute
+  ContentTrashRoute: typeof ContentTrashRoute
+  ContentIndexRoute: typeof ContentIndexRoute
+}
+
+const ContentRouteChildren: ContentRouteChildren = {
+  ContentBoardRoute: ContentBoardRoute,
+  ContentSettingsRoute: ContentSettingsRoute,
+  ContentTrashRoute: ContentTrashRoute,
+  ContentIndexRoute: ContentIndexRoute,
+}
+
+const ContentRouteWithChildren =
+  ContentRoute._addFileChildren(ContentRouteChildren)
+
 interface DeenRouteChildren {
   DeenHistoryRoute: typeof DeenHistoryRoute
   DeenSettingsRoute: typeof DeenSettingsRoute
@@ -234,6 +345,7 @@ const NotesRouteWithChildren = NotesRoute._addFileChildren(NotesRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ContentRoute: ContentRouteWithChildren,
   DeenRoute: DeenRouteWithChildren,
   GithubRoute: GithubRoute,
   NotesRoute: NotesRouteWithChildren,

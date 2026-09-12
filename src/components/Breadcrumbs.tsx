@@ -17,30 +17,31 @@ import {
 } from "@/components/ui/breadcrumb";
 import { Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/ui/menu";
 import {
-  notePath,
+  pagePath,
   trailFromMatches,
   type Crumb,
   type ViewOption,
 } from "@/lib/breadcrumbs";
-import { notesQuery } from "@/queries/notes";
+import { pagesQuery } from "@/queries/content";
 
 /** The crumbs and sibling views for the current location. */
 function useTrail() {
   const matches = useMatches();
   const { pathname } = useLocation();
   const trail = trailFromMatches(matches, pathname);
-  // The selected Notes page is a search parameter rather than a route, so its
+  // The selected Content page is a search parameter rather than a route, so its
   // own hierarchy is read from the page tree instead of the matched routes.
-  const notes = matches.find((match) => match.routeId === "/notes/");
-  const pageId = (notes?.search as { page?: string } | undefined)?.page;
-  const pages = useQuery({ ...notesQuery(), enabled: Boolean(pageId) });
+  const content = matches.find((match) => match.routeId === "/content/");
+  const search = (content?.search ?? {}) as Record<string, unknown>;
+  const pageId = search.page as string | undefined;
+  const pages = useQuery({ ...pagesQuery(), enabled: Boolean(pageId) });
   const crumbs: Crumb[] = [...trail.crumbs];
   if (pageId)
     crumbs.push(
-      ...notePath(pages.data ?? [], pageId).map((page) => ({
+      ...pagePath(pages.data ?? [], pageId).map((page) => ({
         label: page.title,
-        to: "/notes",
-        search: { page: page.id },
+        to: "/content",
+        search: { ...search, page: page.id },
       })),
     );
   return { ...trail, crumbs };

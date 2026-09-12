@@ -1,29 +1,15 @@
-import { createFileRoute, Outlet } from "@tanstack/react-router";
-import { notesSearchSchema } from "@/lib/notes";
+import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 
+/**
+ * Notes became Content. Old links — including anything bookmarked with a page
+ * or a search on it — land on the same view under the new path.
+ */
 export const Route = createFileRoute("/notes")({
-  validateSearch: notesSearchSchema,
-  staticData: {
-    crumbs: (search) => [
-      { label: "Notes", search: { q: search.q, page: undefined } },
-    ],
-    views: ({ search, pathname }) => {
-      const path = pathname.replace(/\/$/, "");
-      return [
-        {
-          label: "Pages",
-          to: "/notes",
-          search: { q: search.q, page: search.page },
-          active: path === "/notes",
-        },
-        {
-          label: "Trash",
-          to: "/notes/trash",
-          search: { q: search.q, page: undefined },
-          active: path === "/notes/trash",
-        },
-      ];
-    },
+  beforeLoad: ({ location }) => {
+    throw redirect({
+      href: `${location.pathname.replace(/^\/notes/, "/content")}${location.searchStr}`,
+      replace: true,
+    });
   },
   component: () => <Outlet />,
 });

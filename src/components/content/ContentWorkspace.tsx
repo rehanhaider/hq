@@ -28,12 +28,33 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import type { NoteBlock, NoteDetail, NotePage } from "@/lib/notes";
-import { noteKeys, noteQuery, notesQuery } from "@/queries/notes";
-import { createNote, restoreNote, saveNote, trashNote } from "@/server/fns";
+import {
+  filterPages,
+  hasFilters,
+  type ContentBlock,
+  type ContentPage,
+  type ContentProperties,
+  type PageDetail,
+} from "@/lib/content";
+import {
+  contentKeys,
+  contentPropertiesQuery,
+  pageQuery,
+  pagesQuery,
+} from "@/queries/content";
+import {
+  createContentProperty,
+  createPage,
+  restorePage,
+  savePage,
+  setPageProperties,
+  trashPage,
+} from "@/server/fns";
+import { ContentToolbar, type ToolbarPatch } from "./ContentToolbar";
+import { PropertyPanel, type PropertyPatch } from "./PropertyPanel";
 
-const NotesEditor = lazy(() =>
-  import("./NotesEditor").then((module) => ({ default: module.NotesEditor })),
+const ContentEditor = lazy(() =>
+  import("./ContentEditor").then((module) => ({ default: module.ContentEditor })),
 );
 
 type SaveState = "saved" | "dirty" | "saving" | "error";
@@ -52,9 +73,9 @@ function readableError(error: unknown, fallback: string) {
   return message;
 }
 
-function pageRows(pages: NotePage[], searching: boolean) {
+function pageRows(pages: ContentPage[], searching: boolean) {
   if (searching) return pages.map((page) => ({ page, depth: 0 }));
-  const children = new Map<string | null, NotePage[]>();
+  const children = new Map<string | null, ContentPage[]>();
   for (const page of pages) {
     const siblings = children.get(page.parentId) ?? [];
     siblings.push(page);
@@ -62,7 +83,7 @@ function pageRows(pages: NotePage[], searching: boolean) {
   }
   for (const siblings of children.values())
     siblings.sort((a, b) => a.order - b.order || a.title.localeCompare(b.title));
-  const rows: { page: NotePage; depth: number }[] = [];
+  const rows: { page: ContentPage; depth: number }[] = [];
   const seen = new Set<string>();
   const visit = (parentId: string | null, depth: number) => {
     for (const page of children.get(parentId) ?? []) {
@@ -77,15 +98,21 @@ function pageRows(pages: NotePage[], searching: boolean) {
   return rows;
 }
 
-export function NotesWorkspace({ trashed }: { trashed: boolean }) {
-  const search = useSearch({ from: "/notes" });
+export function ContentWorkspace({ trashed }: { trashed: boolean }) {
+  const search = useSearch({ from: "/content" });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const list = useQuery(notesQuery(search.q, trashed));
+  const list = useQuery(pagesQuery(search.q, trashed));
+  const propertyQuery = useQuery(contentPropertiesQuery);
+  const properties: ContentProperties = propertyQuery.data ?? {
+    statuses: [],
+    types: [],
+    tags: [],
+  };
   const selectedId = trashed ? undefined : search.page;
-  const detail = useQuery(noteQuery(selectedId ?? ""));
-  const [draft, setDraft] = useState<NoteDetail | null>(null);
-  const draftRef = useRef<NoteDetail | null>(null);
+  const detail = useQuery(pageQuery(selectedId ?? ""));
+  const [draft, setDraft] = useState<PageDetail | null>(null);
+  const draftRef = useRef<PageDetail | null>(null);
   const loadedId = useRef<string | null>(null);
   const changed = useRef(0);
   const saved = useRef(0);
@@ -102,7 +129,7 @@ export function NotesWorkspace({ trashed }: { trashed: boolean }) {
   const recoveringRef = useRef(false);
 
   const applyFreshDetail = useCallback(
-    (next: NoteDetail) => {
+    (next: PageDetail) => {
       if (next.id !== selectedId) return false;
       const current = draftRef.current;
       const samePage = loadedId.current === next.id && current?.id === next.id;
@@ -150,7 +177,7 @@ export function NotesWorkspace({ trashed }: { trashed: boolean }) {
         setSaveState("saving");
         setSaveError("");
         try {
-          const result = await saveNote({
+          const result = await savePage({
             data: {
               id: snapshot.id,
               title: snapshot.title.trim() || "Untitled",
@@ -175,17 +202,17 @@ export function NotesWorkspace({ trashed }: { trashed: boolean }) {
           if (draftRef.current?.id === snapshot.id) {
             draftRef.current = {
               ...draftRef.current,
-              title: sequence === changed.current ? result.note.title : draftRef.current.title,
-              revision: result.note.revision,
-              updatedAt: result.note.updatedAt,
+              title: sequence === changed.current ? result.page.title : draftRef.current.title,
+              revision: result.page.revision,
+              updatedAt: result.page.updatedAt,
             };
             setDraft((current) =>
               current?.id === snapshot.id
                 ? {
                     ...current,
-                    title: sequence === changed.current ? result.note.title : current.title,
-                    revision: result.note.revision,
-                    updatedAt: result.note.updatedAt,
+                    title: sequence === changed.current ? result.page.title : current.title,
+                    revision: result.page.revision,
+                    updatedAt: result.page.updatedAt,
                   }
                 : current,
             );
@@ -194,8 +221,8 @@ export function NotesWorkspace({ trashed }: { trashed: boolean }) {
           staleRevision.current = null;
           setSaveConflict(false);
           setSaveUnavailable(false);
-          queryClient.setQueryData(noteKeys.detail(snapshot.id), result.note);
-          void queryClient.invalidateQueries({ queryKey: ["notes", "list"] });
+          queryClient.setQueryData(contentKeys.detail(snapshot.id), result.page);
+          void queryClient.invalidateQueries({ queryKey: contentKeys.lists });
         } catch (error) {
           setSaveConflict(false);
           setSaveUnavailable(false);
@@ -220,7 +247,7 @@ export function NotesWorkspace({ trashed }: { trashed: boolean }) {
   }, [queryClient]);
 
   const scheduleSave = useCallback(
-    (next: NoteDetail) => {
+    (next: PageDetail) => {
       if (recoveringRef.current) return;
       draftRef.current = next;
       setDraft(next);
@@ -253,24 +280,99 @@ export function NotesWorkspace({ trashed }: { trashed: boolean }) {
     disabled: trashed,
   });
 
-  const rows = useMemo(() => pageRows(list.data ?? [], Boolean(search.q)), [list.data, search.q]);
+  // The server already searched titles and body text, so only the property
+  // filters are applied here. Filtering flattens the tree: a match whose parent
+  // was filtered out still has to be reachable.
+  const rows = useMemo(() => {
+    const pages = trashed
+      ? (list.data ?? [])
+      : filterPages(list.data ?? [], {
+          status: search.status,
+          type: search.type,
+          tag: search.tag,
+        });
+    return pageRows(pages, Boolean(search.q) || hasFilters({ ...search, q: undefined }));
+  }, [list.data, search, trashed]);
+
+  const updateSearch = (patch: ToolbarPatch) =>
+    void navigate({
+      to: "/content",
+      search: { ...search, ...patch },
+      replace: true,
+    });
+
+  const applyProperties = async (patch: PropertyPatch) => {
+    const current = draftRef.current;
+    if (!current) return;
+    const next = { ...current, ...patch, tagIds: patch.tagIds ?? current.tagIds };
+    draftRef.current = next;
+    setDraft(next);
+    // Only the properties this request set, and only while they are still the
+    // ones on screen. The whole draft cannot be restored: the editor may have
+    // typed since, and putting that text back would hand the pending autosave
+    // an older document to persist.
+    const rollback = () => {
+      const latest = draftRef.current;
+      if (!latest || latest.id !== current.id) return;
+      const restored = { ...latest };
+      if (patch.statusId !== undefined && latest.statusId === next.statusId)
+        restored.statusId = current.statusId;
+      if (patch.typeId !== undefined && latest.typeId === next.typeId)
+        restored.typeId = current.typeId;
+      if (patch.tagIds !== undefined && latest.tagIds.join() === next.tagIds.join())
+        restored.tagIds = current.tagIds;
+      draftRef.current = restored;
+      setDraft(restored);
+      setActionError("The page properties could not be saved.");
+    };
+    try {
+      const result = await setPageProperties({ data: { id: current.id, ...patch } });
+      if (!result.ok) {
+        rollback();
+        return;
+      }
+      setActionError("");
+      const editing = draftRef.current?.id === current.id ? draftRef.current : null;
+      queryClient.setQueryData(contentKeys.detail(current.id), {
+        ...result.page,
+        document: editing?.document ?? current.document,
+      });
+      await queryClient.invalidateQueries({ queryKey: contentKeys.lists });
+    } catch {
+      rollback();
+    }
+  };
+
+  const addTag = async (name: string) => {
+    try {
+      const created = await createContentProperty({ data: { kind: "tag", name } });
+      await queryClient.invalidateQueries({ queryKey: contentKeys.properties });
+      return created.id;
+    } catch {
+      setActionError("The tag could not be created.");
+      return null;
+    }
+  };
   const selectPage = async (page: string | undefined) => {
     if (recoveringRef.current || page === selectedId) return;
     if (!(await drain())) return;
     loadedId.current = null;
-    await navigate({ to: "/notes", search: { q: search.q, page } });
+    await navigate({ to: "/content", search: { ...search, page } });
   };
 
   const addPage = async (parentId: string | null) => {
     if (recoveringRef.current) return;
     if (!(await drain())) return;
     try {
-      const created = await createNote({ data: { title: "Untitled", parentId } });
-      queryClient.setQueryData(noteKeys.detail(created.id), created);
-      await queryClient.invalidateQueries({ queryKey: ["notes", "list"] });
+      const created = await createPage({ data: { title: "Untitled", parentId } });
+      queryClient.setQueryData(contentKeys.detail(created.id), created);
+      await queryClient.invalidateQueries({ queryKey: contentKeys.lists });
       loadedId.current = null;
       setActionError("");
-      await navigate({ to: "/notes", search: { q: undefined, page: created.id } });
+      await navigate({
+        to: "/content",
+        search: { ...search, q: undefined, page: created.id },
+      });
     } catch (error) {
       setActionError(readableError(error, "The page could not be created."));
     }
@@ -284,7 +386,7 @@ export function NotesWorkspace({ trashed }: { trashed: boolean }) {
     setRecovering(true);
     setSaveState("saving");
     try {
-      const recovered = await createNote({
+      const recovered = await createPage({
         data: {
           title: snapshot.title.trim() || "Untitled",
           parentId: null,
@@ -300,12 +402,12 @@ export function NotesWorkspace({ trashed }: { trashed: boolean }) {
       setSaveUnavailable(false);
       setSaveError("");
       setSaveState("saved");
-      queryClient.setQueryData(noteKeys.detail(recovered.id), recovered);
-      await queryClient.invalidateQueries({ queryKey: ["notes", "list"] });
+      queryClient.setQueryData(contentKeys.detail(recovered.id), recovered);
+      await queryClient.invalidateQueries({ queryKey: contentKeys.lists });
       if (openCopy)
         await navigate({
-          to: "/notes",
-          search: { q: search.q, page: recovered.id },
+          to: "/content",
+          search: { ...search, page: recovered.id },
         });
       return true;
     } catch (error) {
@@ -329,10 +431,10 @@ export function NotesWorkspace({ trashed }: { trashed: boolean }) {
         <header className="page-header">
           <div>
             <h1 id="trash-heading" className="page-title">Trash</h1>
-            <p className="page-description">Restore pages to their original place in the page tree.</p>
+            <p className="page-description">Restore pages to their original place in the page tree. Trashed pages never appear on the board.</p>
           </div>
         </header>
-        <SearchBox value={search.q ?? ""} onChange={(q) => void navigate({ to: "/notes/trash", search: { q: q || undefined, page: undefined }, replace: true })} label="Search trash" />
+        <SearchBox value={search.q ?? ""} onChange={(q) => void navigate({ to: "/content/trash", search: { ...search, q: q || undefined, page: undefined }, replace: true })} label="Search trash" />
         {actionError && <p className="mt-3 rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert">{actionError}</p>}
         <div className="panel mt-4 divide-y">
           {list.isPending ? (
@@ -349,10 +451,10 @@ export function NotesWorkspace({ trashed }: { trashed: boolean }) {
                   variant="outline"
                   onClick={async () => {
                     try {
-                      const result = await restoreNote({ data: { id: page.id, revision: page.revision } });
+                      const result = await restorePage({ data: { id: page.id, revision: page.revision } });
                       if (result.ok) {
                         setActionError("");
-                        await queryClient.invalidateQueries({ queryKey: noteKeys.all });
+                        await queryClient.invalidateQueries({ queryKey: contentKeys.all });
                       } else {
                         setActionError("This page changed before it could be restored. The list has been refreshed.");
                         void list.refetch();
@@ -375,11 +477,13 @@ export function NotesWorkspace({ trashed }: { trashed: boolean }) {
     );
 
   return (
-    <section aria-labelledby="notes-heading">
+    <section aria-labelledby="content-heading">
       <header className="page-header">
         <div>
-          <h1 id="notes-heading" className="page-title">Notes</h1>
-          <p className="page-description">Keep formatted pages in a searchable tree.</p>
+          <h1 id="content-heading" className="page-title">Pages</h1>
+          <p className="page-description">
+            Every page is a piece of content: write it here, track it on the board.
+          </p>
         </div>
         <Button disabled={recovering} onClick={() => void addPage(null)}><FilePlus2 /> New page</Button>
       </header>
@@ -391,10 +495,16 @@ export function NotesWorkspace({ trashed }: { trashed: boolean }) {
           {actionError}
         </p>
       )}
-      <div className="notes-workspace mt-5">
-        <aside className={`${selectedId ? "hidden md:flex" : "flex"} min-h-[34rem] flex-col border-r bg-card`} aria-label="Note pages">
-          <SearchBox value={search.q ?? ""} onChange={(q) => void navigate({ to: "/notes", search: { q: q || undefined, page: selectedId }, replace: true })} label="Search pages" />
-          <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
+      <div className="mt-5">
+        <ContentToolbar
+          properties={properties}
+          search={search}
+          onChange={updateSearch}
+        />
+      </div>
+      <div className="content-workspace mt-4">
+        <aside className={`${selectedId ? "hidden md:flex" : "flex"} min-h-[34rem] flex-col border-r bg-card`} aria-label="Content pages">
+          <div className="min-h-0 flex-1 overflow-y-auto px-2 py-3">
             {list.isPending ? (
               <p className="p-3 text-muted-foreground">Loading pages…</p>
             ) : rows.length ? (
@@ -436,16 +546,7 @@ export function NotesWorkspace({ trashed }: { trashed: boolean }) {
             <div>
               <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2 sm:px-4">
                 <Button variant="ghost" size="icon" className="md:hidden" disabled={recovering} aria-label="Back to page list" onClick={() => void selectPage(undefined)}><ArrowLeft /></Button>
-                <Input
-                  aria-label="Page title"
-                  value={draft.title}
-                  disabled={recovering}
-                  className="min-w-36 flex-1 border-transparent px-1 text-lg font-semibold shadow-none focus-visible:border-input"
-                  onChange={(event) => scheduleSave({ ...draftRef.current!, title: event.target.value })}
-                  onBlur={() => {
-                    if (!draftRef.current?.title.trim()) scheduleSave({ ...draftRef.current!, title: "Untitled" });
-                  }}
-                />
+                <span className="flex-1" />
                 <span className={`text-xs ${saveState === "error" ? "text-destructive" : "text-muted-foreground"}`} role="status" aria-live="polite">
                   {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved" : saveState === "error" ? "Save failed" : "Unsaved"}
                 </span>
@@ -470,14 +571,14 @@ export function NotesWorkspace({ trashed }: { trashed: boolean }) {
                   const sourceId = current.id;
                   const sourceSequence = changed.current;
                   try {
-                    const result = await trashNote({ data: { id: current.id, revision: current.revision } });
+                    const result = await trashPage({ data: { id: current.id, revision: current.revision } });
                     const sameSource =
                       selectedId === sourceId && draftRef.current?.id === sourceId;
                     const sourceChanged = changed.current !== sourceSequence;
                     if (!result.ok) {
                       if (result.current) {
                         queryClient.setQueryData(
-                          noteKeys.detail(sourceId),
+                          contentKeys.detail(sourceId),
                           result.current,
                         );
                         if (
@@ -498,7 +599,7 @@ export function NotesWorkspace({ trashed }: { trashed: boolean }) {
                           );
                         }
                       } else {
-                        queryClient.setQueryData(noteKeys.detail(sourceId), null);
+                        queryClient.setQueryData(contentKeys.detail(sourceId), null);
                         if (sameSource && sourceChanged) {
                           staleRevision.current = null;
                           setSaveConflict(false);
@@ -512,11 +613,11 @@ export function NotesWorkspace({ trashed }: { trashed: boolean }) {
                         }
                       }
                       await queryClient.invalidateQueries({
-                        queryKey: ["notes", "list"],
+                        queryKey: contentKeys.lists,
                       });
                       return;
                     }
-                    await queryClient.invalidateQueries({ queryKey: noteKeys.all });
+                    await queryClient.invalidateQueries({ queryKey: contentKeys.all });
                     if (sameSource && sourceChanged) {
                       staleRevision.current = null;
                       setSaveConflict(false);
@@ -530,20 +631,43 @@ export function NotesWorkspace({ trashed }: { trashed: boolean }) {
                     if (!sameSource) return;
                     loadedId.current = null;
                     setActionError("");
-                    await navigate({ to: "/notes", search: { q: search.q, page: undefined } });
+                    await navigate({
+                      to: "/content",
+                      search: { ...search, page: undefined },
+                    });
                   } catch (error) {
                     setActionError(readableError(error, "The page could not be moved to trash."));
                   }
                 }}><Trash2 /></Button>
               </div>
+              <div className="content-page-body">
+                <input
+                  aria-label="Page title"
+                  value={draft.title}
+                  disabled={recovering}
+                  placeholder="Untitled"
+                  className="w-full border-none bg-transparent p-0 text-3xl font-semibold tracking-tight outline-none placeholder:text-muted-foreground/40 sm:text-[2rem]"
+                  onChange={(event) => scheduleSave({ ...draftRef.current!, title: event.target.value })}
+                  onBlur={() => {
+                    if (!draftRef.current?.title.trim()) scheduleSave({ ...draftRef.current!, title: "Untitled" });
+                  }}
+                />
+                <PropertyPanel
+                  page={draft}
+                  properties={properties}
+                  disabled={recovering || propertyQuery.isPending}
+                  onChange={(patch) => void applyProperties(patch)}
+                  onCreateTag={addTag}
+                />
+              </div>
               {saveError && <div className="border-b bg-destructive/10 px-4 py-2 text-xs text-destructive" role="alert">{saveError}</div>}
               <ClientOnly fallback={<div className="min-h-[30rem] animate-pulse bg-muted" aria-label="Loading editor" />}>
                 <Suspense fallback={<div className="min-h-[30rem] animate-pulse bg-muted" aria-label="Loading editor" />}>
-                  <NotesEditor
+                  <ContentEditor
                     key={`${draft.id}:${editorGeneration}`}
-                    note={draft}
+                    page={draft}
                     editable={!recovering}
-                    onDocumentChange={(document: NoteBlock[]) => {
+                    onDocumentChange={(document: ContentBlock[]) => {
                       const current = draftRef.current;
                       if (
                         recoveringRef.current ||
@@ -592,7 +716,7 @@ function SearchBox({ value, onChange, label }: { value: string; onChange: (value
   return (
     <label className="relative m-3 block">
       <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-      <Input aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} placeholder="Search notes" className="pl-8" />
+      <Input aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} placeholder="Search pages" className="pl-8" />
     </label>
   );
 }

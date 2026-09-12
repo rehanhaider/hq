@@ -7,7 +7,7 @@ import type { ImportStatus } from "../lib/model";
 import { github } from "./github";
 import { ensureRefreshLoop, startImport } from "./import";
 import { getDeenStore } from "./deen";
-import { getNotesStore } from "./notes";
+import { getContentStore } from "./content";
 import {
   DEEN_CONTENT,
   calculateAdherence,
@@ -24,12 +24,18 @@ import {
 } from "../lib/deen";
 import { z } from "zod";
 import {
-  changeNoteStateSchema,
-  createNoteSchema,
-  listNotesSchema,
-  noteIdSchema,
-  saveNoteSchema,
-} from "../lib/notes";
+  changePageStateSchema,
+  createPageSchema,
+  createPropertySchema,
+  deletePropertySchema,
+  listPagesSchema,
+  movePageCardSchema,
+  pageIdSchema,
+  reorderPropertiesSchema,
+  savePageSchema,
+  setPagePropertiesSchema,
+  updatePropertySchema,
+} from "../lib/content";
 
 function deenSummary() {
   const deen = getDeenStore();
@@ -116,26 +122,63 @@ export const resetDeen = createServerFn({ method: "POST" })
   .validator(resetRequestSchema)
   .handler(() => getDeenStore().reset());
 
-export const getNotes = createServerFn({ method: "GET" })
-  .validator(listNotesSchema)
-  .handler(({ data }) => getNotesStore().list(data));
-export const getNote = createServerFn({ method: "GET" })
-  .validator(noteIdSchema)
-  .handler(({ data }) => getNotesStore().get(data.id));
-export const createNote = createServerFn({ method: "POST" })
-  .validator(createNoteSchema)
+export const getPages = createServerFn({ method: "GET" })
+  .validator(listPagesSchema)
+  .handler(({ data }) => getContentStore().list(data));
+export const getPage = createServerFn({ method: "GET" })
+  .validator(pageIdSchema)
+  .handler(({ data }) => getContentStore().get(data.id));
+export const getContentProperties = createServerFn({ method: "GET" }).handler(() =>
+  getContentStore().properties(),
+);
+export const createPage = createServerFn({ method: "POST" })
+  .validator(createPageSchema)
   .handler(({ data }) =>
-    getNotesStore().create(data.title, data.parentId, data.document),
+    getContentStore().create(
+      data.title,
+      data.parentId,
+      data.document,
+      data.statusId,
+      data.typeId,
+      data.tagIds,
+    ),
   );
-export const saveNote = createServerFn({ method: "POST" })
-  .validator(saveNoteSchema)
-  .handler(({ data }) => getNotesStore().save(data));
-export const trashNote = createServerFn({ method: "POST" })
-  .validator(changeNoteStateSchema)
-  .handler(({ data }) => getNotesStore().trash(data.id, data.revision));
-export const restoreNote = createServerFn({ method: "POST" })
-  .validator(changeNoteStateSchema)
-  .handler(({ data }) => getNotesStore().restore(data.id, data.revision));
+export const setPageProperties = createServerFn({ method: "POST" })
+  .validator(setPagePropertiesSchema)
+  .handler(({ data }) => getContentStore().setProperties(data));
+export const movePageCard = createServerFn({ method: "POST" })
+  .validator(movePageCardSchema)
+  .handler(({ data }) => getContentStore().moveCard(data));
+export const createContentProperty = createServerFn({ method: "POST" })
+  .validator(createPropertySchema)
+  .handler(({ data }) =>
+    getContentStore().createProperty(data.kind, data.name, data.color),
+  );
+export const updateContentProperty = createServerFn({ method: "POST" })
+  .validator(updatePropertySchema)
+  .handler(({ data }) =>
+    getContentStore().updateProperty(data.kind, data.id, {
+      name: data.name,
+      color: data.color,
+    }),
+  );
+export const reorderContentProperties = createServerFn({ method: "POST" })
+  .validator(reorderPropertiesSchema)
+  .handler(({ data }) => getContentStore().reorderProperties(data.kind, data.ids));
+export const deleteContentProperty = createServerFn({ method: "POST" })
+  .validator(deletePropertySchema)
+  .handler(({ data }) =>
+    getContentStore().deleteProperty(data.kind, data.id, data.moveToId),
+  );
+export const savePage = createServerFn({ method: "POST" })
+  .validator(savePageSchema)
+  .handler(({ data }) => getContentStore().save(data));
+export const trashPage = createServerFn({ method: "POST" })
+  .validator(changePageStateSchema)
+  .handler(({ data }) => getContentStore().trash(data.id, data.revision));
+export const restorePage = createServerFn({ method: "POST" })
+  .validator(changePageStateSchema)
+  .handler(({ data }) => getContentStore().restore(data.id, data.revision));
 
 export const getConnections = createServerFn({ method: "GET" }).handler(() => {
   ensureRefreshLoop();

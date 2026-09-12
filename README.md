@@ -1,10 +1,10 @@
 # HQ
 
-Personal dashboard for planning and daily tracking. Notes, Nasr, the 40-day practice tracker, and GitHub activity run in one TanStack Start process with three SQLite files. There is no login. The app listens on the house network.
+Personal dashboard for planning and daily tracking. Content, Nasr, the 40-day practice tracker, and GitHub activity run in one TanStack Start process with three SQLite files. There is no login. The app listens on the house network.
 
 ## Application foundation and pages
 
-Navigation has two levels. The left sidebar contains only Home and primary modules: Nasr, Notes, and GitHub. Each module owns a horizontal page-navigation bar above its content. Module pages must not be flattened into the primary sidebar. The desktop sidebar collapses to an icon rail and remembers its state. Hover or keyboard focus previews the expanded rail without moving the content. Ctrl/Cmd+B toggles collapse outside text fields and editors. On phones, the sidebar opens as a dismissible drawer. A utility top bar holds the sidebar toggle and appearance control; module tabs remain above the content.
+Navigation has two levels. The left sidebar contains only Home and primary modules: Nasr, Content, and GitHub. Each module owns a horizontal page-navigation bar above its content. Module pages must not be flattened into the primary sidebar. The desktop sidebar collapses to an icon rail and remembers its state. Hover or keyboard focus previews the expanded rail without moving the content. Ctrl/Cmd+B toggles collapse outside text fields and editors. On phones, the sidebar opens as a dismissible drawer. A utility top bar holds the sidebar toggle and appearance control; module tabs remain above the content.
 
 TanStack Start is the application framework. Its Vite plugin builds the client and server, file-based Router routes own page navigation, and Start server functions own database access. The production command serves Start's generated server entry. There is no separate application framework or custom request router.
 
@@ -12,7 +12,7 @@ TanStack Query owns fetched data and mutations. TanStack Router owns shareable f
 
 - Home is the daily briefing, with practice progress, a link to continue logging, and a smaller weekly coding summary.
 - Nasr contains Today, Progress, and Settings. Progress separates Salah from adhkar and other practices. Notes and daily note entry are removed. Charity logging is not part of the app and old charity records are not imported or exported.
-- Notes contains Pages and Trash. Pages has a searchable nested page list beside a formatted editor on larger screens. On phones, the list and editor open one at a time. Notes is separate from old Nasr daily-note data.
+- Content contains Pages, Board, Trash, and Settings. It is the production pipeline for streams, YouTube videos, blog posts, and architecture articles. Pages has a searchable nested page list beside a formatted editor on larger screens; on phones, the list and editor open one at a time. Every page — nested subpages included — is a content item with a status, an optional type, and any number of tags, and every page that is not in the trash appears on the Board. Content is separate from old Nasr daily-note data.
 - GitHub contains Overview, Activity history, and Repositories. Repositories manages imports and stored coverage. Its existing URL remains `/github?view=projects`.
 
 ## TanStack library review
@@ -31,7 +31,7 @@ Reviewed against the official catalog on 7 September 2026. This is a library ass
 | DB | Client collections, relational live queries, optimistic writes | Defer; adds a data layer that these pages do not currently need; not a replacement for server SQLite |
 | Virtual | Render only visible rows in large lists | Defer until measured list rendering warrants it; activity history is already paginated |
 | Pacer | Debouncing, throttling, and work queues | Defer; the redesign does not require changing import scheduling |
-| Hotkeys | Keyboard shortcut management | Not added; the Notes editor and app shell own their shortcuts |
+| Hotkeys | Keyboard shortcut management | Not added; the Content editor and app shell own their shortcuts |
 | Markdown, Highlight | Rich text rendering and syntax highlighting | Activity records link to source code |
 | AI | Agent and model integration | No AI feature is in scope |
 | Devtools | Inspect library state during development | Optional future development aid, not required for this redesign |
@@ -52,7 +52,7 @@ Open port 3000 on this machine from any device on the LAN. GitHub import still n
 
 Nasr's history was imported into `data/deen.sqlite` on 8 September 2026 and the Nasr install has been removed; the `imported_from` setting records where it came from. The one-shot importer has been deleted along with it, so a database restored from a Nasr backup would need importing by hand.
 
-Override database paths with `HQ_DATABASE` (GitHub), `HQ_DEEN_DATABASE` (Nasr), and `HQ_NOTES_DATABASE` (Notes). All three default under `data/`.
+Override database paths with `HQ_DATABASE` (GitHub), `HQ_DEEN_DATABASE` (Nasr), and `HQ_CONTENT_DATABASE` (Content). All three default under `data/`. `HQ_NOTES_DATABASE` is the old name for the Content path; it still works and is deprecated.
 
 The application itself reads only `GITHUB_TOKEN`; it does not call the GitHub CLI. Never put a token in a `VITE_` variable or in the browser. If you use a fine-grained token, grant read access to Metadata, Contents, and Pull requests for the repositories you select.
 
@@ -73,8 +73,8 @@ After pulling or editing the source, run `pnpm ship` (`scripts/deploy.sh`). It i
 
 ## Storage and import behavior
 
-- GitHub data lives in `data/activity.sqlite`, Nasr data lives in `data/deen.sqlite`, and Notes data lives in `data/notes.sqlite`. Override them with `HQ_DATABASE`, `HQ_DEEN_DATABASE`, and `HQ_NOTES_DATABASE`. Database files and credentials are ignored by Git.
-- Notes stores the full BlockNote JSON document in SQLite. This is the lossless source of truth. Markdown import and export are for moving a copy between tools; Markdown cannot represent every table detail or rich-text property, so an exported file may simplify them. Pages move to Trash with their active descendants and can be restored. A revision check rejects an older browser tab rather than overwriting a newer save.
+- GitHub data lives in `data/activity.sqlite`, Nasr data lives in `data/deen.sqlite`, and Content data lives in `data/content.sqlite`. Override them with `HQ_DATABASE`, `HQ_DEEN_DATABASE`, and `HQ_CONTENT_DATABASE` (or the deprecated `HQ_NOTES_DATABASE`). Database files and credentials are ignored by Git. On start, a `data/notes.sqlite` left by the old Notes module is renamed to `data/content.sqlite`, write-ahead log included, and the rename is logged once; the `notes` table becomes `pages` in place.
+- Content stores the full BlockNote JSON document in SQLite. This is the lossless source of truth. Markdown import and export are for moving a copy between tools; Markdown cannot represent every table detail or rich-text property, so an exported file may simplify them. Pages move to Trash with their active descendants and can be restored. A revision check rejects an older browser tab rather than overwriting a newer save.
 - GitHub Repositories (`/github?view=projects`) is the repository list: add, remove, fetch status, and stored counts (commits, merged requests, line changes). Filter by organization. Sorted by commit count. Overview and History show activity. Old Connections URLs open Repositories.
 - After the first import, HQ refreshes already-imported repositories in the background. Opening the app starts a catch-up if the last run is older than 15 minutes (`HQ_REFRESH_MS`, `0` to disable). Each refresh asks GitHub only for the last 48 hours, then merges new commits and pull requests into the saved snapshot so older history stays put.
 - Add or remove repositories from Repositories. Removing a repository deletes that repository’s stored history from HQ. Pick an earlier start date only to reach before the earliest saved day. Manual import merges into what is already stored. Unselected repositories are untouched. A repository that fails to fetch is marked failed and the rest continue; token, network, and rate-limit errors stop the run.
@@ -88,13 +88,15 @@ After pulling or editing the source, run `pnpm ship` (`scripts/deploy.sh`). It i
 
 To back up or move the databases, stop the app first and copy the entire `data` directory, including SQLite sidecar files if present. Do not copy `node_modules` between machines.
 
-`hq-backup.timer` runs `scripts/backup.mjs` daily at 02:00 and keeps 7 daily and 4 weekly copies of every database under `backups/<database>/<tier>/`, which Git ignores. It backs up the paths `HQ_DEEN_DATABASE`, `HQ_DATABASE`, and `HQ_NOTES_DATABASE` resolve to, not whatever happens to sit in `data/`, so a relocated database is still covered, and a path named by any of those variables that does not exist fails the run rather than being skipped quietly. `hq-backup.service` therefore reads the same `EnvironmentFile` as `hq.service`. Any other `.sqlite` beside them is picked up too. Each database gets its own directory, so retention and weekly scheduling for one can never affect another; two databases sharing a filename would share a directory, so that is refused with an error naming both paths rather than resolved by guessing a name.
+`hq-backup.timer` runs `scripts/backup.mjs` daily at 02:00 and keeps 7 daily and 4 weekly copies of every database under `backups/<database>/<tier>/`, which Git ignores. It backs up the paths `HQ_DEEN_DATABASE`, `HQ_DATABASE`, and `HQ_CONTENT_DATABASE` (or the deprecated `HQ_NOTES_DATABASE`) resolve to, not whatever happens to sit in `data/`, so a relocated database is still covered, and a path named by any of those variables that does not exist fails the run rather than being skipped quietly. `hq-backup.service` therefore reads the same `EnvironmentFile` as `hq.service`. Any other `.sqlite` beside them is picked up too. Each database gets its own directory, so retention and weekly scheduling for one can never affect another; two databases sharing a filename would share a directory, so that is refused with an error naming both paths rather than resolved by guessing a name.
 
 It uses `VACUUM INTO` rather than a file copy: copying a WAL-mode database captures only the main file and silently omits everything still in the `-wal`, which is how Nasr's old timer ended up a week stale. Each snapshot is staged under a `.tmp` name, reopened and `PRAGMA integrity_check`ed, and only renamed into place once it passes, so a file carrying the `.sqlite` name is always one that was verified — a run killed mid-write leaves nothing that retention or the weekly check would mistake for a good backup. Pruning is by count, so a long gap in runs cannot delete every backup. The weekly tier fires per database whenever that database's newest weekly copy is seven calendar days old, rather than on a fixed weekday, so a Pi that is off on Sundays still gets one and a database whose weekly copy failed is retried. Calendar days rather than a strict 168 hours, because the timer's jitter would otherwise let the seventh day fall minutes short and stretch the interval to eight. Runs are serialised by a kernel advisory lock: the script re-executes itself under `flock`, so an ad-hoc backup started while the timer is running exits rather than racing it for the same weekly slot, however it was invoked. The kernel releases the lock when the holder dies, so there is no stale lock to detect or recover — a leftover `backups/.lock` is inert. Without `flock` on the system the script says so and runs unlocked rather than not running at all. Run `node scripts/backup.mjs` for an ad-hoc snapshot, or set `HQ_BACKUP_WEEKLY=1` to force the weekly tier.
 
-## Notes editor
+## Content editor
 
 Use the formatting toolbar or type `/` to insert headings, lists, checklists, quotes, code blocks, and tables. Blocks can be dragged by their handle. Markdown shortcuts such as `# ` for a heading work at the start of a block.
+
+Under the page title sits the property bar: status, type, and tags. Property changes save on their own, immediately, and never touch the document or its revision, so an open editor keeps its unsaved text.
 
 - Ctrl/Cmd+B: bold
 - Ctrl/Cmd+I: italic
@@ -103,7 +105,15 @@ Use the formatting toolbar or type `/` to insert headings, lists, checklists, qu
 - Ctrl/Cmd+Z: undo
 - Ctrl/Cmd+Shift+Z: redo
 
-Notes save after a short pause. The page shows Unsaved, Saving, Saved, or Save failed. Navigation waits for an unsaved page; retry keeps the local document in the editor. If another tab has already saved a newer revision, overwriting it requires a separate explicit action.
+Pages save after a short pause. The page shows Unsaved, Saving, Saved, or Save failed. Navigation waits for an unsaved page; retry keeps the local document in the editor. If another tab has already saved a newer revision, overwriting it requires a separate explicit action.
+
+## Content board and properties
+
+Board draws one column per status, in the order Settings gives them. Cards show the title, the type and tags as coloured chips, when the page was last updated, and the parent page when it is nested. Clicking a card opens it in Pages. Dragging a card to another column sets that property; dragging within a column saves a manual order. `+ New` at the foot of a column creates a page already in that column and opens it. Group by switches the columns between Status, Type, and Tag, with "No type" and "Untagged" buckets for pages that have neither; dragging across those columns sets the type or adds and removes the tag. Drag and drop uses `@dnd-kit`.
+
+Filters — status, type, tag, and a title search — and the sort (Manual, Updated, Created, Title) live in the URL, so a filtered board is a link. They apply to the Pages list as well. Clear removes them.
+
+Settings owns the three property lists. Add, rename in place, recolour from a fixed palette, reorder, and delete. Deleting a status that holds pages asks which status they move to; deleting a type clears it from its pages; deleting a tag drops its links. The last status cannot be deleted, because the board needs a column. A new page starts in the first status with no type and no tags, and a new subpage inherits its parent's type.
 
 ## Date ranges and charts
 
@@ -133,6 +143,6 @@ pnpm typecheck
 pnpm build
 ```
 
-Tests cover UTC date boundaries, attribution, merge exclusion, category rules, snapshot replacement, account isolation, pagination, commit reuse, failure preservation, deen cycle arithmetic, streaks, adherence, Notes data safety and validation, and backup rotation.
+Tests cover UTC date boundaries, attribution, merge exclusion, category rules, snapshot replacement, account isolation, pagination, commit reuse, failure preservation, deen cycle arithmetic, streaks, adherence, Content data safety and validation, property migration and seeding, board moves, filters and sorts, and backup rotation.
 
-Server functions in `src/server/fns.ts` own the data boundary. Server-derived data belongs to Query. Shareable dates, repository, record type, page, Notes search, and view belong to Router search parameters. Zustand owns the theme preference. Secrets and database imports stay on the server.
+Server functions in `src/server/fns.ts` own the data boundary. Server-derived data belongs to Query. Shareable dates, repository, record type, page, Content search, filters, sort, grouping, and view belong to Router search parameters. Zustand owns the theme preference. Secrets and database imports stay on the server.

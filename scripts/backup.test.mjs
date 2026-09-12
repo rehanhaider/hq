@@ -88,19 +88,26 @@ describe("backup", () => {
     db.close();
   });
 
-  it("backs up Notes when its configured path is outside the other database directories", () => {
-    const notes = join(dir, "notes-volume", "notes.sqlite");
-    makeDb(notes, "pages");
-    run({ HQ_NOTES_DATABASE: notes });
-    const file = listed("notes", "daily")[0];
+  it("backs up Content when its configured path is outside the other database directories", () => {
+    const content = join(dir, "content-volume", "content.sqlite");
+    makeDb(content, "pages");
+    run({ HQ_CONTENT_DATABASE: content });
+    const file = listed("content", "daily")[0];
     expect(file).toBeDefined();
-    const db = new DatabaseSync(join(backupDir(), "notes", "daily", file), {
+    const db = new DatabaseSync(join(backupDir(), "content", "daily", file), {
       readOnly: true,
     });
     expect(
       db.prepare("SELECT name FROM sqlite_master WHERE type='table'").get().name,
     ).toBe("pages");
     db.close();
+  });
+
+  it("still follows the deprecated Notes variable", () => {
+    const legacy = join(dir, "legacy-volume", "content.sqlite");
+    makeDb(legacy, "pages");
+    run({ HQ_NOTES_DATABASE: legacy });
+    expect(listed("content", "daily")[0]).toBeDefined();
   });
 
   it("keeps 7 daily copies", () => {
@@ -296,8 +303,8 @@ describe("backup", () => {
   });
 
   it("ignores non-database files", () => {
-    writeFileSync(join(dataDir(), "notes.txt"), "hello");
+    writeFileSync(join(dataDir(), "content.txt"), "hello");
     run();
-    expect(listed("notes", "daily")).toEqual([]);
+    expect(listed("content", "daily")).toEqual([]);
   });
 });

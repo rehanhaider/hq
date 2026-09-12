@@ -17,7 +17,7 @@ import {
 import { useCreateBlockNote } from "@blocknote/react";
 import { BlockNoteView, ShadCNDefaultComponents } from "@blocknote/shadcn";
 import { Download, Link as LinkIcon, Upload } from "lucide-react";
-import { validateNoteDocument, type NoteBlock, type NoteDetail } from "@/lib/notes";
+import { validateContentDocument, type ContentBlock, type PageDetail } from "@/lib/content";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -94,7 +94,7 @@ function DragSafeDropdownMenuTrigger({
 
 function downloadName(title: string) {
   const safe = title.trim().replace(/[^\p{L}\p{N}._-]+/gu, "-").replace(/^-+|-+$/g, "");
-  return `${safe || "note"}.md`;
+  return `${safe || "page"}.md`;
 }
 
 function normalizedLink(value: string) {
@@ -105,14 +105,14 @@ function normalizedLink(value: string) {
   return `https://${link}`;
 }
 
-export function NotesEditor({
-  note,
+export function ContentEditor({
+  page,
   editable = true,
   onDocumentChange,
 }: {
-  note: NoteDetail;
+  page: PageDetail;
   editable?: boolean;
-  onDocumentChange: (document: NoteBlock[]) => void;
+  onDocumentChange: (document: ContentBlock[]) => void;
 }) {
   const ui = useUI();
   const file = useRef<HTMLInputElement>(null);
@@ -127,7 +127,7 @@ export function NotesEditor({
   const importRun = useRef(0);
   const editor = useCreateBlockNote({
     schema: noteSchema,
-    initialContent: note.document as PartialBlock<
+    initialContent: page.document as PartialBlock<
       typeof noteSchema.blockSchema,
       typeof noteSchema.inlineContentSchema,
       typeof noteSchema.styleSchema
@@ -195,14 +195,30 @@ export function NotesEditor({
     const url = URL.createObjectURL(new Blob([markdown], { type: "text/markdown;charset=utf-8" }));
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = downloadName(note.title);
+    anchor.download = downloadName(page.title);
     anchor.click();
     URL.revokeObjectURL(url);
   };
 
   return (
-    <div className="notes-editor-shell" ref={editorHost}>
-      <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2">
+    <div className="content-editor-shell" ref={editorHost}>
+      <BlockNoteView
+        editor={editor}
+        editable={editable}
+        theme={ui.theme}
+        shadCNComponents={{
+          DropdownMenu: {
+            ...ShadCNDefaultComponents.DropdownMenu,
+            DropdownMenuTrigger: DragSafeDropdownMenuTrigger,
+          },
+        }}
+        onChange={(current) =>
+          onDocumentChange(current.document as unknown as ContentBlock[])
+        }
+        className="min-h-[28rem]"
+        data-testid="content-editor"
+      />
+      <div className="flex flex-wrap items-center gap-2 border-t px-3 py-2 sm:px-4">
         <Button
           variant="outline"
           size="sm"
@@ -229,12 +245,12 @@ export function NotesEditor({
               const markdown = await selected.text();
               if (run !== importRun.current) return;
               const blocks = editor.tryParseMarkdownToBlocks(markdown);
-              if (!validateNoteDocument(blocks))
-                throw new Error("This Markdown file contains content Notes cannot save.");
+              if (!validateContentDocument(blocks))
+                throw new Error("This Markdown file contains content this editor cannot save.");
               replacing = true;
               editor.replaceBlocks(editor.document, blocks);
               if (run !== importRun.current) return;
-              onDocumentChange(editor.document as unknown as NoteBlock[]);
+              onDocumentChange(editor.document as unknown as ContentBlock[]);
               setImportError("");
             } catch (error) {
               if (run !== importRun.current) return;
@@ -257,25 +273,9 @@ export function NotesEditor({
           Type / for blocks
         </span>
       </div>
-      {importError && <p className="border-b bg-destructive/10 px-4 py-2 text-xs text-destructive" role="alert">{importError}</p>}
-      <BlockNoteView
-        editor={editor}
-        editable={editable}
-        theme={ui.theme}
-        shadCNComponents={{
-          DropdownMenu: {
-            ...ShadCNDefaultComponents.DropdownMenu,
-            DropdownMenuTrigger: DragSafeDropdownMenuTrigger,
-          },
-        }}
-        onChange={(current) =>
-          onDocumentChange(current.document as unknown as NoteBlock[])
-        }
-        className="min-h-[28rem]"
-        data-testid="notes-editor"
-      />
-      <p className="border-t px-4 py-2 text-xs leading-5 text-muted-foreground">
-        Markdown is a portable copy and may simplify tables or rich formatting. The saved note keeps the full block document.
+      {importError && <p className="bg-destructive/10 px-4 py-2 text-xs text-destructive" role="alert">{importError}</p>}
+      <p className="px-4 pb-3 text-xs leading-5 text-muted-foreground">
+        Markdown is a portable copy and may simplify tables or rich formatting. The saved page keeps the full block document.
       </p>
       <Dialog
         open={linkOpen}
@@ -292,11 +292,11 @@ export function NotesEditor({
             <DialogDescription>Add a safe link to the selected text.</DialogDescription>
           </DialogHeader>
           <div>
-            <label className="mt-4 block text-xs font-medium" htmlFor="note-link-text">Link text</label>
-            <Input id="note-link-text" className="mt-1" value={linkText} onChange={(event) => setLinkText(event.target.value)} />
-            <label className="mt-3 block text-xs font-medium" htmlFor="note-link-url">Link URL</label>
+            <label className="mt-4 block text-xs font-medium" htmlFor="page-link-text">Link text</label>
+            <Input id="page-link-text" className="mt-1" value={linkText} onChange={(event) => setLinkText(event.target.value)} />
+            <label className="mt-3 block text-xs font-medium" htmlFor="page-link-url">Link URL</label>
             <Input
-              id="note-link-url"
+              id="page-link-url"
               className="mt-1"
               autoFocus
               value={linkUrl}
