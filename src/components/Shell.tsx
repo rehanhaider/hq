@@ -12,6 +12,7 @@ import {
   NotebookPen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { useUI } from "@/store/ui";
 import { defaultFilters } from "@/lib/model";
 import { statusQuery } from "@/queries/dashboard";
@@ -260,15 +261,7 @@ export function Shell() {
           >
             {sidebarOpen ? <PanelLeftClose /> : <PanelLeftOpen />}
           </Button>
-          <span className="text-sm font-medium">
-            {pathname.startsWith("/github")
-              ? "GitHub"
-              : pathname.startsWith("/notes")
-                ? "Notes"
-              : pathname.startsWith("/deen")
-                ? "Nasr"
-                : "Home"}
-          </span>
+          <Breadcrumbs />
           <Button
             variant="ghost"
             size="icon-sm"

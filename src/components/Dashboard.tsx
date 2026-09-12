@@ -64,28 +64,6 @@ export function Dashboard() {
 
   return (
     <div className="space-y-5">
-      <nav aria-label="GitHub views" className="section-tabs">
-        {[
-          { view: "overview" as const, label: "Overview" },
-          { view: "history" as const, label: "Activity history" },
-          { view: "projects" as const, label: "Repositories" },
-        ].map(({ view, label }) => (
-          <Link
-            key={view}
-            to="/github"
-            search={{ ...filters, view, page: 1 }}
-            aria-current={
-              filters.view === view ||
-              (view === "projects" && filters.view === "connections")
-                ? "page"
-                : undefined
-            }
-            className="section-tab"
-          >
-            {label}
-          </Link>
-        ))}
-      </nav>
       {status.data &&
         status.data.state !== "idle" &&
         status.data.state !== "complete" && (

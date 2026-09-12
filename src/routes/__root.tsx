@@ -6,9 +6,11 @@ import {
 import type { QueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Shell } from "@/components/Shell";
+import "@/lib/breadcrumbs";
 import appCss from "../styles/app.css?url";
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   {
+    staticData: { crumbs: () => [{ label: "HQ", to: "/", search: {} }] },
     head: () => ({
       meta: [
         { charSet: "utf-8" },

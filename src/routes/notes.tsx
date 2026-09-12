@@ -1,36 +1,29 @@
-import { createFileRoute, Link, Outlet, useLocation } from "@tanstack/react-router";
+import { createFileRoute, Outlet } from "@tanstack/react-router";
 import { notesSearchSchema } from "@/lib/notes";
 
 export const Route = createFileRoute("/notes")({
   validateSearch: notesSearchSchema,
-  component: NotesLayout,
+  staticData: {
+    crumbs: (search) => [
+      { label: "Notes", search: { q: search.q, page: undefined } },
+    ],
+    views: ({ search, pathname }) => {
+      const path = pathname.replace(/\/$/, "");
+      return [
+        {
+          label: "Pages",
+          to: "/notes",
+          search: { q: search.q, page: search.page },
+          active: path === "/notes",
+        },
+        {
+          label: "Trash",
+          to: "/notes/trash",
+          search: { q: search.q, page: undefined },
+          active: path === "/notes/trash",
+        },
+      ];
+    },
+  },
+  component: () => <Outlet />,
 });
-
-function NotesLayout() {
-  const path = useLocation().pathname.replace(/\/$/, "");
-  return (
-    <div className="space-y-6">
-      <nav aria-label="Notes pages" className="section-tabs">
-        <Link
-          to="/notes"
-          search={{ q: undefined, page: undefined }}
-          activeOptions={{ exact: true }}
-          aria-current={path === "/notes" ? "page" : undefined}
-          className="section-tab"
-        >
-          Pages
-        </Link>
-        <Link
-          to="/notes/trash"
-          search={{ q: undefined, page: undefined }}
-          activeOptions={{ exact: true }}
-          aria-current={path === "/notes/trash" ? "page" : undefined}
-          className="section-tab"
-        >
-          Trash
-        </Link>
-      </nav>
-      <Outlet />
-    </div>
-  );
-}
