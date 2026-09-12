@@ -48,7 +48,8 @@ describe("notes store", () => {
     expect(store.trash(root.id, root.revision).ok).toBe(true);
     expect(store.list()).toEqual([]);
     expect(store.list({ trashed: true })).toHaveLength(3);
-    const trashedChild = store.get(child.id)!;
+    expect(store.get(child.id)).toBeNull();
+    const trashedChild = store.list({ trashed: true }).find((page) => page.id === child.id)!;
     expect(store.restore(child.id, trashedChild.revision).ok).toBe(true);
     expect(store.get(root.id)?.deletedAt).toBeNull();
     expect(store.get(child.id)?.deletedAt).toBeNull();
@@ -62,11 +63,32 @@ describe("notes store", () => {
     const independentlyTrashed = store.create("Already trashed", root.id);
     store.trash(independentlyTrashed.id, independentlyTrashed.revision);
     store.trash(root.id, root.revision);
-    const trashedRoot = store.get(root.id)!;
+    const trashedRoot = store.list({ trashed: true }).find((page) => page.id === root.id)!;
     expect(store.restore(root.id, trashedRoot.revision).ok).toBe(true);
     expect(store.get(root.id)?.deletedAt).toBeNull();
     expect(store.get(kept.id)?.deletedAt).toBeNull();
-    expect(store.get(independentlyTrashed.id)?.deletedAt).not.toBeNull();
+    expect(store.get(independentlyTrashed.id)).toBeNull();
+    expect(
+      store.list({ trashed: true }).some((page) => page.id === independentlyTrashed.id),
+    ).toBe(true);
+  });
+
+  it("hides trashed details while retaining them for restore and save conflicts", () => {
+    store = new NotesStore(":memory:");
+    const note = store.create("Private trash");
+    expect(store.trash(note.id, note.revision).ok).toBe(true);
+    expect(store.get(note.id)).toBeNull();
+    const trashed = store.list({ trashed: true }).find((page) => page.id === note.id)!;
+    expect(
+      store.save({
+        id: note.id,
+        title: note.title,
+        revision: trashed.revision,
+        document: paragraph("kept locally"),
+      }),
+    ).toMatchObject({ ok: false, code: "trashed", current: { id: note.id } });
+    expect(store.restore(note.id, trashed.revision).ok).toBe(true);
+    expect(store.get(note.id)?.title).toBe("Private trash");
   });
 
   it("searches visible text without matching editor metadata", () => {
@@ -92,6 +114,32 @@ describe("notes store", () => {
     expect(store.list({ q: "find-me-at-the-end" }).map((page) => page.id)).toEqual([
       note.id,
     ]);
+  });
+
+  it("lists metadata without loading or parsing documents", () => {
+    store = new NotesStore(":memory:");
+    const note = store.create("List row");
+    store.db
+      .prepare("UPDATE notes SET document = 'not json', search_text = 'Visible Preview' WHERE id = ?")
+      .run(note.id);
+    expect(store.list()).toEqual([
+      expect.objectContaining({ id: note.id, preview: "Visible Preview" }),
+    ]);
+  });
+
+  it("searches Unicode title and body text with one canonical normalization", () => {
+    store = new NotesStore(":memory:");
+    const note = store.create("E\u0301cole notes");
+    const saved = store.save({
+      id: note.id,
+      title: note.title,
+      revision: note.revision,
+      document: paragraph("CAFÉ reference"),
+    });
+    expect(saved.ok).toBe(true);
+    expect(store.list({ q: "éCOLE" }).map((page) => page.id)).toEqual([note.id]);
+    expect(store.list({ q: "cafe\u0301" }).map((page) => page.id)).toEqual([note.id]);
+    expect(store.list()[0]?.preview).toBe("CAFÉ reference");
   });
 
   it("does not create a child under a missing or trashed page", () => {

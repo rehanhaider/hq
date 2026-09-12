@@ -32,6 +32,15 @@ type NoteRow = {
   deletion_group: string | null;
 };
 
+type NoteListRow = Omit<
+  NoteRow,
+  "document" | "search_text" | "deletion_group"
+> & { preview: string };
+
+function normalizeSearch(value: string) {
+  return value.normalize("NFC").toLowerCase();
+}
+
 function textFromDocument(document: NoteBlock[]) {
   const parts: string[] = [];
   const collect = (value: unknown) => {
@@ -62,12 +71,31 @@ function fromRow(row: NoteRow): NoteDetail {
   };
 }
 
+function pageFromRow(row: NoteListRow): NotePage {
+  return {
+    id: row.id,
+    title: row.title,
+    parentId: row.parent_id,
+    order: row.display_order,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    deletedAt: row.deleted_at,
+    revision: row.revision,
+    preview: row.preview,
+  };
+}
+
 export class NotesStore {
   readonly db: DatabaseSync;
 
   constructor(path: string) {
     if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
     this.db = new DatabaseSync(path);
+    this.db.function(
+      "normalize_text",
+      { deterministic: true },
+      (value) => (typeof value === "string" ? normalizeSearch(value) : ""),
+    );
     this.db.exec(`
       PRAGMA journal_mode=WAL;
       PRAGMA busy_timeout=5000;
@@ -91,23 +119,27 @@ export class NotesStore {
   }
 
   list({ q, trashed = false }: { q?: string; trashed?: boolean } = {}): NotePage[] {
-    const search = q?.trim().toLowerCase();
+    const search = normalizeSearch(q?.trim() ?? "");
     const rows = this.db
       .prepare(
-        `SELECT * FROM notes
+        `SELECT id, title, substr(search_text, 1, 180) AS preview,
+                parent_id, display_order, created_at,
+                updated_at, deleted_at, revision
+         FROM notes
          WHERE deleted_at IS ${trashed ? "NOT NULL" : "NULL"}
-           AND (? = '' OR instr(lower(title || ' ' || search_text), ?) > 0)
+           AND (? = '' OR instr(normalize_text(title || ' ' || search_text), ?) > 0)
          ORDER BY display_order, created_at, id`,
       )
-      .all(search ?? "", search ?? "") as unknown as NoteRow[];
-    return rows.map(({ document: _document, ...row }) => {
-      const detail = fromRow({ ...row, document: _document });
-      const { document, ...page } = detail;
-      return page;
-    });
+      .all(search, search) as unknown as NoteListRow[];
+    return rows.map(pageFromRow);
   }
 
   get(id: string): NoteDetail | null {
+    const note = this.getAny(id);
+    return note?.deletedAt ? null : note;
+  }
+
+  private getAny(id: string): NoteDetail | null {
     const row = this.db.prepare("SELECT * FROM notes WHERE id = ?").get(id) as NoteRow | undefined;
     return row ? fromRow(row) : null;
   }
@@ -152,7 +184,7 @@ export class NotesStore {
         input.revision,
       );
     if (result.changes === 0) {
-      const current = this.get(input.id);
+      const current = this.getAny(input.id);
       if (!current) return { ok: false as const, code: "missing" as const, current };
       return current.deletedAt
         ? { ok: false as const, code: "trashed" as const, current }
@@ -192,7 +224,7 @@ export class NotesStore {
   restore(id: string, revision: number) {
     this.db.exec("BEGIN IMMEDIATE");
     try {
-      const current = this.get(id);
+      const current = this.getAny(id);
       if (!current || !current.deletedAt || current.revision !== revision) {
         this.db.exec("ROLLBACK");
         return { ok: false as const, code: "stale" as const, current };

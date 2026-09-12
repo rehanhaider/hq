@@ -107,9 +107,11 @@ function normalizedLink(value: string) {
 
 export function NotesEditor({
   note,
+  editable = true,
   onDocumentChange,
 }: {
   note: NoteDetail;
+  editable?: boolean;
   onDocumentChange: (document: NoteBlock[]) => void;
 }) {
   const ui = useUI();
@@ -122,6 +124,7 @@ export function NotesEditor({
   const [importError, setImportError] = useState("");
   const linkPosition = useRef<number | undefined>(undefined);
   const editingExistingLink = useRef(false);
+  const importRun = useRef(0);
   const editor = useCreateBlockNote({
     schema: noteSchema,
     initialContent: note.document as PartialBlock<
@@ -139,6 +142,7 @@ export function NotesEditor({
     const host = editorHost.current;
     if (!host) return;
     const keydown = (event: KeyboardEvent) => {
+      if (!editable) return;
       if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "k") return;
       event.preventDefault();
       event.stopPropagation();
@@ -153,7 +157,18 @@ export function NotesEditor({
     };
     host.addEventListener("keydown", keydown, true);
     return () => host.removeEventListener("keydown", keydown, true);
-  }, [editor]);
+  }, [editable, editor]);
+
+  useEffect(
+    () => () => {
+      importRun.current += 1;
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!editable) importRun.current += 1;
+  }, [editable]);
 
   const saveLink = () => {
     const href = normalizedLink(linkUrl);
@@ -188,7 +203,12 @@ export function NotesEditor({
   return (
     <div className="notes-editor-shell" ref={editorHost}>
       <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2">
-        <Button variant="outline" size="sm" onClick={() => file.current?.click()}>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={!editable}
+          onClick={() => file.current?.click()}
+        >
           <Upload /> Import .md
         </Button>
         <input
@@ -197,27 +217,36 @@ export function NotesEditor({
           type="file"
           accept=".md,text/markdown,text/plain"
           aria-label="Import Markdown file"
+          disabled={!editable}
           onChange={async (event) => {
             const input = event.currentTarget;
             const selected = input.files?.[0];
             if (!selected) return;
+            const run = ++importRun.current;
             const original = editor.document;
+            let replacing = false;
             try {
-              const blocks = editor.tryParseMarkdownToBlocks(await selected.text());
+              const markdown = await selected.text();
+              if (run !== importRun.current) return;
+              const blocks = editor.tryParseMarkdownToBlocks(markdown);
               if (!validateNoteDocument(blocks))
                 throw new Error("This Markdown file contains content Notes cannot save.");
+              replacing = true;
               editor.replaceBlocks(editor.document, blocks);
+              if (run !== importRun.current) return;
               onDocumentChange(editor.document as unknown as NoteBlock[]);
               setImportError("");
             } catch (error) {
-              if (editor.document !== original) editor.replaceBlocks(editor.document, original);
+              if (run !== importRun.current) return;
+              if (replacing && editor.document !== original)
+                editor.replaceBlocks(editor.document, original);
               setImportError(
                 error instanceof Error && error.message.startsWith("This Markdown file")
                   ? error.message
                   : "The Markdown file could not be imported.",
               );
             } finally {
-              input.value = "";
+              if (run === importRun.current) input.value = "";
             }
           }}
         />
@@ -231,6 +260,7 @@ export function NotesEditor({
       {importError && <p className="border-b bg-destructive/10 px-4 py-2 text-xs text-destructive" role="alert">{importError}</p>}
       <BlockNoteView
         editor={editor}
+        editable={editable}
         theme={ui.theme}
         shadCNComponents={{
           DropdownMenu: {

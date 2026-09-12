@@ -95,8 +95,10 @@ export function NotesWorkspace({ trashed }: { trashed: boolean }) {
   const [saveError, setSaveError] = useState("");
   const [saveConflict, setSaveConflict] = useState(false);
   const [saveUnavailable, setSaveUnavailable] = useState(false);
+  const [recovering, setRecovering] = useState(false);
   const [actionError, setActionError] = useState("");
   const staleRevision = useRef<number | null>(null);
+  const recoveringRef = useRef(false);
 
   useEffect(() => {
     if (!selectedId || !detail.data || loadedId.current === selectedId) return;
@@ -113,6 +115,7 @@ export function NotesWorkspace({ trashed }: { trashed: boolean }) {
   }, [detail.data, selectedId]);
 
   const drain = useCallback(() => {
+    if (recoveringRef.current) return Promise.resolve(false);
     if (timer.current) {
       clearTimeout(timer.current);
       timer.current = null;
@@ -197,6 +200,7 @@ export function NotesWorkspace({ trashed }: { trashed: boolean }) {
 
   const scheduleSave = useCallback(
     (next: NoteDetail) => {
+      if (recoveringRef.current) return;
       draftRef.current = next;
       setDraft(next);
       changed.current += 1;
@@ -230,13 +234,14 @@ export function NotesWorkspace({ trashed }: { trashed: boolean }) {
 
   const rows = useMemo(() => pageRows(list.data ?? [], Boolean(search.q)), [list.data, search.q]);
   const selectPage = async (page: string | undefined) => {
-    if (page === selectedId) return;
+    if (recoveringRef.current || page === selectedId) return;
     if (!(await drain())) return;
     loadedId.current = null;
     await navigate({ to: "/notes", search: { q: search.q, page } });
   };
 
   const addPage = async (parentId: string | null) => {
+    if (recoveringRef.current) return;
     if (!(await drain())) return;
     try {
       const created = await createNote({ data: { title: "Untitled", parentId } });
@@ -251,8 +256,12 @@ export function NotesWorkspace({ trashed }: { trashed: boolean }) {
   };
 
   const saveAsNewPage = async (openCopy = true) => {
+    if (recoveringRef.current) return false;
     const snapshot = draftRef.current;
     if (!snapshot) return false;
+    recoveringRef.current = true;
+    setRecovering(true);
+    setSaveState("saving");
     try {
       const created = await createNote({
         data: { title: snapshot.title.trim() || "Untitled", parentId: null },
@@ -284,6 +293,7 @@ export function NotesWorkspace({ trashed }: { trashed: boolean }) {
         });
       return true;
     } catch (error) {
+      setSaveState("error");
       setSaveError(
         readableError(
           error,
@@ -291,6 +301,9 @@ export function NotesWorkspace({ trashed }: { trashed: boolean }) {
         ),
       );
       return false;
+    } finally {
+      recoveringRef.current = false;
+      setRecovering(false);
     }
   };
 
@@ -352,7 +365,7 @@ export function NotesWorkspace({ trashed }: { trashed: boolean }) {
           <h1 id="notes-heading" className="page-title">Notes</h1>
           <p className="page-description">Keep formatted pages in a searchable tree.</p>
         </div>
-        <Button onClick={() => void addPage(null)}><FilePlus2 /> New page</Button>
+        <Button disabled={recovering} onClick={() => void addPage(null)}><FilePlus2 /> New page</Button>
       </header>
       {actionError && (
         <p
@@ -376,6 +389,7 @@ export function NotesWorkspace({ trashed }: { trashed: boolean }) {
                   className="flex min-h-10 w-full items-center gap-2 rounded-lg pr-2 text-left text-sm hover:bg-muted aria-[current=page]:bg-accent aria-[current=page]:font-medium"
                   style={{ paddingLeft: `${Math.min(depth, 8) * 16 + 8}px` }}
                   aria-current={selectedId === page.id ? "page" : undefined}
+                  disabled={recovering}
                   onClick={() => void selectPage(page.id)}
                 >
                   {depth > 0 ? <ChevronRight className="size-3 shrink-0 text-muted-foreground" /> : <FileText className="size-4 shrink-0 text-muted-foreground" />}
@@ -394,7 +408,9 @@ export function NotesWorkspace({ trashed }: { trashed: boolean }) {
             </div>
           ) : detail.isError ? (
             <div className="flex min-h-[34rem] items-center justify-center p-6 text-center"><div><p role="alert">The page could not load.</p><Button className="mt-3" variant="outline" onClick={() => void detail.refetch()}>Reload page</Button></div></div>
-          ) : !detail.isPending && detail.data === null ? (
+          ) : !detail.isPending &&
+            detail.data === null &&
+            (draft?.id !== selectedId || !hasUnsaved) ? (
             <div className="flex min-h-[34rem] items-center justify-center p-6 text-center">
               <div><p>This page is no longer available.</p><Button className="mt-3" variant="outline" onClick={() => void selectPage(undefined)}>Back to page list</Button></div>
             </div>
@@ -403,10 +419,11 @@ export function NotesWorkspace({ trashed }: { trashed: boolean }) {
           ) : (
             <div>
               <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2 sm:px-4">
-                <Button variant="ghost" size="icon" className="md:hidden" aria-label="Back to page list" onClick={() => void selectPage(undefined)}><ArrowLeft /></Button>
+                <Button variant="ghost" size="icon" className="md:hidden" disabled={recovering} aria-label="Back to page list" onClick={() => void selectPage(undefined)}><ArrowLeft /></Button>
                 <Input
                   aria-label="Page title"
                   value={draft.title}
+                  disabled={recovering}
                   className="min-w-36 flex-1 border-transparent px-1 text-lg font-semibold shadow-none focus-visible:border-input"
                   onChange={(event) => scheduleSave({ ...draftRef.current!, title: event.target.value })}
                   onBlur={() => {
@@ -417,7 +434,7 @@ export function NotesWorkspace({ trashed }: { trashed: boolean }) {
                   {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved" : saveState === "error" ? "Save failed" : "Unsaved"}
                 </span>
                 {saveState === "error" && (
-                  <Button variant="outline" size="sm" onClick={() => {
+                  <Button variant="outline" size="sm" disabled={recovering} onClick={() => {
                     if (saveUnavailable) {
                       void saveAsNewPage();
                       return;
@@ -428,10 +445,10 @@ export function NotesWorkspace({ trashed }: { trashed: boolean }) {
                       staleRevision.current = null;
                     }
                     void drain();
-                  }}>{saveUnavailable ? "Save as new page" : saveConflict ? "Overwrite saved version" : "Try saving again"}</Button>
+                  }}>{recovering ? "Saving copy…" : saveUnavailable ? "Save as new page" : saveConflict ? "Overwrite saved version" : "Try saving again"}</Button>
                 )}
-                <Button variant="outline" size="sm" onClick={() => void addPage(draft.id)} aria-label={`New subpage under ${draft.title}`}><FilePlus2 /> Subpage</Button>
-                <Button variant="destructive" size="icon-sm" aria-label={`Move ${draft.title} to trash`} onClick={async () => {
+                <Button variant="outline" size="sm" disabled={recovering} onClick={() => void addPage(draft.id)} aria-label={`New subpage under ${draft.title}`}><FilePlus2 /> Subpage</Button>
+                <Button variant="destructive" size="icon-sm" disabled={recovering} aria-label={`Move ${draft.title} to trash`} onClick={async () => {
                   if (!(await drain())) return;
                   const current = draftRef.current!;
                   try {
@@ -453,7 +470,21 @@ export function NotesWorkspace({ trashed }: { trashed: boolean }) {
               {saveError && <div className="border-b bg-destructive/10 px-4 py-2 text-xs text-destructive" role="alert">{saveError}</div>}
               <ClientOnly fallback={<div className="min-h-[30rem] animate-pulse bg-muted" aria-label="Loading editor" />}>
                 <Suspense fallback={<div className="min-h-[30rem] animate-pulse bg-muted" aria-label="Loading editor" />}>
-                  <NotesEditor key={draft.id} note={draft} onDocumentChange={(document: NoteBlock[]) => scheduleSave({ ...draftRef.current!, document })} />
+                  <NotesEditor
+                    key={draft.id}
+                    note={draft}
+                    editable={!recovering}
+                    onDocumentChange={(document: NoteBlock[]) => {
+                      const current = draftRef.current;
+                      if (
+                        recoveringRef.current ||
+                        !current ||
+                        current.id !== draft.id
+                      )
+                        return;
+                      scheduleSave({ ...current, document });
+                    }}
+                  />
                 </Suspense>
               </ClientOnly>
             </div>
@@ -469,7 +500,7 @@ export function NotesWorkspace({ trashed }: { trashed: boolean }) {
             {saveError && <p className="mt-2 text-sm text-destructive" role="alert">{saveError}</p>}
           <DialogFooter>
               <Button variant="outline" onClick={() => { if (blocker.status === "blocked") blocker.reset(); }}>Stay here</Button>
-              <Button onClick={async () => {
+              <Button disabled={recovering} onClick={async () => {
                 if (saveUnavailable) {
                   if ((await saveAsNewPage(false)) && blocker.status === "blocked") blocker.proceed();
                   return;
@@ -480,7 +511,7 @@ export function NotesWorkspace({ trashed }: { trashed: boolean }) {
                   staleRevision.current = null;
                 }
                 if ((await drain()) && blocker.status === "blocked") blocker.proceed();
-              }}>{saveUnavailable ? "Save copy and continue" : saveConflict ? "Overwrite and continue" : "Save and continue"}</Button>
+              }}>{recovering ? "Saving copy…" : saveUnavailable ? "Save copy and continue" : saveConflict ? "Overwrite and continue" : "Save and continue"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
