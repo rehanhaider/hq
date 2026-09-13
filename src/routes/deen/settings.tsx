@@ -16,12 +16,10 @@ function SettingsPage() {
   const queryClient = useQueryClient();
   const settings = useQuery(deenSettingsQuery);
   const [timezone, setTimezone] = useState("");
-  const [cycleStart, setCycleStart] = useState("");
   const [target, setTarget] = useState("100");
   useEffect(() => {
     if (!settings.data) return;
     setTimezone(settings.data.timezone);
-    setCycleStart(settings.data.cycle_start_date ?? "");
     setTarget(String(settings.data.istighfar_target));
   }, [settings.data]);
   const save = useMutation({
@@ -64,7 +62,6 @@ function SettingsPage() {
             save.mutate({
               data: {
                 timezone,
-                cycle_start_date: cycleStart || null,
                 istighfar_target: Number(target),
               },
             });
@@ -75,13 +72,6 @@ function SettingsPage() {
               <Input
                 value={timezone}
                 onChange={(event) => setTimezone(event.target.value)}
-              />
-            </Row>
-            <Row label="40-day cycle start">
-              <Input
-                type="date"
-                value={cycleStart}
-                onChange={(event) => setCycleStart(event.target.value)}
               />
             </Row>
             <Row label="Istighfar daily target">

@@ -13,12 +13,10 @@ import {
   DEEN_CONTENT,
   calculateAdherence,
   dateString,
-  daysInCycleWindow,
+  daysInWindow,
   deenDayUpdateSchema,
   fajrOnTimeStreak,
-  getCycleDay,
   getToday,
-  isCycleComplete,
   overallAdherence,
   resetRequestSchema,
   settingsUpdateSchema,
@@ -44,32 +42,31 @@ function deenSummary() {
   const settings = deen.settings();
   const today = getToday(settings.timezone);
   const days = deen.days();
-  const cycleDay = getCycleDay(settings.cycle_start_date, today);
-  // Adherence divides by the cycle length, so it has to count only the days
-  // inside that cycle. `days` stays whole for the calendar and the day pager.
-  const windowed = daysInCycleWindow(days, settings.cycle_start_date, today);
-  const cycleDays = cycleDay !== null ? Math.min(cycleDay, 40) : windowed.length;
+  // Everything with a denominator is measured over the rolling window: the
+  // last 40 days, ending today. `days` stays whole for the calendar and the
+  // day pager.
+  const windowed = daysInWindow(days, today);
+  // Fewer than 40 days logged scores against the days that exist, so a week
+  // of records is not read as a week out of forty.
+  const windowDays = windowed.length;
   return {
     settings,
     today,
     day: deen.day(today),
     days,
-    cycleDay,
-    cycleDays,
-    // How much of the window is actually logged, so the pages can tell an empty
-    // window apart from an empty history rather than inferring it from zeroes.
-    loggedInWindow: windowed.length,
-    cycleComplete: isCycleComplete(cycleDay),
+    // How much of the window is actually logged, so the pages can tell an
+    // empty window apart from an empty history rather than inferring it from
+    // zeroes.
+    windowDays,
     // Deliberately not windowed. A streak has no denominator, so it never had
-    // the mismatch the window exists to fix, and it runs to today: past day 40
-    // the window ends before today, which would report every live streak as 0.
+    // the mismatch the window exists to fix, and it runs to today.
     fajrStreak: fajrOnTimeStreak(days, today),
     adherence: calculateAdherence(
       windowed,
-      cycleDays,
+      windowDays,
       settings.istighfar_target,
     ),
-    overall: overallAdherence(windowed, cycleDays, settings.istighfar_target),
+    overall: overallAdherence(windowed, windowDays, settings.istighfar_target),
     content: DEEN_CONTENT,
   };
 }

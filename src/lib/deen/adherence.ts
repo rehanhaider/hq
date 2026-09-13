@@ -1,5 +1,5 @@
 import type { DeenDay } from "./schemas";
-import { cycleDatesForDay, datesInRange, shiftDate } from "./cycle";
+import { windowDates } from "./dates";
 
 export interface AdherenceResult {
   percentage: number;
@@ -8,35 +8,25 @@ export interface AdherenceResult {
 }
 
 /**
- * Restricts days to the span the adherence denominator measures.
+ * The logged days inside the rolling window adherence is measured over: the
+ * last forty calendar days, today last.
  *
- * Every percentage divides a count of days by `cycleDays`, so the two have to
- * describe the same span. Counting all history against a denominator of
- * `min(cycleDay, 40)` reads over 100% — a cycle started today scores its first
- * day against every day ever logged.
- *
- * With a cycle set the span is that cycle, ending no later than today; without
- * one it is the trailing 40 days, which is the longest span a cycle can cover.
+ * Every percentage divides a count of days by the same denominator, so the two
+ * have to describe the same span. Counting all history against forty days
+ * reads over 100%.
  */
-export function daysInCycleWindow(
+export function daysInWindow(
   days: DeenDay[],
-  cycleStartDate: string | null,
   today: string,
+  length = 40,
 ): DeenDay[] {
-  if (cycleStartDate) {
-    const dates = cycleDatesForDay(cycleStartDate);
-    const first = dates[0]!;
-    const last = dates[dates.length - 1]!;
-    const end = last > today ? today : last;
-    return days.filter((d) => d.date >= first && d.date <= end);
-  }
-  const first = shiftDate(today, -39);
+  const first = windowDates(today, length)[0]!;
   return days.filter((d) => d.date >= first && d.date <= today);
 }
 
 export function calculateAdherence(
   days: DeenDay[],
-  cycleDays: number,
+  windowDays: number,
   istighfarTarget: number,
 ): Record<string, AdherenceResult> {
   const prayers = ["fajr", "dhuhr", "asr", "maghrib", "isha"] as const;
@@ -56,25 +46,25 @@ export function calculateAdherence(
       (d) => d[prayer] === "ontime" || d[prayer] === "qada",
     ).length;
     result[prayer] = {
-      percentage: cycleDays > 0 ? Math.round((completed / cycleDays) * 100) : 0,
+      percentage: windowDays > 0 ? Math.round((completed / windowDays) * 100) : 0,
       completed,
-      total: cycleDays,
+      total: windowDays,
     };
   }
 
   const fajrOntime = days.filter((d) => d.fajr === "ontime").length;
   result.fajr_ontime = {
-    percentage: cycleDays > 0 ? Math.round((fajrOntime / cycleDays) * 100) : 0,
+    percentage: windowDays > 0 ? Math.round((fajrOntime / windowDays) * 100) : 0,
     completed: fajrOntime,
-    total: cycleDays,
+    total: windowDays,
   };
 
   for (const item of booleans) {
     const completed = days.filter((d) => d[item]).length;
     result[item] = {
-      percentage: cycleDays > 0 ? Math.round((completed / cycleDays) * 100) : 0,
+      percentage: windowDays > 0 ? Math.round((completed / windowDays) * 100) : 0,
       completed,
-      total: cycleDays,
+      total: windowDays,
     };
   }
 
@@ -83,9 +73,9 @@ export function calculateAdherence(
   ).length;
   result.istighfar = {
     percentage:
-      cycleDays > 0 ? Math.round((istighfarCompleted / cycleDays) * 100) : 0,
+      windowDays > 0 ? Math.round((istighfarCompleted / windowDays) * 100) : 0,
     completed: istighfarCompleted,
-    total: cycleDays,
+    total: windowDays,
   };
 
   return result;
@@ -93,10 +83,10 @@ export function calculateAdherence(
 
 export function overallAdherence(
   days: DeenDay[],
-  cycleDays: number,
+  windowDays: number,
   istighfarTarget: number,
 ): AdherenceResult {
-  const items = calculateAdherence(days, cycleDays, istighfarTarget);
+  const items = calculateAdherence(days, windowDays, istighfarTarget);
   const keys = Object.keys(items).filter((k) => k !== "fajr_ontime");
   if (keys.length === 0) return { percentage: 0, completed: 0, total: 0 };
 
@@ -143,9 +133,9 @@ export type DayMark = {
   /**
    * `late` is a day holding a prayer prayed outside its window; it outranks
    * `hit` because lateness is the thing worth seeing. `empty` is a day with
-   * no record; `future` has not happened yet.
+   * no record.
    */
-  state: "hit" | "late" | "partial" | "empty" | "future";
+  state: "hit" | "late" | "partial" | "empty";
   today: boolean;
 };
 
@@ -157,34 +147,28 @@ export function hasQada(day: DeenDay): boolean {
 }
 
 /**
- * One mark per day of the cycle. Without a cycle start date it is the
- * trailing forty days ending today, which is the same window adherence uses,
- * so the strip and the ring never disagree.
+ * One mark per day of the rolling window, today last. It is the same window
+ * adherence uses, so the strip and the ring never disagree, and it holds no
+ * future day: the window ends where the record does.
  */
-export function cycleStrip(
+export function windowStrip(
   days: DeenDay[],
-  cycleStartDate: string | null,
   today: string,
   istighfarTarget: number,
   length = 40,
 ): DayMark[] {
-  const dates = cycleStartDate
-    ? cycleDatesForDay(cycleStartDate, length)
-    : datesInRange(shiftDate(today, -(length - 1)), today);
   const byDate = new Map(days.map((day) => [day.date, day]));
-  return dates.map((date) => {
+  return windowDates(today, length).map((date) => {
     const day = byDate.get(date);
     const completion = day ? dayCompletion(day, istighfarTarget) : 0;
     const state =
-      date > today
-        ? ("future" as const)
-        : day && hasQada(day)
-          ? ("late" as const)
-          : completion >= 0.5
-            ? ("hit" as const)
-            : completion > 0
-              ? ("partial" as const)
-              : ("empty" as const);
+      day && hasQada(day)
+        ? ("late" as const)
+        : completion >= 0.5
+          ? ("hit" as const)
+          : completion > 0
+            ? ("partial" as const)
+            : ("empty" as const);
     return { date, state, today: date === today };
   });
 }

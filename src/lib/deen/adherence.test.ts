@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   calculateAdherence,
-  cycleStrip,
   dayCompletion,
-  daysInCycleWindow,
+  daysInWindow,
   hasQada,
   overallAdherence,
+  windowStrip,
 } from "./adherence";
 import { emptyDay } from "./schemas";
 import { fajrOnTimeStreak } from "./streaks";
@@ -61,7 +61,7 @@ describe("calculateAdherence", () => {
     expect(result.istighfar?.completed).toBe(2);
     expect(result.istighfar?.percentage).toBe(40);
   });
-  it("missed day lowers adherence but does not reset cycle", () => {
+  it("a missed day lowers adherence", () => {
     const days = [
       makeDay("2025-01-01", {
         fajr: "ontime",
@@ -117,69 +117,59 @@ describe("overallAdherence", () => {
   });
 });
 
-describe("daysInCycleWindow", () => {
-  const logged = ["2026-08-27", "2026-08-28", "2026-09-06", "2026-09-07"].map(
+describe("daysInWindow", () => {
+  const logged = ["2026-07-01", "2026-07-31", "2026-08-27", "2026-09-08"].map(
     (date) => makeDay(date, { fajr: "qada" }),
   );
 
-  it("keeps a percentage at or below 100 when a cycle starts today", () => {
-    // Regression: counting all history against a denominator of one cycle day
-    // reported 1200% for twelve logged days.
-    const windowed = daysInCycleWindow(logged, "2026-09-08", "2026-09-08");
-    expect(windowed).toEqual([]);
-    const result = calculateAdherence(windowed, 1, 100);
-    expect(result.fajr!.percentage).toBe(0);
-    expect(overallAdherence(windowed, 1, 100).percentage).toBe(0);
+  it("keeps only the last forty days, today last", () => {
+    // The window opens on 2026-07-31, so the July 1st record falls out of it.
+    const windowed = daysInWindow(logged, "2026-09-08");
+    expect(windowed.map((d) => d.date)).toEqual([
+      "2026-07-31",
+      "2026-08-27",
+      "2026-09-08",
+    ]);
   });
 
-  it("counts only days inside the cycle", () => {
-    const windowed = daysInCycleWindow(logged, "2026-09-06", "2026-09-08");
-    expect(windowed.map((d) => d.date)).toEqual(["2026-09-06", "2026-09-07"]);
-    expect(calculateAdherence(windowed, 3, 100).fajr!.percentage).toBe(67);
+  it("measures adherence over the days present when there are fewer than 40", () => {
+    const days = [
+      makeDay("2026-09-07", { fajr: "ontime" }),
+      makeDay("2026-09-08", { fajr: "missed" }),
+    ];
+    const windowed = daysInWindow(days, "2026-09-08");
+    expect(windowed).toHaveLength(2);
+    expect(calculateAdherence(windowed, windowed.length, 100).fajr!.percentage).toBe(
+      50,
+    );
   });
 
-  it("stops at the fortieth day, not at today", () => {
-    const days = [makeDay("2026-08-27"), makeDay("2026-10-20")];
-    const windowed = daysInCycleWindow(days, "2026-08-27", "2026-12-01");
-    expect(windowed.map((d) => d.date)).toEqual(["2026-08-27"]);
+  it("is empty, and scores zero, with nothing logged", () => {
+    expect(daysInWindow([], "2026-09-08")).toEqual([]);
+    expect(overallAdherence([], 0, 100).percentage).toBe(0);
   });
 
-  it("excludes days before the cycle starts", () => {
-    const windowed = daysInCycleWindow(logged, "2026-09-01", "2026-09-08");
-    expect(windowed.map((d) => d.date)).toEqual(["2026-09-06", "2026-09-07"]);
-  });
-
-  it("is empty while the cycle is still in the future", () => {
-    expect(daysInCycleWindow(logged, "2026-10-01", "2026-09-08")).toEqual([]);
-  });
-
-  it("falls back to the trailing 40 days with no cycle set", () => {
-    const days = [makeDay("2026-07-01"), ...logged];
-    const windowed = daysInCycleWindow(days, null, "2026-09-08");
-    expect(windowed.map((d) => d.date)).not.toContain("2026-07-01");
-    expect(windowed).toHaveLength(4);
+  it("drops a day logged in the future", () => {
+    const days = [makeDay("2026-09-09", { fajr: "ontime" })];
+    expect(daysInWindow(days, "2026-09-08")).toEqual([]);
   });
 });
 
 describe("streaks against the adherence window", () => {
   // A streak has no denominator, so it never had the mismatch the window
-  // exists to fix, and it must run to today. Past cycle day 40 the window
-  // ends before today, which would report every live streak as zero.
-  const days = ["2026-09-05", "2026-09-06", "2026-09-07", "2026-09-08"].map(
+  // exists to fix, and it runs over the whole history rather than the window.
+  const days = ["2026-07-01", "2026-09-06", "2026-09-07", "2026-09-08"].map(
     (date) => makeDay(date, { fajr: "ontime" }),
   );
 
-  it("reports a live streak past day 40 of a cycle", () => {
+  it("reports a streak running to today", () => {
     const today = "2026-09-08";
-    const cycleStart = "2026-07-28"; // day 43 on today; window ends 2026-09-05
-    const windowed = daysInCycleWindow(days, cycleStart, today);
-    expect(windowed.at(-1)!.date).toBe("2026-09-05");
-    expect(fajrOnTimeStreak(windowed, today).current).toBe(0);
-    expect(fajrOnTimeStreak(days, today).current).toBe(4);
+    expect(fajrOnTimeStreak(daysInWindow(days, today), today).current).toBe(3);
+    expect(fajrOnTimeStreak(days, today).longest).toBe(3);
   });
 });
 
-describe("cycleStrip", () => {
+describe("windowStrip", () => {
   const days = [
     makeDay("2026-09-01", {
       fajr: "ontime",
@@ -194,29 +184,29 @@ describe("cycleStrip", () => {
     makeDay("2026-09-03", { fajr: "missed" }),
   ];
 
-  it("marks a cycle day by day, and today with itself", () => {
-    const marks = cycleStrip(days, "2026-09-01", "2026-09-04", 100);
+  it("runs the last forty days to today, and marks today", () => {
+    const marks = windowStrip(days, "2026-09-04", 100);
     expect(marks).toHaveLength(40);
-    // 09-01 kept most of the day but prayed Asr late, so it reads amber, not
-    // green: lateness outranks a high count.
-    expect(marks.slice(0, 5).map((mark) => mark.state)).toEqual([
-      "late",
-      "partial",
-      "empty",
-      "empty",
-      "future",
-    ]);
+    expect(marks.at(0)?.date).toBe("2026-07-27");
+    expect(marks.at(-1)?.date).toBe("2026-09-04");
     expect(marks.filter((mark) => mark.today).map((mark) => mark.date)).toEqual([
       "2026-09-04",
     ]);
   });
 
-  it("falls back to the trailing forty days when no cycle is set", () => {
-    const marks = cycleStrip(days, null, "2026-09-04", 100);
-    expect(marks).toHaveLength(40);
-    expect(marks.at(-1)?.date).toBe("2026-09-04");
-    expect(marks.at(0)?.date).toBe("2026-07-27");
-    expect(marks.every((mark) => mark.state !== "future")).toBe(true);
+  it("empties every day that was never logged", () => {
+    const marks = windowStrip(days, "2026-09-04", 100);
+    // 09-01 kept most of the day but prayed Asr late, so it reads amber, not
+    // green: lateness outranks a high count.
+    expect(marks.slice(-4).map((mark) => mark.state)).toEqual([
+      "late",
+      "partial",
+      "empty",
+      "empty",
+    ]);
+    expect(windowStrip([], "2026-09-04", 100).every((m) => m.state === "empty")).toBe(
+      true,
+    );
   });
 });
 
@@ -237,9 +227,7 @@ describe("a late day in the strip", () => {
       istighfar_count: 100,
     });
     expect(hasQada(whole)).toBe(true);
-    expect(cycleStrip([whole], null, "2026-09-01", 100).at(-1)?.state).toBe(
-      "late",
-    );
+    expect(windowStrip([whole], "2026-09-01", 100).at(-1)?.state).toBe("late");
   });
   it("reads hit when nothing was late", () => {
     const day = makeDay("2026-09-01", {
@@ -252,7 +240,7 @@ describe("a late day in the strip", () => {
       evening_adhkar: true,
     });
     expect(hasQada(day)).toBe(false);
-    expect(cycleStrip([day], null, "2026-09-01", 100).at(-1)?.state).toBe("hit");
+    expect(windowStrip([day], "2026-09-01", 100).at(-1)?.state).toBe("hit");
   });
 });
 

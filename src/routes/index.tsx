@@ -7,7 +7,7 @@ import { useNewPage } from "@/queries/content";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Dot } from "@/components/content/properties";
 import { relativeTime } from "@/lib/content";
-import { cycleStrip, type DayMark, type PrayerStatus } from "@/lib/deen";
+import { windowStrip, type DayMark, type PrayerStatus } from "@/lib/deen";
 import { defaultFilters } from "@/lib/model";
 import { cn } from "@/lib/utils";
 
@@ -82,12 +82,7 @@ function HomePage() {
         : `${WORDS[logged]} ${logged === 1 ? "prayer" : "prayers"} logged, ${WORDS[5 - logged]?.toLowerCase()} to go.`;
   const target = deen.settings.istighfar_target;
   const istighfar = target > 0 ? Math.min(100, (day.istighfar_count / target) * 100) : 0;
-  const marks = cycleStrip(
-    deen.days,
-    deen.settings.cycle_start_date,
-    deen.today,
-    target,
-  );
+  const marks = windowStrip(deen.days, deen.today, target);
   const week = github.week;
   const peak = Math.max(...week.days.map((entry) => entry.commits), 0);
   const chart = github.repositories > 0 && peak > 0;
@@ -99,14 +94,6 @@ function HomePage() {
           <p className="section-label">{date}</p>
           <h1 className="title mt-2">{state}</h1>
         </div>
-        <span className="inline-flex h-6 items-center gap-2 rounded-md bg-muted px-2 text-xs font-medium text-muted-foreground">
-          <span className="size-1.5 rounded-full bg-primary" aria-hidden />
-          {deen.cycleDay === null
-            ? "No cycle set"
-            : deen.cycleComplete
-              ? "Cycle complete"
-              : `Day ${deen.cycleDay} of 40`}
-        </span>
       </header>
 
       <div className="grid items-stretch gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] lg:gap-8">
@@ -190,9 +177,9 @@ function HomePage() {
           <div className="section my-5" />
 
           <div className="flex items-center justify-between gap-3">
-            <p className="section-label">The cycle</p>
+            <p className="section-label">The last 40 days</p>
             <span className="text-[0.8125rem] text-muted-foreground">
-              {deen.settings.cycle_start_date ? "40-day" : "Last 40 days"}
+              Rolling window
             </span>
           </div>
 
@@ -217,7 +204,7 @@ function HomePage() {
 
             <div
               className="grid flex-1 grid-cols-10 gap-1 sm:grid-cols-[repeat(20,minmax(0,1fr))]"
-              aria-label="One mark per day of the cycle"
+              aria-label="One mark per day of the last 40 days"
               role="img"
             >
               {marks.map((mark) => (
@@ -259,15 +246,6 @@ function HomePage() {
               {deen.fajrStreak.longest === 1 ? "day" : "days"}
             </span>
           </div>
-          {!deen.settings.cycle_start_date && (
-            <p className="mt-4 text-[0.8125rem] text-muted-foreground">
-              No cycle start date yet.{" "}
-              <Link to="/deen/settings" className="text-primary underline">
-                Set one
-              </Link>{" "}
-              to measure a real cycle.
-            </p>
-          )}
 
           <div className="mt-5 flex-1" />
           <Link
@@ -482,9 +460,7 @@ function markLabel(state: DayMark["state"]) {
       ? "a prayer made up late"
       : state === "partial"
         ? "partly kept"
-        : state === "empty"
-          ? "not logged"
-          : "still to come";
+        : "not logged";
 }
 
 function weekday(day: string) {

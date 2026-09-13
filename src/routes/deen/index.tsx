@@ -222,22 +222,6 @@ function TodayPage() {
               />
             </section>
             <div className="list">
-              {data?.cycleDay !== null && data?.cycleDay !== undefined && (
-                <div className="list-row">
-                  <span className="section-label">Cycle</span>
-                  {data.cycleComplete ? (
-                    <span className="text-sm font-medium">Cycle complete</span>
-                  ) : (
-                    <span className="text-2xl font-semibold tabular-nums">
-                      {data.cycleDay}
-                      <span className="text-sm font-normal text-muted-foreground">
-                        {" "}
-                        / 40
-                      </span>
-                    </span>
-                  )}
-                </div>
-              )}
               <div className="list-row">
                 <span className="section-label">Fajr streak</span>
                 {data?.fajrStreak.current ? (

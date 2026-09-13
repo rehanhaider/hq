@@ -61,11 +61,10 @@ type DayRow = {
   note: string | null;
 };
 
-const SETTING_KEYS = [
-  "timezone",
-  "cycle_start_date",
-  "istighfar_target",
-] as const;
+// Nasr measures a rolling 40-day window, so there is no cycle start date to
+// read. A `cycle_start_date` row left by an older version stays in the file,
+// unread, rather than being deleted out from under a backup.
+const SETTING_KEYS = ["timezone", "istighfar_target"] as const;
 
 function asBool(value: unknown): boolean {
   return value === 1 || value === true;
@@ -121,7 +120,6 @@ export class DeenStore {
   settings(): Settings {
     return {
       timezone: this.setting("timezone") ?? "Asia/Kolkata",
-      cycle_start_date: this.setting("cycle_start_date"),
       istighfar_target: parseInt(this.setting("istighfar_target") ?? "100", 10),
     };
   }
