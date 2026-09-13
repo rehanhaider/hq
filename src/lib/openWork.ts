@@ -19,23 +19,18 @@ export type WorkItem = {
   updatedAt: string;
   labels: WorkLabel[];
   draft: boolean;
-  assignedToMe: boolean;
+  /** Nobody has picked it up: the one thing that makes a row triage. */
+  unassigned: boolean;
 };
-export type WorkCounts = {
-  assigned: number;
-  reviewRequested: number;
-  openPrs: number;
-  openIssues: number;
-};
+/**
+ * Two lists, because there are two reasons to look: the work that is mine,
+ * and the work in my repositories that nobody has taken. Counts are not
+ * carried here — the view recomputes them from whatever it is showing.
+ */
 export type OpenWork = {
   connected: boolean;
-  me: {
-    assigned: WorkItem[];
-    reviewRequested: WorkItem[];
-    authored: WorkItem[];
-  };
-  all: WorkItem[];
-  counts: WorkCounts;
+  mine: WorkItem[];
+  triage: WorkItem[];
   fetchedAt: string;
   error?: string;
 };
@@ -70,8 +65,7 @@ export function repoOf(repositoryUrl: string) {
   return parts.slice(-2).join("/");
 }
 
-export function normalise(raw: SearchItem, login: string): WorkItem {
-  const me = login.toLowerCase();
+export function normalise(raw: SearchItem): WorkItem {
   const assignees = [
     ...(raw.assignees ?? []),
     ...(raw.assignee ? [raw.assignee] : []),
@@ -91,29 +85,21 @@ export function normalise(raw: SearchItem, login: string): WorkItem {
       color: label.color ?? "",
     })),
     draft: raw.draft ?? false,
-    assignedToMe: assignees.some(
-      (assignee) => assignee.login.toLowerCase() === me,
-    ),
+    unassigned: assignees.length === 0,
   };
 }
 
-export function normaliseAll(raws: SearchItem[], login: string) {
-  return dedupe(raws.map((raw) => normalise(raw, login)));
+export function normaliseAll(raws: SearchItem[]) {
+  return dedupe(raws.map(normalise));
 }
 
 /**
  * The same issue comes back from several searches — assigned to me, in an org
- * I belong to, authored by me. One row per id, and an assignment seen in any
- * of them sticks.
+ * I belong to, authored by me. One row per id.
  */
 export function dedupe(items: WorkItem[]) {
   const byId = new Map<number, WorkItem>();
-  for (const item of items) {
-    const seen = byId.get(item.id);
-    if (!seen) byId.set(item.id, item);
-    else if (item.assignedToMe && !seen.assignedToMe)
-      byId.set(item.id, { ...seen, assignedToMe: true });
-  }
+  for (const item of items) if (!byId.has(item.id)) byId.set(item.id, item);
   return [...byId.values()];
 }
 
@@ -128,23 +114,20 @@ export function byOldestCreated(a: WorkItem, b: WorkItem) {
   );
 }
 
-export function countWork(
-  all: WorkItem[],
-  assigned: WorkItem[],
-  reviewRequested: WorkItem[],
-): WorkCounts {
+/** Issues and pull requests apart, for the figures on the home page. */
+export function countKinds(items: WorkItem[]) {
   return {
-    assigned: assigned.length,
-    reviewRequested: reviewRequested.length,
-    openPrs: all.filter((item) => item.kind === "pr").length,
-    openIssues: all.filter((item) => item.kind === "issue").length,
+    issues: items.filter((item) => item.kind === "issue").length,
+    prs: items.filter((item) => item.kind === "pr").length,
   };
 }
 
 /**
- * Everything the searches found, folded into one answer. The per-repo sweep
- * misses anything assigned to me in a repository I neither own nor belong to,
- * so the three personal searches are folded into `all` as well.
+ * The two lists. Mine is the union of the three personal searches — assigned
+ * to me, waiting on my review, opened by me — deduped and with no record of
+ * which of the three it came from, because the answer is the same either way.
+ * Triage is everything the sweep across my repositories found that nobody has
+ * been given; a thing of mine with no assignee is in both, which is true.
  */
 export function buildOpenWork(
   lists: {
@@ -156,25 +139,18 @@ export function buildOpenWork(
   fetchedAt: string,
   error?: string,
 ): OpenWork {
-  const assigned = dedupe(lists.assigned).sort(byOldestCreated);
-  const reviewRequested = dedupe(lists.reviewRequested).sort(byOldestCreated);
-  const authored = dedupe(lists.authored).sort(byOldestCreated);
-  const assignedIds = new Set(assigned.map((item) => item.id));
-  const all = dedupe([
-    ...lists.everything,
-    ...assigned,
-    ...reviewRequested,
-    ...authored,
-  ])
-    .map((item) =>
-      assignedIds.has(item.id) ? { ...item, assignedToMe: true } : item,
-    )
-    .sort(byOldestUpdated);
+  const mine = dedupe([
+    ...lists.assigned,
+    ...lists.reviewRequested,
+    ...lists.authored,
+  ]).sort(byOldestCreated);
+  const triage = dedupe(lists.everything)
+    .filter((item) => item.unassigned)
+    .sort(byOldestCreated);
   return {
     connected: true,
-    me: { assigned, reviewRequested, authored },
-    all,
-    counts: countWork(all, assigned, reviewRequested),
+    mine,
+    triage,
     fetchedAt,
     ...(error ? { error } : {}),
   };
@@ -187,9 +163,8 @@ export function emptyOpenWork(
 ): OpenWork {
   return {
     connected,
-    me: { assigned: [], reviewRequested: [], authored: [] },
-    all: [],
-    counts: { assigned: 0, reviewRequested: 0, openPrs: 0, openIssues: 0 },
+    mine: [],
+    triage: [],
     fetchedAt,
     ...(error ? { error } : {}),
   };
@@ -258,7 +233,7 @@ export function age(iso: string, now = Date.now()) {
  * filter, the rest narrow it, and the arranging below is pure so the view can
  * stay a rendering of it.
  */
-export type WorkTab = "assigned" | "reviews" | "authored" | "all";
+export type WorkTab = "mine" | "triage";
 export type WorkKind = "both" | "issue" | "pr";
 export type WorkSort = "recent" | "oldest";
 export type WorkView = {
@@ -273,10 +248,20 @@ export type WorkGroup = { repo: string; items: WorkItem[] };
 /** The one list a tab stands for. */
 export function tabItems(work: OpenWork | undefined, tab: WorkTab): WorkItem[] {
   if (!work) return [];
-  if (tab === "assigned") return work.me.assigned;
-  if (tab === "reviews") return work.me.reviewRequested;
-  if (tab === "authored") return work.me.authored;
-  return work.all;
+  return tab === "triage" ? work.triage : work.mine;
+}
+
+/**
+ * The number on each tab, read through the filters below it — otherwise the
+ * tabs say one thing while the list shows another.
+ */
+export function tabCounts(
+  work: OpenWork | undefined,
+  filter: { kind: WorkKind; repo: string; search: string },
+) {
+  const count = (tab: WorkTab) =>
+    tabItems(work, tab).filter((item) => matchesWork(item, filter)).length;
+  return { mine: count("mine"), triage: count("triage") };
 }
 
 export function matchesWork(
@@ -293,11 +278,22 @@ export function byRecentUpdated(a: WorkItem, b: WorkItem) {
   return -byOldestUpdated(a, b);
 }
 
-/** The repositories in a list, the fullest first, for the repository select. */
-export function repoOptions(items: WorkItem[]) {
+/**
+ * The repositories in a list, the fullest first, for the repository select —
+ * counted through the other filters so the numbers match the list.
+ */
+export function repoOptions(
+  items: WorkItem[],
+  filter: { kind: WorkKind; repo: string; search: string } = {
+    kind: "both",
+    repo: "all",
+    search: "",
+  },
+) {
   const counts = new Map<string, number>();
   for (const item of items)
-    counts.set(item.repo, (counts.get(item.repo) ?? 0) + 1);
+    if (matchesWork(item, filter))
+      counts.set(item.repo, (counts.get(item.repo) ?? 0) + 1);
   return [...counts]
     .map(([repo, count]) => ({ repo, count }))
     .sort((a, b) => b.count - a.count || a.repo.localeCompare(b.repo));

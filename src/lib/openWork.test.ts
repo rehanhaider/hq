@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   age,
   buildOpenWork,
-  countWork,
+  countKinds,
   dedupe,
   normalise,
   normaliseAll,
@@ -10,6 +10,7 @@ import {
   sweepQueries,
   arrangeWork,
   repoOptions,
+  tabCounts,
   tabItems,
   searchResponseSchema,
 } from "./openWork";
@@ -43,7 +44,7 @@ function item(overrides: Partial<WorkItem> = {}): WorkItem {
     updatedAt: "2026-09-05T00:00:00Z",
     labels: [],
     draft: false,
-    assignedToMe: false,
+    unassigned: true,
     ...overrides,
   };
 }
@@ -53,82 +54,77 @@ describe("normalise", () => {
     expect(repoOf("https://api.github.com/repos/acme/widget")).toBe("acme/widget");
   });
   it("calls a result with a pull_request a pull request", () => {
-    expect(normalise(raw({ pull_request: { url: "x" }, draft: true }), "me").kind).toBe("pr");
-    expect(normalise(raw(), "me").kind).toBe("issue");
-    expect(normalise(raw({ pull_request: { url: "x" }, draft: true }), "me").draft).toBe(true);
+    expect(normalise(raw({ pull_request: { url: "x" }, draft: true })).kind).toBe("pr");
+    expect(normalise(raw()).kind).toBe("issue");
+    expect(normalise(raw({ pull_request: { url: "x" }, draft: true })).draft).toBe(true);
   });
-  it("marks the rows assigned to me, whatever the case of the login", () => {
-    expect(normalise(raw({ assignees: [{ login: "Me" }] }), "me").assignedToMe).toBe(true);
-    expect(normalise(raw({ assignee: { login: "me" } }), "me").assignedToMe).toBe(true);
-    expect(normalise(raw({ assignees: [{ login: "other" }] }), "me").assignedToMe).toBe(false);
+  it("marks a row with nobody on it unassigned", () => {
+    expect(normalise(raw({ assignees: [] })).unassigned).toBe(true);
+    expect(normalise(raw({ assignees: [{ login: "me" }] })).unassigned).toBe(false);
+    expect(normalise(raw({ assignees: [], assignee: { login: "them" } })).unassigned).toBe(false);
   });
   it("keeps labels with their colour and survives a missing author", () => {
-    const row = normalise(raw({ user: null }), "me");
+    const row = normalise(raw({ user: null }));
     expect(row.author).toBe("unknown");
     expect(row.labels).toEqual([{ name: "bug", color: "d73a4a" }]);
   });
   it("parses a search response", () => {
     const parsed = searchResponseSchema.parse({ total_count: 1, items: [raw()] });
-    expect(normaliseAll(parsed.items, "me")).toHaveLength(1);
+    expect(normaliseAll(parsed.items)).toHaveLength(1);
   });
 });
 
 describe("dedupe", () => {
-  it("keeps one row per id and carries an assignment across searches", () => {
+  it("keeps one row per id however many searches found it", () => {
     const rows = dedupe([
-      item({ id: 1 }),
-      item({ id: 1, assignedToMe: true }),
+      item({ id: 1, title: "first" }),
+      item({ id: 1, title: "again" }),
       item({ id: 2 }),
     ]);
-    expect(rows).toHaveLength(2);
-    expect(rows[0]?.assignedToMe).toBe(true);
+    expect(rows.map((row) => row.id)).toEqual([1, 2]);
+    expect(rows[0]?.title).toBe("first");
   });
 });
 
-describe("counts", () => {
-  it("counts open pull requests and issues apart", () => {
-    const counts = countWork(
-      [item({ id: 1 }), item({ id: 2, kind: "pr" }), item({ id: 3, kind: "pr" })],
-      [item({ id: 1 })],
-      [item({ id: 2, kind: "pr" }), item({ id: 3, kind: "pr" })],
-    );
-    expect(counts).toEqual({
-      assigned: 1,
-      reviewRequested: 2,
-      openPrs: 2,
-      openIssues: 1,
-    });
+describe("countKinds", () => {
+  it("counts pull requests and issues apart", () => {
+    expect(
+      countKinds([item({ id: 1 }), item({ id: 2, kind: "pr" }), item({ id: 3, kind: "pr" })]),
+    ).toEqual({ issues: 1, prs: 2 });
   });
 });
 
 describe("buildOpenWork", () => {
   const work = buildOpenWork(
     {
-      assigned: [item({ id: 1, assignedToMe: true, updatedAt: "2026-09-09T00:00:00Z" })],
-      reviewRequested: [item({ id: 2, kind: "pr", updatedAt: "2026-09-02T00:00:00Z" })],
-      authored: [item({ id: 3, kind: "pr", updatedAt: "2026-09-07T00:00:00Z" })],
+      assigned: [item({ id: 1, unassigned: false, createdAt: "2026-09-03T00:00:00Z" })],
+      reviewRequested: [
+        item({ id: 2, kind: "pr", unassigned: false, createdAt: "2026-09-01T00:00:00Z" }),
+      ],
+      authored: [
+        item({ id: 1, unassigned: false, createdAt: "2026-09-03T00:00:00Z" }),
+        item({ id: 3, kind: "pr", createdAt: "2026-09-02T00:00:00Z" }),
+      ],
       everything: [
-        item({ id: 1, updatedAt: "2026-09-09T00:00:00Z" }),
-        item({ id: 4, updatedAt: "2026-09-01T00:00:00Z" }),
+        item({ id: 3, kind: "pr", createdAt: "2026-09-02T00:00:00Z" }),
+        item({ id: 4, createdAt: "2026-09-04T00:00:00Z" }),
+        item({ id: 5, unassigned: false, createdAt: "2026-09-05T00:00:00Z" }),
+        item({ id: 4, createdAt: "2026-09-04T00:00:00Z" }),
       ],
     },
     "2026-09-10T00:00:00Z",
   );
-  it("folds the personal searches into the full list without duplicates", () => {
-    expect(work.all.map((row) => row.id)).toEqual([4, 2, 3, 1]);
+  it("unions the three personal searches into one list, oldest first", () => {
+    expect(work.mine.map((row) => row.id)).toEqual([2, 3, 1]);
   });
-  it("keeps the assignment on the folded row", () => {
-    expect(work.all.find((row) => row.id === 1)?.assignedToMe).toBe(true);
+  it("leaves the assigned rows out of triage and keeps the rest once", () => {
+    expect(work.triage.map((row) => row.id)).toEqual([3, 4]);
   });
-  it("sorts the full list oldest updated first and counts it", () => {
-    expect(work.counts).toEqual({
-      assigned: 1,
-      reviewRequested: 1,
-      openPrs: 2,
-      openIssues: 2,
-    });
-    expect(work.error).toBeUndefined();
+  it("lets a row of mine that nobody was given stand in both lists", () => {
+    expect(work.mine.some((row) => row.id === 3)).toBe(true);
+    expect(work.triage.some((row) => row.id === 3)).toBe(true);
     expect(work.connected).toBe(true);
+    expect(work.error).toBeUndefined();
   });
   it("keeps an error string when one is given", () => {
     const failed = buildOpenWork(
@@ -137,6 +133,8 @@ describe("buildOpenWork", () => {
       "GitHub request limit reached.",
     );
     expect(failed.error).toBe("GitHub request limit reached.");
+    expect(failed.mine).toEqual([]);
+    expect(failed.triage).toEqual([]);
   });
 });
 
@@ -213,23 +211,40 @@ describe("arranging a list", () => {
       { repo: "me/hq", count: 1 },
     ]);
   });
+  it("counts the repositories through the other filters", () => {
+    expect(repoOptions(rows, { kind: "pr", repo: "all", search: "" })).toEqual([
+      { repo: "me/app", count: 1 },
+      { repo: "me/hq", count: 1 },
+    ]);
+    expect(repoOptions(rows, { kind: "both", repo: "all", search: "import" })).toEqual([
+      { repo: "me/app", count: 2 },
+    ]);
+  });
 });
 
-describe("tabItems", () => {
+describe("the tabs", () => {
   const work = buildOpenWork(
     {
-      assigned: [item({ id: 1, assignedToMe: true })],
-      reviewRequested: [item({ id: 2, kind: "pr" })],
-      authored: [item({ id: 3, kind: "pr" })],
-      everything: [item({ id: 4 })],
+      assigned: [item({ id: 1, unassigned: false, title: "Fix the importer" })],
+      reviewRequested: [item({ id: 2, kind: "pr", unassigned: false, title: "Ship it" })],
+      authored: [item({ id: 3, kind: "pr", unassigned: false, title: "Tidy up" })],
+      everything: [item({ id: 4, repo: "me/hq", title: "Triage me" }), item({ id: 5, kind: "pr" })],
     },
     "2026-09-10T00:00:00Z",
   );
+  const all = { kind: "both", repo: "all", search: "" } as const;
+
   it("hands back the list the tab stands for", () => {
-    expect(tabItems(work, "assigned").map((row) => row.id)).toEqual([1]);
-    expect(tabItems(work, "reviews").map((row) => row.id)).toEqual([2]);
-    expect(tabItems(work, "authored").map((row) => row.id)).toEqual([3]);
-    expect(tabItems(work, "all")).toHaveLength(4);
-    expect(tabItems(undefined, "all")).toEqual([]);
+    expect(tabItems(work, "mine").map((row) => row.id)).toEqual([1, 2, 3]);
+    expect(tabItems(work, "triage").map((row) => row.id)).toEqual([5, 4]);
+    expect(tabItems(undefined, "mine")).toEqual([]);
+  });
+  it("counts both tabs through the filters below them", () => {
+    expect(tabCounts(work, all)).toEqual({ mine: 3, triage: 2 });
+    expect(tabCounts(work, { ...all, kind: "pr" })).toEqual({ mine: 2, triage: 1 });
+    expect(tabCounts(work, { ...all, kind: "issue" })).toEqual({ mine: 1, triage: 1 });
+    expect(tabCounts(work, { ...all, repo: "me/hq" })).toEqual({ mine: 0, triage: 1 });
+    expect(tabCounts(work, { ...all, search: "ship" })).toEqual({ mine: 1, triage: 0 });
+    expect(tabCounts(undefined, all)).toEqual({ mine: 0, triage: 0 });
   });
 });

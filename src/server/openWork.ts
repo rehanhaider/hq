@@ -153,7 +153,7 @@ export async function loadOpenWork(): Promise<OpenWork> {
       searchPages(client, query),
     );
     note(result.error);
-    return normaliseAll(result.value ?? [], login);
+    return normaliseAll(result.value ?? []);
   };
 
   // A few at a time: search allows thirty requests a minute, and one query
