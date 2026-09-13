@@ -3,6 +3,8 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, Check, Circle, FilePlus2 } from "lucide-react";
 import { homeQuery } from "@/queries/deen";
+import { openWorkQuery } from "@/queries/dashboard";
+import { age } from "@/lib/openWork";
 import { useNewPage } from "@/queries/content";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Dot } from "@/components/content/properties";
@@ -98,7 +100,7 @@ function HomePage() {
         </div>
       </header>
 
-      <div className="grid items-stretch gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] lg:gap-8">
+      <div className="grid items-stretch gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1.1fr)] lg:gap-8">
         <section className="card flex flex-col p-5" aria-labelledby="nasr-heading">
           <div className="flex items-center justify-between gap-3">
             <h2 id="nasr-heading" className="section-title">
@@ -257,6 +259,8 @@ function HomePage() {
             Log today <ArrowRight className="size-4" />
           </Link>
         </section>
+
+        <OpenWorkCard />
 
         <section
           className={cn(
@@ -451,6 +455,121 @@ function HomePage() {
         )}
       </section>
     </div>
+  );
+}
+
+/**
+ * What is open on GitHub right now, read live rather than from the imported
+ * snapshots, and on its own query so a slow search never holds up the day.
+ */
+function OpenWorkCard() {
+  const work = useQuery(openWorkQuery);
+  const data = work.data;
+  const assigned = (data?.me.assigned ?? []).slice(0, 5);
+  const failed = Boolean(work.error) || Boolean(data && !data.connected);
+  return (
+    <section
+      className="card flex min-w-0 flex-col p-5"
+      aria-labelledby="work-heading"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <h2 id="work-heading" className="section-title">
+          Open work
+        </h2>
+        {data && data.connected ? (
+          <span className="text-[0.8125rem] text-muted-foreground">
+            {age(data.fetchedAt)} ago
+          </span>
+        ) : null}
+      </div>
+
+      {work.isPending ? (
+        <div className="mt-4 space-y-3" aria-label="Loading open work">
+          <div className="h-14 animate-pulse rounded-lg bg-muted" />
+          <div className="h-3 w-2/3 animate-pulse rounded bg-muted" />
+          <div className="h-3 w-1/2 animate-pulse rounded bg-muted" />
+        </div>
+      ) : failed ? (
+        <>
+          <p className="mt-4 text-muted-foreground">
+            Connect GitHub to see open work.
+          </p>
+          <div className="mt-5 flex-1" />
+          <Link
+            to="/github"
+            search={{ ...defaultFilters(), view: "work" }}
+            className="text-[0.8125rem] font-medium text-primary"
+          >
+            Open GitHub work <ArrowRight className="inline size-3.5" />
+          </Link>
+        </>
+      ) : (
+        <>
+          <dl className="mt-3.5 grid grid-cols-2 gap-x-6 gap-y-4">
+            {(
+              [
+                ["Assigned to me", data?.counts.assigned ?? 0],
+                ["Reviews waiting", data?.counts.reviewRequested ?? 0],
+                ["Open PRs", data?.counts.openPrs ?? 0],
+                ["Open issues", data?.counts.openIssues ?? 0],
+              ] as const
+            ).map(([label, value]) => (
+              <div key={label} className="min-w-0">
+                <dt className="section-label">{label}</dt>
+                <dd className="figure mt-1.5">{number(value)}</dd>
+              </div>
+            ))}
+          </dl>
+
+          <Rule />
+
+          {assigned.length ? (
+            <ul className="list min-w-0">
+              {assigned.map((item) => (
+                <li key={item.id} className="min-w-0">
+                  {/* Three columns, each allowed to shrink to nothing: a repo
+                      name and a title are both long enough to push a card
+                      wider than the phone it is on. */}
+                  <a
+                    href={item.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="grid grid-cols-[minmax(0,8rem)_minmax(0,1fr)_auto] items-baseline gap-2 py-2"
+                  >
+                    <span className="truncate text-xs text-muted-foreground">
+                      {item.repo}
+                    </span>
+                    <span className="truncate">{item.title}</span>
+                    <span className="font-mono text-xs text-muted-foreground tabular-nums">
+                      {age(item.createdAt)}
+                    </span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-muted-foreground">
+              Nothing is assigned to you.
+            </p>
+          )}
+
+          {data?.error ? (
+            <p className="mt-3 text-xs text-muted-foreground" role="status">
+              Some of GitHub could not be read just now.
+            </p>
+          ) : null}
+
+          <div className="mt-5 flex-1" />
+          <Link
+            to="/github"
+            search={{ ...defaultFilters(), view: "work" }}
+            className="text-[0.8125rem] font-medium text-primary"
+          >
+            Open GitHub work <ArrowRight className="inline size-3.5" />
+          </Link>
+        </>
+      )}
+    </section>
   );
 }
 
