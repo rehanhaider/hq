@@ -138,7 +138,7 @@ function TodayPage() {
               <h2 className="section-title">Salah</h2>
               <p className="flex items-baseline gap-2">
                 <span className="display">{logged}</span>
-                <span className="display-unit">/ 5 logged</span>
+                <span className="text-base font-normal text-muted-foreground">/ 5 logged</span>
               </p>
               <div className="list">
                 {prayers.map(({ key, label }) => {
@@ -478,7 +478,7 @@ function PracticeGuide({
 
 function ContentEntry({ item, number }: { item: DeenContent; number: number }) {
   return (
-    <li className="panel p-4">
+    <li className="card p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 gap-3">
           <span className="text-xs tabular-nums text-muted-foreground">
@@ -561,7 +561,7 @@ function IstighfarCounter({
 }) {
   const pct = Math.min(100, Math.round((count / target) * 100));
   return (
-    <div className="panel p-5">
+    <div className="card p-5">
       <div className="flex items-end justify-between">
         <span className="text-3xl font-semibold tabular-nums tracking-tight">
           {count}

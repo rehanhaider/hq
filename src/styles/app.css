@@ -42,72 +42,91 @@
   --color-card: var(--card);
   --color-foreground: var(--foreground);
   --color-background: var(--background);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
+  /* One radius, and the few fixed steps the app actually uses: chip 6,
+     control 8, default 10, card 12. Nothing needs 2.6 x the radius. */
+  --radius-sm: 6px;
+  --radius-md: 8px;
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --radius-3xl: 20px;
+  --radius-4xl: 24px;
 }
 
 @theme inline {
   --font-mono: "Geist Mono Variable", monospace;
   --color-positive: var(--positive);
   --color-negative: var(--negative);
+  --color-surface-2: var(--surface-2);
+  --color-track: var(--track);
 }
 
+/* Palette A - warm paper, evergreen. Three surface steps: the page
+   (`background`), a card (`card`), and chrome or a well (`surface-2`). Dark
+   keeps ~0.05 of lightness between each step so a card reads as a card
+   without a border. */
 :root {
-  --background: oklch(0.978 0.004 90);
-  --foreground: oklch(0.24 0.009 90);
-  --card: oklch(0.998 0.002 90);
+  --background: #faf9f6;
+  --foreground: #1c1b19;
+  --card: #ffffff;
   --card-foreground: var(--foreground);
+  --surface-2: #f3f2ee;
   --popover: var(--card);
   --popover-foreground: var(--foreground);
-  --primary: oklch(0.43 0.085 160);
-  --primary-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.945 0.006 90);
+  --primary: #15694e;
+  --primary-foreground: #ffffff;
+  --secondary: var(--surface-2);
   --secondary-foreground: var(--foreground);
-  --muted: var(--secondary);
-  --muted-foreground: oklch(0.49 0.01 90);
-  --accent: oklch(0.935 0.014 160);
+  --muted: var(--surface-2);
+  --muted-foreground: #6b6862;
+  --accent: color-mix(in oklab, var(--primary) 8%, var(--surface-2));
   --accent-foreground: var(--foreground);
-  --destructive: oklch(0.52 0.15 30);
-  --border: oklch(0.9 0.006 90);
-  --input: oklch(0.83 0.009 90);
+  --destructive: #b3412c;
+  --border: #e4e2dc;
+  --input: #d6d3cb;
   --ring: var(--primary);
-  --positive: oklch(0.43 0.1 155);
-  --negative: var(--destructive);
+  --positive: #1e7a4e;
+  --negative: #b3412c;
+  /* The unfilled half of a meter, a pill, or a day mark. */
+  --track: #eae8e2;
+  /* Two shadows, and only two. Raised cards in the light theme; popovers and
+     drawers anywhere. Dark separates with lightness instead. */
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.04);
+  --shadow-overlay: 0 8px 24px rgb(0 0 0 / 0.16);
   --chart-1: oklch(0.53 0.11 160);
   --chart-2: oklch(0.65 0.1 220);
   --chart-3: oklch(0.69 0.13 75);
   --chart-4: oklch(0.58 0.12 295);
   --chart-5: oklch(0.66 0.13 25);
   --chart-6: oklch(0.69 0.02 250);
-  --radius: 0.625rem;
-  --sidebar: var(--card);
+  --radius: 10px;
+  --sidebar: var(--surface-2);
   --sidebar-foreground: var(--foreground);
   --sidebar-primary: var(--primary);
   --sidebar-primary-foreground: var(--primary-foreground);
-  --sidebar-accent: var(--accent);
+  /* The selected rail item is a card sitting on the chrome. */
+  --sidebar-accent: var(--card);
   --sidebar-accent-foreground: var(--foreground);
   --sidebar-border: var(--border);
   --sidebar-ring: var(--ring);
 }
 
 [data-theme="dark"] {
-  --background: oklch(0.17 0.004 90);
-  --foreground: oklch(0.94 0.004 90);
-  --card: oklch(0.205 0.005 90);
-  --primary: oklch(0.76 0.1 160);
-  --primary-foreground: oklch(0.19 0.02 160);
-  --secondary: oklch(0.26 0.006 90);
-  --muted-foreground: oklch(0.72 0.007 90);
-  --accent: oklch(0.285 0.025 160);
-  --destructive: oklch(0.76 0.12 30);
-  --border: oklch(0.32 0.006 90);
-  --input: oklch(0.41 0.007 90);
-  --positive: oklch(0.77 0.12 155);
+  --background: #131311;
+  --foreground: #edece8;
+  --card: #1c1c19;
+  --surface-2: #242421;
+  --primary: #58c39a;
+  --primary-foreground: #10251c;
+  --muted-foreground: #9c9a93;
+  --accent: color-mix(in oklab, var(--primary) 12%, var(--surface-2));
+  --destructive: #e0765c;
+  --border: #34342f;
+  --input: #403f39;
+  --positive: #4fbf8b;
+  --negative: #e0765c;
+  --track: #2b2b27;
+  --shadow-card: none;
   --chart-1: oklch(0.7 0.12 160);
   --chart-2: oklch(0.73 0.1 220);
   --chart-3: oklch(0.79 0.13 75);
@@ -120,8 +139,18 @@
   * {
     @apply border-border outline-ring/50;
   }
+  /* The theme is an attribute, not a media query, so every scroll container
+     has to be told which one it is: a scroller left on the wrong colour
+     scheme paints a light slab under dark content. */
   html {
     @apply font-sans;
+    color-scheme: light;
+  }
+  [data-theme="dark"] {
+    color-scheme: dark;
+  }
+  * {
+    scrollbar-color: var(--input) transparent;
   }
   body {
     @apply bg-background text-foreground text-sm antialiased;
@@ -147,12 +176,22 @@
 }
 
 @layer components {
-  .panel {
+  /* An independent unit of work: draggable, scrollable, editable, or a
+     module of its own. Light adds a hairline and the card shadow; dark drops
+     the border and lets the lightness step do the work. */
+  .card {
     @apply rounded-xl border bg-card;
+    box-shadow: var(--shadow-card);
   }
-  .field {
-    @apply h-8 rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/30;
+  [data-theme="dark"] .card {
+    border-color: transparent;
   }
+  /* Content read in place, grouped by a rule and air rather than a box. */
+  .section {
+    @apply border-t border-border;
+  }
+  /* Retired with the breadcrumb tab row: every route that has a crumb says
+     its own name once, not three times. Deleted with its last user. */
   .page-header {
     @apply flex flex-wrap items-end justify-between gap-4;
   }
@@ -162,23 +201,31 @@
   .page-description {
     @apply mt-2 max-w-prose text-sm leading-6 text-muted-foreground;
   }
-  .display {
-    @apply text-5xl font-semibold leading-none tracking-tight tabular-nums;
+  .field {
+    @apply h-8 rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/30;
   }
-  .display-unit {
-    @apply text-lg font-normal text-muted-foreground;
+  /* Type scale. Every figure is mono and tabular, because on a dashboard the
+     data is the headline. */
+  .display {
+    @apply font-mono text-[2.5rem] leading-[1.05] font-semibold tracking-[-0.02em] tabular-nums;
+  }
+  .figure {
+    @apply font-mono text-xl leading-[1.1] font-semibold tabular-nums;
+  }
+  .title {
+    @apply text-2xl leading-tight font-semibold tracking-[-0.015em] text-balance;
+  }
+  .section-title {
+    @apply text-[0.9375rem] leading-[1.3] font-semibold;
   }
   .section-label {
-    @apply text-xs font-medium uppercase tracking-wide text-muted-foreground;
+    @apply text-[0.6875rem] leading-none font-medium tracking-[0.06em] uppercase text-muted-foreground;
   }
   .list {
     @apply divide-y divide-border;
   }
   .list-row {
     @apply flex min-h-11 items-center justify-between gap-4 py-3;
-  }
-  .hairline {
-    @apply border-t border-border;
   }
   .section-tabs {
     @apply flex gap-5 overflow-x-auto border-b;
@@ -188,9 +235,6 @@
   }
   .section-tab[aria-current="page"] {
     @apply border-primary font-medium text-foreground;
-  }
-  .section-title {
-    @apply text-base font-semibold tracking-tight;
   }
   .content-workspace {
     /* Two columns only once there is room for both. Below `lg` the sidebar

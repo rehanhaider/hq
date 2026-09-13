@@ -273,7 +273,7 @@ export function ContentBoard() {
       {pages.isPending || propertyQuery.isPending ? (
         <div className="h-[28rem] animate-pulse rounded-xl bg-muted" aria-label="Loading board" />
       ) : total === 0 && hasFilters(search) ? (
-        <p className="panel p-10 text-center text-muted-foreground">
+        <p className="card p-10 text-center text-muted-foreground">
           No pages match these filters.
         </p>
       ) : (

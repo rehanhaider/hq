@@ -60,7 +60,7 @@ export function ImportPanel({
     (mutation.data && !mutation.data.ok ? mutation.data.error : "") ||
     mutation.error?.message;
   return (
-    <section className="panel p-5" aria-labelledby="import-heading">
+    <section className="card p-5" aria-labelledby="import-heading">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 id="import-heading" className="section-title">

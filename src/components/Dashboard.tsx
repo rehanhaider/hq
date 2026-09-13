@@ -127,7 +127,7 @@ export function Dashboard() {
               ))}
             </div>
           ) : dashboard.error ? (
-            <div className="panel p-5">
+            <div className="card p-5">
               <p role="alert">{dashboard.error.message}</p>
               <Button
                 className="mt-3"
@@ -141,7 +141,7 @@ export function Dashboard() {
             data && (
               <>
                 {!hasData ? (
-                  <div className="hairline flex min-h-64 flex-col items-center justify-center px-5 py-12 text-center">
+                  <div className="section flex min-h-64 flex-col items-center justify-center px-5 py-12 text-center">
                     <span className="mb-4 flex size-12 items-center justify-center rounded-xl border bg-muted">
                       <FolderGit2 className="size-5 text-muted-foreground" />
                     </span>
@@ -218,7 +218,7 @@ function Overview({
         <div className="min-w-0">
           <p className="flex flex-wrap items-baseline gap-x-2">
             <span className="display">{number(data.total.commits)}</span>
-            <span className="display-unit">commits</span>
+            <span className="text-base font-normal text-muted-foreground">commits</span>
           </p>
           <p className="mt-2.5 text-sm text-muted-foreground">
             {data.activeDays} active {data.activeDays === 1 ? "day" : "days"}
@@ -238,7 +238,7 @@ function Overview({
           />
         </div>
       </div>
-      <div className="hairline grid min-w-0 gap-6 pt-6 lg:grid-cols-[minmax(0,1fr)_17.5rem] lg:gap-8">
+      <div className="section grid min-w-0 gap-6 pt-6 lg:grid-cols-[minmax(0,1fr)_17.5rem] lg:gap-8">
         <ActivityChart
           projects={data.projects}
           metric={filters.metric}
@@ -291,7 +291,7 @@ function Overview({
         mode={filters.languages}
         onModeChange={(languages) => setFilters({ languages })}
       />
-      <div className="hairline grid min-w-0 gap-8 pt-6 lg:grid-cols-[minmax(0,1fr)_17.5rem] lg:gap-10">
+      <div className="section grid min-w-0 gap-8 pt-6 lg:grid-cols-[minmax(0,1fr)_17.5rem] lg:gap-10">
         <Projects
           data={data}
           limit={5}
@@ -439,7 +439,7 @@ function HistoryList({
   const page = Math.min(filters.page, pages);
   const visible = records.slice((page - 1) * 30, page * 30);
   return (
-    <section className="hairline min-w-0 pt-6">
+    <section className="section min-w-0 pt-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="section-title">Recorded activity</h2>
@@ -518,7 +518,7 @@ function HistoryList({
           </p>
         </div>
       )}
-      <div className="hairline flex items-center justify-between py-3">
+      <div className="section flex items-center justify-between py-3">
         <span className="text-xs text-muted-foreground">
           Page {page} of {pages}
         </span>

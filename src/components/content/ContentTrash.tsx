@@ -110,7 +110,7 @@ export function ContentTrash() {
           {error}
         </p>
       )}
-      <div className="panel mt-4 divide-y">
+      <div className="card mt-4 divide-y">
         {list.isPending ? (
           <p className="p-4 text-muted-foreground">Loading trash…</p>
         ) : pages.length ? (

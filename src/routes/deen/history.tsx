@@ -82,7 +82,7 @@ function HistoryPage() {
                   <span className="display">
                     {adherence.fajr_ontime?.percentage ?? 0}
                   </span>
-                  <span className="display-unit">% of days</span>
+                  <span className="text-base font-normal text-muted-foreground">% of days</span>
                 </p>
               </div>
             )}
@@ -122,7 +122,7 @@ function HistoryPage() {
             </section>
             <section
               aria-label="Other practices progress"
-              className="hairline space-y-4 pt-8 lg:border-t-0 lg:pt-0"
+              className="section space-y-4 pt-8 lg:border-t-0 lg:pt-0"
             >
               <h2 className="section-title">Adhkar and other practices</h2>
               <Breakdown
@@ -146,7 +146,7 @@ function HistoryPage() {
       {calDates.length > 0 && (
         <section className="space-y-3">
           <h2 className="section-title">Fajr calendar</h2>
-          <div className="panel p-3">
+          <div className="card p-3">
             <div className="grid grid-cols-8 gap-1.5 sm:grid-cols-10 lg:grid-cols-[repeat(20,minmax(0,1fr))]">
               {calDates.map((date, i) => {
                 const d = dayMap.get(date);
@@ -178,7 +178,7 @@ function HistoryPage() {
         </section>
       )}
       {cycleComplete && (
-        <div className="panel border-positive/30 p-6 text-center">
+        <div className="card border-positive/30 p-6 text-center">
           <h3 className="text-base font-semibold">Cycle complete</h3>
           <p className="mt-1 text-sm text-muted-foreground">
             {overall.percentage}% overall adherence across {cycleDays} days.

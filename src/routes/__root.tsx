@@ -16,6 +16,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         { charSet: "utf-8" },
         { name: "viewport", content: "width=device-width, initial-scale=1" },
         { title: "HQ" },
+        // Dark is the default, so the static value is the dark background.
+        // `applyTheme` keeps it honest when the preference says otherwise.
+        { name: "theme-color", content: "#131311" },
       ],
       links: [
         { rel: "stylesheet", href: appCss },
@@ -25,13 +28,16 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         },
       ],
       scripts: [
+        // Runs before the first paint. HQ is dark unless the browser holds a
+        // stored preference for light, so a stored value is the only thing
+        // that can move it off the theme the server already rendered.
         {
-          children: `(function(){try{var t=localStorage.getItem('hq:theme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');document.documentElement.dataset.theme=t;document.documentElement.style.colorScheme=t}catch(e){}})();`,
+          children: `(function(){try{var t=localStorage.getItem('hq:theme')==='light'?'light':'dark';var r=document.documentElement;r.dataset.theme=t;r.style.colorScheme=t;var m=document.querySelector('meta[name=theme-color]');if(m)m.content=t==='dark'?'#131311':'#faf9f6'}catch(e){}})();`,
         },
       ],
     }),
     component: () => (
-      <html lang="en" data-theme="light" suppressHydrationWarning>
+      <html lang="en" data-theme="dark" suppressHydrationWarning>
         <head>
           <HeadContent />
         </head>

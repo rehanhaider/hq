@@ -78,7 +78,7 @@ function SettingsPage() {
             });
           }}
         >
-          <div className="panel divide-y">
+          <div className="card divide-y">
             <Row label="Timezone" hint="e.g. Asia/Kolkata, America/New_York">
               <Input
                 value={timezone}

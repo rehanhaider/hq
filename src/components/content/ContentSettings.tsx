@@ -211,7 +211,7 @@ function PropertyList({
   };
 
   return (
-    <section className="panel flex flex-col">
+    <section className="card flex flex-col">
       <header className="border-b px-4 py-3">
         <h2 className="section-title">{section.title}</h2>
         <p className="mt-1 text-xs leading-5 text-muted-foreground">{section.description}</p>

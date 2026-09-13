@@ -137,7 +137,7 @@ function HomePage() {
               </div>
             ))}
           </div>
-          <div className="hairline mt-6 flex flex-wrap justify-between gap-2 pt-4 text-xs text-muted-foreground">
+          <div className="section mt-6 flex flex-wrap justify-between gap-2 pt-4 text-xs text-muted-foreground">
             <span>
               Istighfar · {day.istighfar_count} /{" "}
               {deen.settings.istighfar_target}

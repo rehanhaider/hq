@@ -150,7 +150,7 @@ export function Connections({ importing }: { importing: boolean }) {
         </Button>
       </div>
 
-      <section className="list-row hairline flex-wrap pt-3">
+      <section className="list-row section flex-wrap pt-3">
         <h2 className="section-label">GitHub account</h2>
         {github.isPending ? (
           <p className="text-sm text-muted-foreground">Checking token…</p>
@@ -188,7 +188,7 @@ export function Connections({ importing }: { importing: boolean }) {
           {connections.error.message}
         </p>
       ) : !rows.length ? (
-        <div className="hairline flex min-h-48 flex-col items-center justify-center px-5 py-12 text-center">
+        <div className="section flex min-h-48 flex-col items-center justify-center px-5 py-12 text-center">
           <span className="mb-4 flex size-12 items-center justify-center rounded-xl border bg-muted">
             <FolderGit2 className="size-5 text-muted-foreground" />
           </span>

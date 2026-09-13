@@ -46,7 +46,7 @@ export function ActivityChart({
   });
   const selected = active === null ? undefined : rows[active];
   return (
-    <section className="panel min-w-0 p-5" aria-label="Activity">
+    <section className="card min-w-0 p-5" aria-label="Activity">
       <h2 className="section-title">Activity</h2>
       <div className="my-3 flex flex-wrap items-center gap-3">
         <div
