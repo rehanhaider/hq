@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { openWorkQuery } from "@/queries/dashboard";
-import { age, arrangeWork, repoOptions, tabItems } from "@/lib/openWork";
+import { age, arrangeWork, repoOptions, tabCounts, tabItems } from "@/lib/openWork";
 import type { WorkItem, WorkKind, WorkSort, WorkTab } from "@/lib/openWork";
 import { cn } from "@/lib/utils";
 
@@ -20,29 +20,19 @@ import { cn } from "@/lib/utils";
 const PAGE = 50;
 const emptyItems: WorkItem[] = [];
 const TABS = [
-  {
-    value: "assigned",
-    label: "Assigned to me",
-    empty: "Nothing assigned to you.",
-  },
-  { value: "reviews", label: "Reviews waiting", empty: "No reviews requested." },
-  { value: "authored", label: "Authored", empty: "Nothing open of yours." },
-  {
-    value: "all",
-    label: "All open",
-    empty: "Nothing open. Everything the token can see is closed.",
-  },
+  { value: "mine", label: "Mine", empty: "Nothing needs your attention." },
+  { value: "triage", label: "Needs triage", empty: "Nothing to triage." },
 ] as const;
 
 /**
- * The GitHub module's Work view: one list at a time. The tab picks the list,
- * the row below narrows it, and the rows are grouped by repository so the eye
- * has somewhere to land.
+ * The GitHub module's Work view: what is mine, and what nobody has taken. The
+ * tab picks the list, the row below narrows it — and the counts on the tabs
+ * are counted through that row, so a number always matches the list under it.
  */
 export function OpenWork() {
   const work = useQuery(openWorkQuery);
   const data = work.data;
-  const [tab, setTab] = useState<WorkTab>("assigned");
+  const [tab, setTab] = useState<WorkTab>("mine");
   const [kind, setKind] = useState<WorkKind>("both");
   const [repo, setRepo] = useState("all");
   const [search, setSearch] = useState("");
@@ -56,9 +46,15 @@ export function OpenWork() {
   }, []);
 
   const items = data ? tabItems(data, tab) : emptyItems;
+  // The repository list is counted through every filter but the repository
+  // itself, which would only ever leave the one already chosen.
   const repos = useMemo(
-    () => repoOptions(items.filter((item) => kind === "both" || item.kind === kind)),
-    [items, kind],
+    () => repoOptions(items, { kind, repo: "all", search }),
+    [items, kind, search],
+  );
+  const counts = useMemo(
+    () => tabCounts(data, { kind, repo, search }),
+    [data, kind, repo, search],
   );
   const { total, shown, groups } = useMemo(
     () => arrangeWork(items, { kind, repo, search, sort, limit }),
@@ -86,12 +82,6 @@ export function OpenWork() {
     );
 
   const connected = data?.connected ?? false;
-  const counts = {
-    assigned: data?.me.assigned.length ?? 0,
-    reviews: data?.me.reviewRequested.length ?? 0,
-    authored: data?.me.authored.length ?? 0,
-    all: data?.all.length ?? 0,
-  };
   const empty = TABS.find((entry) => entry.value === tab)?.empty ?? "";
   return (
     <div className="space-y-5">

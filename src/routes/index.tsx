@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, Check, Circle, FilePlus2 } from "lucide-react";
 import { homeQuery } from "@/queries/deen";
 import { openWorkQuery } from "@/queries/dashboard";
-import { age } from "@/lib/openWork";
+import { age, countKinds } from "@/lib/openWork";
 import { useNewPage } from "@/queries/content";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Dot } from "@/components/content/properties";
@@ -465,7 +465,9 @@ function HomePage() {
 function OpenWorkCard() {
   const work = useQuery(openWorkQuery);
   const data = work.data;
-  const assigned = (data?.me.assigned ?? []).slice(0, 5);
+  const mine = data?.mine ?? [];
+  const oldest = mine.slice(0, 5);
+  const kinds = countKinds(mine);
   const failed = Boolean(work.error) || Boolean(data && !data.connected);
   return (
     <section
@@ -505,13 +507,12 @@ function OpenWorkCard() {
         </>
       ) : (
         <>
-          <dl className="mt-3.5 grid grid-cols-2 gap-x-6 gap-y-4">
+          <dl className="mt-3.5 grid grid-cols-3 gap-x-4 gap-y-4">
             {(
               [
-                ["Assigned to me", data?.counts.assigned ?? 0],
-                ["Reviews waiting", data?.counts.reviewRequested ?? 0],
-                ["Open PRs", data?.counts.openPrs ?? 0],
-                ["Open issues", data?.counts.openIssues ?? 0],
+                ["Issues", kinds.issues],
+                ["PRs", kinds.prs],
+                ["Needs triage", data?.triage.length ?? 0],
               ] as const
             ).map(([label, value]) => (
               <div key={label} className="min-w-0">
@@ -523,9 +524,9 @@ function OpenWorkCard() {
 
           <Rule />
 
-          {assigned.length ? (
+          {oldest.length ? (
             <ul className="list min-w-0">
-              {assigned.map((item) => (
+              {oldest.map((item) => (
                 <li key={item.id} className="min-w-0">
                   {/* Three columns, each allowed to shrink to nothing: a repo
                       name and a title are both long enough to push a card
@@ -549,7 +550,7 @@ function OpenWorkCard() {
             </ul>
           ) : (
             <p className="text-muted-foreground">
-              Nothing is assigned to you.
+              Nothing needs your attention.
             </p>
           )}
 
