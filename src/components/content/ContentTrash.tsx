@@ -79,21 +79,14 @@ export function ContentTrash() {
   };
 
   return (
-    <section aria-labelledby="trash-heading">
-      <header className="page-header">
-        <div>
-          <h1 id="trash-heading" className="page-title">Trash</h1>
-          <p className="page-description">
-            Restore pages to their original place in the page tree, with their images and
-            files. Deleting a page from here is permanent.
-          </p>
-        </div>
+    <section aria-label="Trash">
+      <div className="flex min-h-10 items-center justify-end">
         {pages.length > 0 && (
-          <Button variant="outline" onClick={() => setConfirming("all")}>
+          <Button className="h-10 px-4" variant="outline" onClick={() => setConfirming("all")}>
             <Trash2 /> Empty trash
           </Button>
         )}
-      </header>
+      </div>
       <SearchBox
         value={search.q ?? ""}
         onChange={(q) =>
@@ -110,7 +103,7 @@ export function ContentTrash() {
           {error}
         </p>
       )}
-      <div className="panel mt-4 divide-y">
+      <div className="card mt-4 divide-y">
         {list.isPending ? (
           <p className="p-4 text-muted-foreground">Loading trash…</p>
         ) : pages.length ? (

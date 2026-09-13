@@ -81,17 +81,7 @@ export function ContentSettings() {
     ).length;
 
   return (
-    <section aria-labelledby="content-settings-heading" className="space-y-6">
-      <header className="page-header">
-        <div>
-          <h1 id="content-settings-heading" className="page-title">
-            Settings
-          </h1>
-          <p className="page-description">
-            The properties every page is described by. Statuses are the board's columns.
-          </p>
-        </div>
-      </header>
+    <section aria-label="Content settings" className="space-y-6">
       {error && (
         <p className="rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert">
           {error}
@@ -211,7 +201,7 @@ function PropertyList({
   };
 
   return (
-    <section className="panel flex flex-col">
+    <section className="card flex flex-col">
       <header className="border-b px-4 py-3">
         <h2 className="section-title">{section.title}</h2>
         <p className="mt-1 text-xs leading-5 text-muted-foreground">{section.description}</p>

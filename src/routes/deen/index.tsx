@@ -87,36 +87,34 @@ function TodayPage() {
   }
   return (
     <div className="space-y-8">
-      <header className="page-header">
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            disabled={update.isPending}
-            aria-label="Previous day"
-            onClick={() => setOffset((value) => value - 1)}
-          >
-            <ChevronLeft />
-          </Button>
-          <div>
-            <h1 className="page-title">
-              {isToday ? "Today" : "Previous day"}
-            </h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {readableDate}
-            </p>
-          </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Next day"
-            disabled={isToday || update.isPending}
-            onClick={() => setOffset((value) => Math.min(0, value + 1))}
-          >
-            <ChevronRight />
-          </Button>
-        </div>
-      </header>
+      <div className="flex min-h-10 items-center justify-between gap-2 sm:justify-end">
+        <Button
+          variant="ghost"
+          size="icon"
+          disabled={update.isPending}
+          aria-label="Previous day"
+          onClick={() => setOffset((value) => value - 1)}
+        >
+          <ChevronLeft />
+        </Button>
+        <p className="text-sm font-medium">
+          {readableDate}
+          {!isToday && (
+            <span className="ml-2 font-normal text-muted-foreground">
+              Previous day
+            </span>
+          )}
+        </p>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Next day"
+          disabled={isToday || update.isPending}
+          onClick={() => setOffset((value) => Math.min(0, value + 1))}
+        >
+          <ChevronRight />
+        </Button>
+      </div>
 
       {update.isError && (
         <p role="alert" className="text-sm text-negative">
@@ -138,7 +136,7 @@ function TodayPage() {
               <h2 className="section-title">Salah</h2>
               <p className="flex items-baseline gap-2">
                 <span className="display">{logged}</span>
-                <span className="display-unit">/ 5 logged</span>
+                <span className="text-base font-normal text-muted-foreground">/ 5 logged</span>
               </p>
               <div className="list">
                 {prayers.map(({ key, label }) => {
@@ -478,7 +476,7 @@ function PracticeGuide({
 
 function ContentEntry({ item, number }: { item: DeenContent; number: number }) {
   return (
-    <li className="panel p-4">
+    <li className="card p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 gap-3">
           <span className="text-xs tabular-nums text-muted-foreground">
@@ -561,7 +559,7 @@ function IstighfarCounter({
 }) {
   const pct = Math.min(100, Math.round((count / target) * 100));
   return (
-    <div className="panel p-5">
+    <div className="card p-5">
       <div className="flex items-end justify-between">
         <span className="text-3xl font-semibold tabular-nums tracking-tight">
           {count}

@@ -248,17 +248,7 @@ export function ContentBoard() {
   const total = buckets.reduce((sum, bucket) => sum + bucket.pages.length, 0);
 
   return (
-    <section aria-labelledby="board-heading" className="space-y-5">
-      <header className="page-header">
-        <div>
-          <h1 id="board-heading" className="page-title">
-            Board
-          </h1>
-          <p className="page-description">
-            Every page as a card. Drag between columns to move it through the pipeline.
-          </p>
-        </div>
-      </header>
+    <section aria-label="Board" className="space-y-5">
       <ContentToolbar
         properties={properties}
         search={search}
@@ -273,7 +263,7 @@ export function ContentBoard() {
       {pages.isPending || propertyQuery.isPending ? (
         <div className="h-[28rem] animate-pulse rounded-xl bg-muted" aria-label="Loading board" />
       ) : total === 0 && hasFilters(search) ? (
-        <p className="panel p-10 text-center text-muted-foreground">
+        <p className="card p-10 text-center text-muted-foreground">
           No pages match these filters.
         </p>
       ) : (

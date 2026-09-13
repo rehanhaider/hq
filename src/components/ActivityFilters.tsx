@@ -112,7 +112,7 @@ export function ActivityFilters({
         {open && (
           <div
             id="date-options"
-            className="panel space-y-4 p-4"
+            className="card space-y-4 p-4"
             onKeyDown={(e) => {
               if (e.key === "Escape") setOpen(false);
             }}

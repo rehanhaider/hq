@@ -132,15 +132,9 @@ export function Connections({ importing }: { importing: boolean }) {
 
   return (
     <div className="space-y-5">
-      <div className="page-header">
-        <div className="min-w-0">
-          <h1 className="page-title">Repositories</h1>
-          <p className="page-description">
-            Add or remove repositories. See fetch status and how much is stored.
-          </p>
-        </div>
+      <div className="flex min-h-10 items-center justify-end">
         <Button
-          size="lg"
+          className="h-10 px-4"
           variant="default"
           onClick={() => setShowAdd((open) => !open)}
           aria-expanded={showAdd}
@@ -150,7 +144,7 @@ export function Connections({ importing }: { importing: boolean }) {
         </Button>
       </div>
 
-      <section className="list-row hairline flex-wrap pt-3">
+      <section className="list-row section flex-wrap pt-3">
         <h2 className="section-label">GitHub account</h2>
         {github.isPending ? (
           <p className="text-sm text-muted-foreground">Checking token…</p>
@@ -188,7 +182,7 @@ export function Connections({ importing }: { importing: boolean }) {
           {connections.error.message}
         </p>
       ) : !rows.length ? (
-        <div className="hairline flex min-h-48 flex-col items-center justify-center px-5 py-12 text-center">
+        <div className="section flex min-h-48 flex-col items-center justify-center px-5 py-12 text-center">
           <span className="mb-4 flex size-12 items-center justify-center rounded-xl border bg-muted">
             <FolderGit2 className="size-5 text-muted-foreground" />
           </span>

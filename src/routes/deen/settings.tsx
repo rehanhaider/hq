@@ -56,14 +56,6 @@ function SettingsPage() {
 
   return (
     <div className="space-y-8">
-      <header className="page-header">
-        <div>
-          <h1 className="page-title">Settings</h1>
-          <p className="page-description">
-            Targets, dates, and the clock everything is measured against.
-          </p>
-        </div>
-      </header>
       <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] lg:gap-12">
         <form
           className="space-y-6"
@@ -78,7 +70,7 @@ function SettingsPage() {
             });
           }}
         >
-          <div className="panel divide-y">
+          <div className="card divide-y">
             <Row label="Timezone" hint="e.g. Asia/Kolkata, America/New_York">
               <Input
                 value={timezone}

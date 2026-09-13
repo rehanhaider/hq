@@ -69,7 +69,7 @@ On a Raspberry Pi, install from the lockfile, build, and run the same production
 
 `deploy/` holds the systemd units the Pi runs. Copy them to `/etc/systemd/system/`, then `systemctl enable --now hq.service hq-backup.timer`. `hq.service` binds port 80 so the app answers at `hq.local`, and grants only `CAP_NET_BIND_SERVICE` so it still runs as the app user rather than root. Put `GITHUB_TOKEN` in `.env` beside the lockfile; the unit reads it through `EnvironmentFile`.
 
-After pulling or editing the source, run `pnpm ship` (`scripts/deploy.sh`). It installs from the lockfile, rebuilds `dist/`, and restarts `hq.service`; the running app does not pick up changes until then.
+After pulling or editing the source, run `make deploy` (`scripts/deploy.sh`). It installs from the lockfile, rebuilds `dist/`, and restarts `hq.service`; the running app does not pick up changes until then.
 
 ## Storage and import behavior
 

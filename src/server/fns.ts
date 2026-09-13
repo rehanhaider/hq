@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { importSchema, searchSchema, daysAgo } from "../lib/model";
-import { summarize } from "../lib/metrics";
+import { dailySeries, summarize } from "../lib/metrics";
 import { connectionRow } from "../lib/connections";
 import { getStore, idleStatus } from "./db";
 import type { ImportStatus } from "../lib/model";
@@ -36,6 +36,7 @@ import {
   savePageSchema,
   setPagePropertiesSchema,
   updatePropertySchema,
+  contentSummary,
 } from "../lib/content";
 
 function deenSummary() {
@@ -76,9 +77,11 @@ function deenSummary() {
 export const getHome = createServerFn({ method: "GET" }).handler(() => {
   ensureRefreshLoop();
   const dataset = getStore().dataset();
+  const from = daysAgo(6);
+  const to = daysAgo(0);
   const week = summarize(dataset, {
-    from: daysAgo(6),
-    to: daysAgo(0),
+    from,
+    to,
     repo: "all",
     view: "overview",
     kind: "all",
@@ -87,13 +90,18 @@ export const getHome = createServerFn({ method: "GET" }).handler(() => {
     chart: "daily",
     page: 1,
   });
+  const content = getContentStore();
   return {
     deen: deenSummary(),
     github: {
       login: dataset.login,
       repositories: dataset.snapshots.length,
-      week: week.total,
+      // The totals, plus the seven days behind them: a figure with no shape
+      // is three numbers and no trend. The rest of `summarize` — history,
+      // languages, per-project rows — is not the home page's business.
+      week: { ...week.total, days: dailySeries(week.daily, from, to) },
     },
+    content: contentSummary(content.list(), content.properties()),
   };
 });
 export const getDeen = createServerFn({ method: "GET" }).handler(deenSummary);

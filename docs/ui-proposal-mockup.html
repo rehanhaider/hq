@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HQ — proposed homepage and palettes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ---------- Option A: warm paper, evergreen (recommended) ---------- */
+:root{
+  --bg:#FAF9F6; --surface:#FFFFFF; --surface-2:#F3F2EE; --border:#E4E2DC;
+  --fg:#1C1B19; --muted:#6B6862; --accent:#15694E; --accent-fg:#FFFFFF;
+  --positive:#1E7A4E; --negative:#B3412C;
+  --track:#EAE8E2; --shadow:0 1px 2px rgb(0 0 0 / .04);
+  --radius:10px; color-scheme:light;
+}
+[data-theme="dark"]{
+  --bg:#131311; --surface:#1C1C19; --surface-2:#242421; --border:#34342F;
+  --fg:#EDECE8; --muted:#9C9A93; --accent:#58C39A; --accent-fg:#10251C;
+  --positive:#4FBF8B; --negative:#E0765C;
+  --track:#2B2B27; --shadow:none; color-scheme:dark;
+}
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; background:var(--bg); color:var(--fg);
+  font-family:"Geist",system-ui,-apple-system,"Segoe UI",sans-serif;
+  font-size:14px; line-height:1.5; -webkit-font-smoothing:antialiased;
+}
+.mono{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums}
+
+/* ---------- type scale ---------- */
+.display{font-family:"Geist Mono",monospace;font-size:40px;line-height:1.05;font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.h1{font-size:24px;line-height:1.2;font-weight:600;letter-spacing:-.015em;margin:0}
+.h2{font-size:15px;line-height:1.3;font-weight:600;margin:0}
+.small{font-size:13px;color:var(--muted)}
+.eyebrow{font-size:11px;line-height:1;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.figure{font-family:"Geist Mono",monospace;font-size:20px;line-height:1.1;font-weight:600;font-variant-numeric:tabular-nums}
+
+/* ---------- chrome ---------- */
+.page{max-width:1440px;margin:0 auto;display:flex;min-height:100vh}
+.rail{width:224px;flex:0 0 224px;background:var(--surface-2);border-right:1px solid var(--border);padding:12px 10px;display:flex;flex-direction:column;gap:2px}
+.brand{display:flex;align-items:center;gap:10px;padding:6px 6px 16px}
+.mark{width:28px;height:28px;border-radius:8px;background:var(--accent);color:var(--accent-fg);display:grid;place-items:center;font-family:"Geist Mono",monospace;font-size:12px;font-weight:600}
+.navitem{display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:8px;color:var(--muted);text-decoration:none;font-size:14px}
+.navitem .count{margin-left:auto;font-size:12px;font-family:"Geist Mono",monospace;color:var(--muted)}
+.navitem.on{background:var(--surface);color:var(--fg);font-weight:500;box-shadow:var(--shadow)}
+.navitem svg{width:16px;height:16px;flex:0 0 16px}
+.body{flex:1;min-width:0;display:flex;flex-direction:column}
+.topbar{height:48px;display:flex;align-items:center;gap:12px;padding:0 24px;border-bottom:1px solid var(--border);background:var(--bg)}
+.crumb{font-size:13px;color:var(--muted)}
+.crumb b{color:var(--fg);font-weight:500}
+.topbar .spacer{flex:1}
+main{padding:24px;display:flex;flex-direction:column;gap:24px}
+
+/* ---------- primitives ---------- */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;box-shadow:var(--shadow)}
+[data-theme="dark"] .card{border-color:transparent}
+.row{display:flex;align-items:center;gap:12px}
+.between{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.rule{height:1px;background:var(--border);margin:16px 0}
+.btn{display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 16px;border-radius:8px;border:1px solid transparent;background:var(--accent);color:var(--accent-fg);font:inherit;font-weight:500;font-size:14px;cursor:pointer;text-decoration:none}
+.btn.ghost{background:transparent;border-color:var(--border);color:var(--fg)}
+.btn.sm{height:32px;padding:0 12px;font-size:13px}
+.link{color:var(--accent);text-decoration:none;font-weight:500;font-size:13px}
+.chip{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 8px;border-radius:6px;background:var(--surface-2);color:var(--muted);font-size:12px;font-weight:500}
+[data-theme="dark"] .chip{background:var(--track)}
+.dot{width:7px;height:7px;border-radius:99px;flex:0 0 7px}
+
+/* ---------- greeting ---------- */
+.greet{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap}
+
+/* ---------- grid ---------- */
+.two{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:24px;align-items:stretch}
+
+/* ---------- today ---------- */
+.salah{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:16px}
+.salah div{text-align:center}
+.pill{height:6px;border-radius:99px;background:var(--track)}
+.pill.on{background:var(--positive)}
+.pill.late{background:linear-gradient(90deg,var(--positive) 50%,var(--track) 50%)}
+.salah span{display:block;margin-top:8px;font-size:12px;color:var(--muted)}
+.practice{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;font-size:14px}
+.practice i{font-style:normal;width:16px;display:inline-block;text-align:center}
+.done{color:var(--positive)}
+.todo{color:var(--muted)}
+.meter{height:6px;border-radius:99px;background:var(--track);overflow:hidden;margin-top:8px}
+.meter > i{display:block;height:100%;background:var(--accent);border-radius:99px}
+
+/* ---------- cycle ---------- */
+.ring{width:132px;height:132px;margin:8px auto 0;display:grid;place-items:center;border-radius:99px;
+  background:conic-gradient(var(--accent) 0 68%, var(--track) 68% 100%);}
+.ring > div{width:104px;height:104px;border-radius:99px;background:var(--surface);display:grid;place-items:center;text-align:center}
+.strip{display:grid;grid-template-columns:repeat(20,1fr);gap:4px;margin-top:20px}
+.strip i{display:block;aspect-ratio:1;border-radius:3px;background:var(--track)}
+.strip i.hit{background:var(--positive)}
+.strip i.miss{background:var(--negative);opacity:.55}
+.strip i.now{outline:2px solid var(--accent);outline-offset:1px}
+
+/* ---------- in flight ---------- */
+.counts{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.plist{display:flex;flex-direction:column}
+.plist a{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:16px;align-items:center;
+  padding:11px 0;border-top:1px solid var(--border);color:inherit;text-decoration:none;font-size:14px}
+.plist a:first-child{border-top:0}
+.plist .title{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.plist .meta{font-size:12px;color:var(--muted);white-space:nowrap}
+.plist .when{font-size:12px;color:var(--muted);font-family:"Geist Mono",monospace;white-space:nowrap;min-width:52px;text-align:right}
+
+/* ---------- code ---------- */
+.metrics{display:flex;flex-wrap:wrap;gap:32px;margin-top:14px}
+.spark{display:flex;align-items:flex-end;gap:6px;height:56px;margin-top:18px;max-width:420px}
+.spark i{flex:1;background:var(--accent);border-radius:3px 3px 0 0;opacity:.85}
+.sparklabels{display:flex;gap:6px;margin-top:8px;max-width:420px}
+.sparklabels span{flex:1;text-align:center;font-size:11px;color:var(--muted)}
+
+/* ---------- palettes ---------- */
+.palettes{border-top:1px solid var(--border);margin-top:8px;padding-top:24px;display:flex;flex-direction:column;gap:20px}
+.swatches{display:grid;grid-template-columns:repeat(9,minmax(0,1fr));gap:0;border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-top:10px}
+.sw{padding:14px 10px;min-height:76px;display:flex;flex-direction:column;justify-content:flex-end;gap:2px}
+.sw b{font-size:11px;font-weight:500;letter-spacing:.03em}
+.sw code{font-family:"Geist Mono",monospace;font-size:10px;opacity:.75}
+.rec{display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:99px;background:var(--accent);color:var(--accent-fg);font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+
+.toggle{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--fg);font:inherit;font-size:13px;cursor:pointer}
+.note{font-size:12px;color:var(--muted);max-width:70ch}
+
+@media (max-width:900px){
+  .rail{display:none}
+  .two{grid-template-columns:minmax(0,1fr)}
+  main{padding:16px}
+  .swatches{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <aside class="rail">
+    <div class="brand"><span class="mark">hq</span><b style="font-size:14px">HQ</b></div>
+    <a class="navitem on" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 10l9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg>Home</a>
+    <a class="navitem" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 5h6a3 3 0 0 1 3 3v11a2 2 0 0 0-2-2H3zM21 5h-6a3 3 0 0 0-3 3v11a2 2 0 0 1 2-2h7z"/></svg>Nasr<span class="count">2/5</span></a>
+    <a class="navitem" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 3h9l5 5v13H5z"/><path d="M14 3v5h5"/></svg>Content<span class="count">9</span></a>
+    <a class="navitem" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4h10l2 2h4v12H4z"/></svg>GitHub<span class="count">92</span></a>
+  </aside>
+
+  <div class="body">
+    <header class="topbar">
+      <span class="crumb"><b>HQ</b></span>
+      <span class="spacer"></span>
+      <button class="toggle" id="themeBtn" type="button">Dark</button>
+    </header>
+
+    <main>
+
+      <!-- greeting strip -->
+      <section class="greet">
+        <div>
+          <p class="eyebrow" style="margin:0 0 8px">Sunday 13 September</p>
+          <h1 class="h1">Two prayers logged, three to go.</h1>
+        </div>
+        <span class="chip"><span class="dot" style="background:var(--accent)"></span>Day 12 of 40</span>
+      </section>
+
+      <!-- today + cycle -->
+      <div class="two">
+
+        <section class="card">
+          <div class="between">
+            <h2 class="h2">Today</h2>
+            <span class="mono" style="font-size:13px;color:var(--muted)">2 / 5 salah</span>
+          </div>
+
+          <div class="salah">
+            <div><div class="pill"></div><span>Fajr</span></div>
+            <div><div class="pill late"></div><span>Dhuhr</span></div>
+            <div><div class="pill on"></div><span>Asr</span></div>
+            <div><div class="pill"></div><span>Maghrib</span></div>
+            <div><div class="pill"></div><span>Isha</span></div>
+          </div>
+
+          <div class="rule"></div>
+
+          <div class="practice">
+            <div><i class="done">✓</i> Morning adhkar</div>
+            <div><i class="todo">○</i> Evening adhkar</div>
+            <div><i class="todo">○</i> Night recitation</div>
+            <div><i class="todo">○</i> Self-ruqyah</div>
+          </div>
+
+          <div class="rule"></div>
+
+          <div class="between">
+            <span class="small">Istighfar</span>
+            <span class="mono" style="font-size:13px">42 / 100</span>
+          </div>
+          <div class="meter"><i style="width:42%"></i></div>
+
+          <div style="margin-top:20px"><a class="btn" href="#">Log today &rarr;</a></div>
+        </section>
+
+        <section class="card">
+          <div class="between">
+            <h2 class="h2">The cycle</h2>
+            <span class="small">40-day</span>
+          </div>
+
+          <div class="ring">
+            <div>
+              <div>
+                <div class="display" style="font-size:28px">68%</div>
+                <div class="eyebrow" style="margin-top:4px">adherence</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="strip" aria-label="One mark per day of the cycle">
+            <i class="hit"></i><i class="hit"></i><i class="hit"></i><i class="miss"></i><i class="hit"></i>
+            <i class="hit"></i><i class="hit"></i><i class="hit"></i><i class="miss"></i><i class="hit"></i>
+            <i class="hit"></i><i class="hit now"></i><i></i><i></i><i></i>
+            <i></i><i></i><i></i><i></i><i></i>
+            <i></i><i></i><i></i><i></i><i></i>
+            <i></i><i></i><i></i><i></i><i></i>
+            <i></i><i></i><i></i><i></i><i></i>
+            <i></i><i></i><i></i><i></i><i></i>
+          </div>
+
+          <div class="rule"></div>
+          <div class="between"><span class="small">Fajr streak</span><span class="mono" style="font-size:13px">4 days</span></div>
+          <div style="height:8px"></div>
+          <div class="between"><span class="small">Best</span><span class="mono" style="font-size:13px">11 days</span></div>
+        </section>
+      </div>
+
+      <!-- in flight -->
+      <section class="card">
+        <div class="between">
+          <h2 class="h2">In flight</h2>
+          <a class="link" href="#">Open board &rarr;</a>
+        </div>
+        <div class="counts">
+          <span class="chip"><span class="dot" style="background:#94A3B8"></span>Idea 3</span>
+          <span class="chip"><span class="dot" style="background:#5B8DEF"></span>Planned 1</span>
+          <span class="chip"><span class="dot" style="background:#9B7BE0"></span>Drafting 2</span>
+          <span class="chip"><span class="dot" style="background:#2FA98C"></span>Recorded 1</span>
+          <span class="chip"><span class="dot" style="background:#D8A33A"></span>Editing 1</span>
+          <span class="chip"><span class="dot" style="background:#D97A3C"></span>Scheduled 1</span>
+        </div>
+        <div class="rule"></div>
+        <div class="plist">
+          <a href="#"><span class="title">Building a Kanban board with dnd-kit</span><span class="meta">YouTube video · Drafting</span><span class="when">1h</span></a>
+          <a href="#"><span class="title">Why I moved off Notion for content planning</span><span class="meta">Blog post · Editing</span><span class="when">1d</span></a>
+          <a href="#"><span class="title">SQLite WAL backups that actually restore</span><span class="meta">Architecture article · Recorded</span><span class="when">4d</span></a>
+          <a href="#"><span class="title">Live: refactoring the import pipeline</span><span class="meta">Stream · Scheduled</span><span class="when">1h</span></a>
+        </div>
+        <div class="rule"></div>
+        <a class="btn ghost sm" href="#">+ New page</a>
+      </section>
+
+      <!-- code -->
+      <section class="card">
+        <div class="between">
+          <h2 class="h2">Last 7 days in code</h2>
+          <a class="link" href="#">Open GitHub &rarr;</a>
+        </div>
+        <div class="metrics">
+          <div>
+            <div class="eyebrow">Commits</div>
+            <div class="figure" style="margin-top:6px">77</div>
+          </div>
+          <div>
+            <div class="eyebrow">Requests merged</div>
+            <div class="figure" style="margin-top:6px">30</div>
+          </div>
+          <div>
+            <div class="eyebrow">Lines changed</div>
+            <div class="figure" style="margin-top:6px">
+              <span style="color:var(--positive)">+12,431</span>
+              <span style="color:var(--muted);font-weight:400"> / </span>
+              <span style="color:var(--negative)">&minus;3,180</span>
+            </div>
+          </div>
+        </div>
+        <div class="spark">
+          <i style="height:22%"></i><i style="height:48%"></i><i style="height:34%"></i>
+          <i style="height:71%"></i><i style="height:100%"></i><i style="height:30%"></i><i style="height:14%"></i>
+        </div>
+        <div class="sparklabels">
+          <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+        </div>
+      </section>
+
+      <!-- palettes -->
+      <section class="palettes">
+        <div>
+          <h2 class="h1">Palette options</h2>
+          <p class="note" style="margin:8px 0 0">Nine tokens per theme. Toggle the theme above to see both halves of each
+            option. <code class="mono">surface-2</code> is the step the current two-step system is missing — it is what
+            lets the sidebar read as chrome and dark cards read as cards.</p>
+        </div>
+
+        <div>
+          <div class="row"><h3 class="h2">Option A &mdash; Warm paper, evergreen</h3><span class="rec">Recommended</span></div>
+          <div class="swatches" data-palette="a"></div>
+          <p class="note" style="margin:8px 0 0">Keeps HQ's identity. Fixes what is actually wrong: a third surface, a wider
+            dark lightness step, and an accent dark enough to use as text and rules rather than only on a filled button.</p>
+        </div>
+
+        <div>
+          <h3 class="h2">Option B &mdash; Slate ink, indigo</h3>
+          <div class="swatches" data-palette="b"></div>
+          <p class="note" style="margin:8px 0 0">Cooler and more conventionally dashboard-like. Choose it only to deliberately
+            stop looking like a note-taking app.</p>
+        </div>
+
+        <div>
+          <h3 class="h2">Option C &mdash; Graphite, amber</h3>
+          <div class="swatches" data-palette="c"></div>
+          <p class="note" style="margin:8px 0 0">Editorial and high-contrast. Sharp, but hard on something opened every morning.</p>
+        </div>
+      </section>
+
+      <p class="note" style="padding-bottom:32px">Static mockup of the recommendation. Fake but realistic data; not the running app.</p>
+    </main>
+  </div>
+</div>
+
+<script>
+const PALETTES = {
+  a: {
+    light:{background:"#FAF9F6",surface:"#FFFFFF","surface-2":"#F3F2EE",border:"#E4E2DC",foreground:"#1C1B19",muted:"#6B6862",accent:"#15694E",positive:"#1E7A4E",negative:"#B3412C"},
+    dark: {background:"#131311",surface:"#1C1C19","surface-2":"#242421",border:"#34342F",foreground:"#EDECE8",muted:"#9C9A93",accent:"#58C39A",positive:"#4FBF8B",negative:"#E0765C"}
+  },
+  b: {
+    light:{background:"#F6F7F9",surface:"#FFFFFF","surface-2":"#EEF0F4",border:"#DDE1E8",foreground:"#14181F",muted:"#626B7A",accent:"#3A5BD9",positive:"#13795A",negative:"#C0392F"},
+    dark: {background:"#0E1116",surface:"#171B22","surface-2":"#1F252E",border:"#2B323D",foreground:"#E7EAEF",muted:"#939CAA",accent:"#7C9AFF",positive:"#45C48C",negative:"#F0796B"}
+  },
+  c: {
+    light:{background:"#FFFFFF",surface:"#FAFAF9","surface-2":"#F2F1EF",border:"#E3E2DF",foreground:"#0C0C0B",muted:"#6E6D69",accent:"#B45309",positive:"#15803D",negative:"#B91C1C"},
+    dark: {background:"#0B0B0A",surface:"#151514","surface-2":"#1E1E1C",border:"#2D2D2A",foreground:"#F5F4F1",muted:"#A1A09B",accent:"#F0A42B",positive:"#4ADE80",negative:"#F87171"}
+  }
+};
+
+function readable(hex){
+  const n = parseInt(hex.slice(1), 16);
+  const [r,g,b] = [(n>>16)&255,(n>>8)&255,n&255].map(v => {
+    const s = v/255;
+    return s <= 0.03928 ? s/12.92 : Math.pow((s+0.055)/1.055, 2.4);
+  });
+  return (0.2126*r + 0.7152*g + 0.0722*b) > 0.42 ? "#111111" : "#FFFFFF";
+}
+
+function paintSwatches(){
+  const theme = document.documentElement.dataset.theme;
+  for (const [key, sets] of Object.entries(PALETTES)) {
+    const host = document.querySelector(`.swatches[data-palette="${key}"]`);
+    const set = sets[theme];
+    host.innerHTML = Object.entries(set).map(([name, hex]) =>
+      `<div class="sw" style="background:${hex};color:${readable(hex)}">
+         <b>${name}</b><code>${hex.toUpperCase()}</code>
+       </div>`).join("");
+  }
+}
+
+const btn = document.getElementById("themeBtn");
+btn.addEventListener("click", () => {
+  const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  document.documentElement.dataset.theme = next;
+  btn.textContent = next === "dark" ? "Light" : "Dark";
+  paintSwatches();
+});
+paintSwatches();
+</script>
+</body>
+</html>

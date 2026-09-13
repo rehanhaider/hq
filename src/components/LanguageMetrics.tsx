@@ -62,7 +62,7 @@ export function LanguageMetrics({
     })
     .join(", ");
   return (
-    <section className="hairline min-w-0 pt-6" aria-label="Language metrics">
+    <section className="section min-w-0 pt-6" aria-label="Language metrics">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="section-title">Languages</h2>
         <div

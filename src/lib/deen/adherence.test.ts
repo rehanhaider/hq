@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   calculateAdherence,
+  cycleStrip,
+  dayCompletion,
   daysInCycleWindow,
   overallAdherence,
 } from "./adherence";
@@ -173,5 +175,66 @@ describe("streaks against the adherence window", () => {
     expect(windowed.at(-1)!.date).toBe("2026-09-05");
     expect(fajrOnTimeStreak(windowed, today).current).toBe(0);
     expect(fajrOnTimeStreak(days, today).current).toBe(4);
+  });
+});
+
+describe("cycleStrip", () => {
+  const days = [
+    makeDay("2026-09-01", {
+      fajr: "ontime",
+      dhuhr: "ontime",
+      asr: "qada",
+      maghrib: "ontime",
+      isha: "ontime",
+      morning_adhkar: true,
+      istighfar_count: 100,
+    }),
+    makeDay("2026-09-02", { fajr: "ontime" }),
+    makeDay("2026-09-03", { fajr: "missed" }),
+  ];
+
+  it("marks a cycle day by day, and today with itself", () => {
+    const marks = cycleStrip(days, "2026-09-01", "2026-09-04", 100);
+    expect(marks).toHaveLength(40);
+    expect(marks.slice(0, 5).map((mark) => mark.state)).toEqual([
+      "hit",
+      "partial",
+      "empty",
+      "empty",
+      "future",
+    ]);
+    expect(marks.filter((mark) => mark.today).map((mark) => mark.date)).toEqual([
+      "2026-09-04",
+    ]);
+  });
+
+  it("falls back to the trailing forty days when no cycle is set", () => {
+    const marks = cycleStrip(days, null, "2026-09-04", 100);
+    expect(marks).toHaveLength(40);
+    expect(marks.at(-1)?.date).toBe("2026-09-04");
+    expect(marks.at(0)?.date).toBe("2026-07-27");
+    expect(marks.every((mark) => mark.state !== "future")).toBe(true);
+  });
+});
+
+describe("dayCompletion", () => {
+  it("counts the same twelve things adherence divides by", () => {
+    expect(dayCompletion(makeDay("2026-09-01"), 100)).toBe(0);
+    const whole = makeDay("2026-09-01", {
+      fajr: "ontime",
+      dhuhr: "ontime",
+      asr: "ontime",
+      maghrib: "ontime",
+      isha: "ontime",
+      morning_adhkar: true,
+      evening_adhkar: true,
+      night_ayat_kursi: true,
+      night_baqarah: true,
+      night_three_suras: true,
+      ruqyah: true,
+      istighfar_count: 100,
+    });
+    expect(dayCompletion(whole, 100)).toBe(1);
+    expect(dayCompletion(makeDay("2026-09-01", { fajr: "missed" }), 100)).toBe(0);
   });
 });
