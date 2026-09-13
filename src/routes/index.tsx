@@ -181,7 +181,7 @@ function HomePage() {
           <div className="flex items-center justify-between gap-3">
             <p className="section-label">The last 40 days</p>
             <span className="text-[0.8125rem] text-muted-foreground">
-              Rolling window
+              {deen.windowDays} of 40 days logged
             </span>
           </div>
 
@@ -192,7 +192,7 @@ function HomePage() {
                 background: `conic-gradient(var(--primary) 0 ${deen.overall.percentage}%, var(--track) ${deen.overall.percentage}% 100%)`,
               }}
               role="img"
-              aria-label={`${deen.overall.percentage}% adherence`}
+              aria-label={`${deen.overall.percentage}% adherence over ${deen.windowDays} logged days`}
             >
               <div className="grid size-[4.75rem] place-items-center rounded-full bg-card text-center sm:size-26">
                 <div>

@@ -20,8 +20,9 @@ function HistoryPage() {
   }
   const data = summary.data;
   if (!data) return null;
-  // Adherence, the streak and the window length come from the server so the
-  // window they are measured over is defined in exactly one place.
+  // Adherence, the streak and the count of logged days in the window come
+  // from the server, so the window adherence is measured over is defined in
+  // one place. The calendar draws the same window from `windowDates`.
   const { today, days, windowDays, adherence, fajrStreak } = data;
   const calDates = windowDates(today);
   const dayMap = new Map(days.map((d) => [d.date, d]));
@@ -49,7 +50,9 @@ function HistoryPage() {
                   <span className="display">
                     {adherence.fajr_ontime?.percentage ?? 0}
                   </span>
-                  <span className="text-base font-normal text-muted-foreground">% of days</span>
+                  <span className="text-base font-normal text-muted-foreground">
+                    % of {windowDays} logged {windowDays === 1 ? "day" : "days"}
+                  </span>
                 </p>
               </div>
             )}
