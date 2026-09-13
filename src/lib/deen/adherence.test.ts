@@ -7,6 +7,7 @@ import {
   overallAdherence,
   windowStrip,
 } from "./adherence";
+import { windowDates } from "./dates";
 import { emptyDay } from "./schemas";
 import { fajrOnTimeStreak } from "./streaks";
 import type { DeenDay } from "./schemas";
@@ -158,14 +159,20 @@ describe("daysInWindow", () => {
 describe("streaks against the adherence window", () => {
   // A streak has no denominator, so it never had the mismatch the window
   // exists to fix, and it runs over the whole history rather than the window.
-  const days = ["2026-07-01", "2026-09-06", "2026-09-07", "2026-09-08"].map(
-    (date) => makeDay(date, { fajr: "ontime" }),
+  // The run here starts before the window opens (2026-07-31), so a streak
+  // measured over the windowed days alone would be capped at 40.
+  const today = "2026-09-08";
+  const days = windowDates(today, 46).map((date) =>
+    makeDay(date, { fajr: "ontime" }),
   );
 
-  it("reports a streak running to today", () => {
-    const today = "2026-09-08";
-    expect(fajrOnTimeStreak(daysInWindow(days, today), today).current).toBe(3);
-    expect(fajrOnTimeStreak(days, today).longest).toBe(3);
+  it("runs over the whole history, not the window", () => {
+    expect(days[0]!.date).toBe("2026-07-25");
+    expect(fajrOnTimeStreak(days, today)).toEqual({ current: 46, longest: 46 });
+    expect(fajrOnTimeStreak(daysInWindow(days, today), today)).toEqual({
+      current: 40,
+      longest: 40,
+    });
   });
 });
 
