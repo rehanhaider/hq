@@ -243,7 +243,7 @@ function HomePage() {
                     mark.state === "hit"
                       ? "bg-positive"
                       : mark.state === "partial"
-                        ? "bg-negative/55"
+                        ? "bg-positive/35"
                         : mark.state === "empty"
                           ? "bg-track"
                           : "bg-track/50",

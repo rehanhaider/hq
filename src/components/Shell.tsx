@@ -89,6 +89,7 @@ export function Shell() {
     return () => window.removeEventListener("keydown", keydown);
   }, [sidebarOpen]);
   const ui = useUI();
+  const inContent = pathname === "/content" || pathname.startsWith("/content/");
   const newPage = useNewPage();
   const [creating, setCreating] = useState(false);
   const queryClient = useQueryClient();
@@ -271,39 +272,43 @@ export function Shell() {
             </Button>
             <Breadcrumbs />
             {/* The top bar does work now: a page can be started from
-                anywhere, and appearance moves into the overflow menu. */}
-            <Button
-              variant="outline"
-              className="ml-auto"
-              disabled={creating}
-              onClick={() => {
-                setCreating(true);
-                void newPage().finally(() => setCreating(false));
-              }}
-            >
-              <FilePlus2 />
-              <span className="hidden sm:inline">New page</span>
-              <span className="sr-only sm:hidden">New page</span>
-            </Button>
-            <Menu>
-              <MenuTrigger
-                render={
-                  <Button variant="ghost" size="icon-sm" aria-label="More" />
-                }
-              >
-                <MoreHorizontal />
-              </MenuTrigger>
-              <MenuContent align="end">
-                <MenuItem onClick={ui.toggleTheme}>
-                  {ui.theme === "dark" ? (
-                    <Sun className="size-4" />
-                  ) : (
-                    <Moon className="size-4" />
-                  )}
-                  {ui.theme === "dark" ? "Light theme" : "Dark theme"}
-                </MenuItem>
-              </MenuContent>
-            </Menu>
+                anywhere but Content, which has its own New page, and
+                appearance moves into the overflow menu. */}
+            <div className="ml-auto flex items-center gap-2">
+              {!inContent && (
+                <Button
+                  variant="outline"
+                  disabled={creating}
+                  onClick={() => {
+                    setCreating(true);
+                    void newPage().finally(() => setCreating(false));
+                  }}
+                >
+                  <FilePlus2 />
+                  <span className="hidden sm:inline">New page</span>
+                  <span className="sr-only sm:hidden">New page</span>
+                </Button>
+              )}
+              <Menu>
+                <MenuTrigger
+                  render={
+                    <Button variant="ghost" size="icon-sm" aria-label="More" />
+                  }
+                >
+                  <MoreHorizontal />
+                </MenuTrigger>
+                <MenuContent align="end">
+                  <MenuItem onClick={ui.toggleTheme}>
+                    {ui.theme === "dark" ? (
+                      <Sun className="size-4" />
+                    ) : (
+                      <Moon className="size-4" />
+                    )}
+                    {ui.theme === "dark" ? "Light theme" : "Dark theme"}
+                  </MenuItem>
+                </MenuContent>
+              </Menu>
+            </div>
           </header>
           <ModuleTabs />
         </div>

@@ -277,6 +277,12 @@
   [data-slot="button"][aria-label] {
     min-width: 44px;
   }
+  /* A 44px target is taller than its own text, so the text has to be told to
+     sit in the middle of it rather than at the top. */
+  nav a {
+    display: flex;
+    align-items: center;
+  }
   [data-slot="input"],
   .field {
     font-size: 16px;
