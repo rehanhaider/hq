@@ -4,11 +4,13 @@ import {
   buildOpenWork,
   countWork,
   dedupe,
-  labelChip,
   normalise,
   normaliseAll,
   repoOf,
   sweepQueries,
+  arrangeWork,
+  repoOptions,
+  tabItems,
   searchResponseSchema,
 } from "./openWork";
 import type { SearchItem, WorkItem } from "./openWork";
@@ -172,13 +174,62 @@ describe("age", () => {
   });
 });
 
-describe("labelChip", () => {
-  it("puts white on a dark label and ink on a pale one", () => {
-    expect(labelChip("0e1a2b").color).toBe("#ffffff");
-    expect(labelChip("fef2c0").color).toBe("#1c1b19");
-    expect(labelChip("fef2c0").background).toBe("#fef2c0");
+describe("arranging a list", () => {
+  const rows = [
+    item({ id: 1, repo: "me/app", updatedAt: "2026-09-05T00:00:00Z", title: "Fix the importer" }),
+    item({ id: 2, repo: "me/hq", kind: "pr", updatedAt: "2026-09-09T00:00:00Z", title: "Ship the board" }),
+    item({ id: 3, repo: "me/app", kind: "pr", updatedAt: "2026-09-07T00:00:00Z", title: "Tidy the sweep" }),
+    item({ id: 4, repo: "me/app", updatedAt: "2026-09-01T00:00:00Z", title: "Import fixture" }),
+  ];
+  const view = { kind: "both", repo: "all", search: "", sort: "recent", limit: 50 } as const;
+
+  it("gathers the rows into repositories in the order they appear", () => {
+    const { groups, total, shown } = arrangeWork(rows, view);
+    expect(total).toBe(4);
+    expect(shown).toBe(4);
+    expect(groups.map((group) => group.repo)).toEqual(["me/hq", "me/app"]);
+    expect(groups[1]?.items.map((row) => row.id)).toEqual([3, 1, 4]);
   });
-  it("falls back when the colour is missing", () => {
-    expect(labelChip("").background).toBe("var(--track)");
+  it("reverses on the oldest sort", () => {
+    const oldest = arrangeWork(rows, { ...view, sort: "oldest" });
+    expect(oldest.groups.map((group) => group.repo)).toEqual(["me/app", "me/hq"]);
+    expect(oldest.groups[0]?.items.map((row) => row.id)).toEqual([4, 1, 3]);
+  });
+  it("filters by kind, repository, and a search over the title", () => {
+    expect(arrangeWork(rows, { ...view, kind: "pr" }).total).toBe(2);
+    expect(arrangeWork(rows, { ...view, repo: "me/app" }).total).toBe(3);
+    expect(arrangeWork(rows, { ...view, search: "  IMPORT " }).total).toBe(2);
+    expect(arrangeWork(rows, { ...view, search: "nothing" }).groups).toEqual([]);
+  });
+  it("cuts to the limit but still counts everything that matched", () => {
+    const page = arrangeWork(rows, { ...view, limit: 2 });
+    expect(page.total).toBe(4);
+    expect(page.shown).toBe(2);
+    expect(page.groups.flatMap((group) => group.items).map((row) => row.id)).toEqual([2, 3]);
+  });
+  it("counts the repositories, the fullest first", () => {
+    expect(repoOptions(rows)).toEqual([
+      { repo: "me/app", count: 3 },
+      { repo: "me/hq", count: 1 },
+    ]);
+  });
+});
+
+describe("tabItems", () => {
+  const work = buildOpenWork(
+    {
+      assigned: [item({ id: 1, assignedToMe: true })],
+      reviewRequested: [item({ id: 2, kind: "pr" })],
+      authored: [item({ id: 3, kind: "pr" })],
+      everything: [item({ id: 4 })],
+    },
+    "2026-09-10T00:00:00Z",
+  );
+  it("hands back the list the tab stands for", () => {
+    expect(tabItems(work, "assigned").map((row) => row.id)).toEqual([1]);
+    expect(tabItems(work, "reviews").map((row) => row.id)).toEqual([2]);
+    expect(tabItems(work, "authored").map((row) => row.id)).toEqual([3]);
+    expect(tabItems(work, "all")).toHaveLength(4);
+    expect(tabItems(undefined, "all")).toEqual([]);
   });
 });
