@@ -14,6 +14,7 @@ import {
   type SavePageInput,
   type StoredUpload,
 } from "../lib/content";
+import { uploadIdsInDocument } from "../lib/uploads";
 
 const emptyDocument = (): ContentBlock[] => [
   {
@@ -478,32 +479,36 @@ export class ContentStore {
         position,
       );
     if (tagIds.length) this.setTags(id, tagIds);
+    this.adoptUploads(id, document);
     return this.get(id)!;
   }
 
   save(input: SavePageInput) {
-    const now = new Date().toISOString();
-    const result = this.db
-      .prepare(
-        `UPDATE pages SET title = ?, document = ?, search_text = ?, updated_at = ?, revision = revision + 1
-         WHERE id = ? AND revision = ? AND deleted_at IS NULL`,
-      )
-      .run(
-        input.title,
-        JSON.stringify(input.document),
-        textFromDocument(input.document),
-        now,
-        input.id,
-        input.revision,
-      );
-    if (result.changes === 0) {
-      const current = this.getAny(input.id);
-      if (!current) return { ok: false as const, code: "missing" as const, current };
-      return current.deletedAt
-        ? { ok: false as const, code: "trashed" as const, current }
-        : { ok: false as const, code: "stale" as const, current };
-    }
-    return { ok: true as const, page: this.get(input.id)! };
+    return this.transaction(() => {
+      const now = new Date().toISOString();
+      const result = this.db
+        .prepare(
+          `UPDATE pages SET title = ?, document = ?, search_text = ?, updated_at = ?, revision = revision + 1
+           WHERE id = ? AND revision = ? AND deleted_at IS NULL`,
+        )
+        .run(
+          input.title,
+          JSON.stringify(input.document),
+          textFromDocument(input.document),
+          now,
+          input.id,
+          input.revision,
+        );
+      if (result.changes === 0) {
+        const current = this.getAny(input.id);
+        if (!current) return { ok: false as const, code: "missing" as const, current };
+        return current.deletedAt
+          ? { ok: false as const, code: "trashed" as const, current }
+          : { ok: false as const, code: "stale" as const, current };
+      }
+      this.adoptUploads(input.id, input.document);
+      return { ok: true as const, page: this.get(input.id)! };
+    });
   }
 
   /**
@@ -770,20 +775,45 @@ export class ContentStore {
     mime: string;
     size: number;
   }) {
-    return this.transaction(() => {
-      const page = this.db
-        .prepare("SELECT 1 FROM pages WHERE id = ?")
-        .get(input.pageId);
-      if (!page) return { ok: false as const, code: "missing-page" as const };
-      this.db
-        .prepare(
-          `INSERT INTO uploads (id, page_id, name, mime, size, created_at)
-           VALUES (?, ?, ?, ?, ?, ?)
-           ON CONFLICT (id, page_id) DO NOTHING`,
-        )
-        .run(input.id, input.pageId, input.name, input.mime, input.size, new Date().toISOString());
-      return { ok: true as const, upload: this.upload(input.id)! };
-    });
+    return this.transaction(() => this.linkUpload(input));
+  }
+
+  /**
+   * A page that shows `/api/uploads/<id>` without an uploads row — a save-as-new
+   * copy, or a pasted block — still uses that file. Erase only consults the
+   * table, so the row has to exist before the original page can be deleted.
+   */
+  private adoptUploads(pageId: string, document: ContentBlock[]) {
+    for (const id of uploadIdsInDocument(document)) {
+      const existing = this.upload(id);
+      if (!existing) continue;
+      this.linkUpload({
+        id,
+        pageId,
+        name: existing.name,
+        mime: existing.mime,
+        size: existing.size,
+      });
+    }
+  }
+
+  private linkUpload(input: {
+    id: string;
+    pageId: string;
+    name: string;
+    mime: string;
+    size: number;
+  }) {
+    const page = this.db.prepare("SELECT 1 FROM pages WHERE id = ?").get(input.pageId);
+    if (!page) return { ok: false as const, code: "missing-page" as const };
+    this.db
+      .prepare(
+        `INSERT INTO uploads (id, page_id, name, mime, size, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT (id, page_id) DO NOTHING`,
+      )
+      .run(input.id, input.pageId, input.name, input.mime, input.size, new Date().toISOString());
+    return { ok: true as const, upload: this.upload(input.id)! };
   }
 
   /** One stored file, by id. Any row will do: they all describe the same bytes. */

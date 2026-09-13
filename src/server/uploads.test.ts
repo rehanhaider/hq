@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -113,6 +113,52 @@ describe("upload store", () => {
     const inTrash = content.list({ trashed: true })[0]!;
     expect(content.restore(inTrash.id, inTrash.revision).ok).toBe(true);
     expect(content.uploadsFor(page.id)).toHaveLength(1);
+  });
+
+  it("keeps a copied page's files when the original is deleted for good", () => {
+    // Save-as-new-page and a pasted block copy the URL without posting the
+    // file again. The copy still shows the picture, so erase must see its row.
+    const store = uploads();
+    const original = content.create("Stream plan");
+    const saved = store.save({ bytes: png, name: "shot.png", mime: "image/png", pageId: original.id });
+    expect(saved.ok).toBe(true);
+    if (!saved.ok) return;
+    const document = [
+      {
+        id: randomUUID(),
+        type: "image",
+        props: {
+          backgroundColor: "default",
+          textAlignment: "left",
+          name: "shot.png",
+          url: saved.url,
+          caption: "",
+          showPreview: true,
+          previewWidth: 512,
+        },
+        children: [],
+      },
+    ];
+    const copy = content.create("Copy", null, document);
+    expect(content.uploadsFor(copy.id).map((item) => item.id)).toEqual([saved.upload.id]);
+
+    const blank = content.create("Blank");
+    expect(
+      content.save({
+        id: blank.id,
+        title: blank.title,
+        revision: blank.revision,
+        document,
+      }).ok,
+    ).toBe(true);
+    expect(content.uploadsFor(blank.id).map((item) => item.id)).toEqual([saved.upload.id]);
+
+    const page = content.get(original.id)!;
+    expect(content.trash(page.id, page.revision).ok).toBe(true);
+    const trashed = content.list({ trashed: true })[0]!;
+    expect(store.deletePageForever(trashed.id, trashed.revision).ok).toBe(true);
+    expect(existsSync(store.path(saved.upload.id))).toBe(true);
+    expect(store.read(saved.upload.id)?.upload).toBeTruthy();
   });
 
   it("deletes a page's files for good, unless another page still uses them", () => {

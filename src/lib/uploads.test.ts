@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { declaredUploadBytes } from "./uploads";
+import { declaredUploadBytes, uploadIdFromUrl, uploadIdsInDocument } from "./uploads";
 
 describe("declaredUploadBytes", () => {
   it("accepts a positive whole number of bytes", () => {
@@ -15,5 +15,21 @@ describe("declaredUploadBytes", () => {
     expect(declaredUploadBytes("1.5")).toBeNull();
     expect(declaredUploadBytes("1e7")).toBeNull();
     expect(declaredUploadBytes("abc")).toBeNull();
+  });
+});
+
+describe("uploadIdsInDocument", () => {
+  const id = `${"a".repeat(64)}.png`;
+
+  it("collects HQ upload URLs and ignores external links", () => {
+    expect(uploadIdFromUrl(`/api/uploads/${id}`)).toBe(id);
+    expect(uploadIdFromUrl(`https://hq.local/api/uploads/${id}`)).toBe(id);
+    expect(uploadIdFromUrl("https://example.com/plan.pdf")).toBeNull();
+    expect(
+      uploadIdsInDocument([
+        { type: "image", props: { url: `/api/uploads/${id}` }, children: [] },
+        { type: "file", props: { url: "https://example.com/plan.pdf" }, children: [] },
+      ]),
+    ).toEqual([id]);
   });
 });

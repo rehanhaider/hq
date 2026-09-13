@@ -145,6 +145,6 @@ pnpm typecheck
 pnpm build
 ```
 
-Tests cover UTC date boundaries, attribution, merge exclusion, category rules, snapshot replacement, account isolation, pagination, commit reuse, failure preservation, deen cycle arithmetic, streaks, adherence, Content data safety and validation, property migration and seeding, board moves, filters and sorts, upload limits and deduplication, permanent deletion of a page's files, and backup rotation.
+Tests cover UTC date boundaries, attribution, merge exclusion, category rules, snapshot replacement, account isolation, pagination, commit reuse, failure preservation, deen cycle arithmetic, streaks, adherence, Content data safety and validation, property migration and seeding, board moves, filters and sorts, upload limits and deduplication, permanent deletion of a page's files, copies of those files on other pages, and backup rotation.
 
 Server functions in `src/server/fns.ts` own the data boundary. Server-derived data belongs to Query. Shareable dates, repository, record type, page, Content search, filters, sort, grouping, and view belong to Router search parameters. Zustand owns the theme preference. Secrets and database imports stay on the server.

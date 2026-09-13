@@ -144,3 +144,38 @@ export function uploadExtension(name: string, mime: string) {
 export function uploadUrl(id: string) {
   return `/api/uploads/${id}`;
 }
+
+/** The stored id in an `/api/uploads/<id>` URL, or null if it is not one of ours. */
+export function uploadIdFromUrl(url: string) {
+  try {
+    const path = url.startsWith("/") ? url.split("?")[0]! : new URL(url).pathname;
+    const match = /^\/api\/uploads\/([^/]+)$/.exec(path);
+    return match && isUploadId(match[1]) ? match[1] : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Every HQ upload a document still shows. Save-as-new-page and a pasted block
+ * copy the URL without going through the upload endpoint, so create and save
+ * have to collect these or erase will think no surviving page uses the file.
+ */
+export function uploadIdsInDocument(value: unknown): string[] {
+  const found = new Set<string>();
+  const visit = (node: unknown) => {
+    if (Array.isArray(node)) {
+      node.forEach(visit);
+      return;
+    }
+    if (!node || typeof node !== "object") return;
+    const item = node as Record<string, unknown>;
+    if (typeof item.url === "string") {
+      const id = uploadIdFromUrl(item.url);
+      if (id) found.add(id);
+    }
+    Object.values(item).forEach(visit);
+  };
+  visit(value);
+  return [...found];
+}
