@@ -57,6 +57,7 @@
   --font-mono: "Geist Mono Variable", monospace;
   --color-positive: var(--positive);
   --color-negative: var(--negative);
+  --color-warning: var(--warning);
   --color-surface-2: var(--surface-2);
   --color-track: var(--track);
 }
@@ -87,6 +88,10 @@
   --ring: var(--primary);
   --positive: #1e7a4e;
   --negative: #b3412c;
+  /* Late, not lost: a prayer prayed outside its window, and a day that holds
+     one. Amber sits between the evergreen and the red, and never stands for a
+     half-finished thing. */
+  --warning: #a9711c;
   /* The unfilled half of a meter, a pill, or a day mark. */
   --track: #eae8e2;
   /* Two shadows, and only two. Raised cards in the light theme; popovers and
@@ -125,6 +130,7 @@
   --input: #403f39;
   --positive: #4fbf8b;
   --negative: #e0765c;
+  --warning: #e0a75e;
   --track: #2b2b27;
   --shadow-card: none;
   --chart-1: oklch(0.7 0.12 160);

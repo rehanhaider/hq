@@ -140,10 +140,21 @@ export function dayCompletion(day: DeenDay, istighfarTarget: number): number {
 
 export type DayMark = {
   date: string;
-  /** `empty` is a day with no record; `future` has not happened yet. */
-  state: "hit" | "partial" | "empty" | "future";
+  /**
+   * `late` is a day holding a prayer prayed outside its window; it outranks
+   * `hit` because lateness is the thing worth seeing. `empty` is a day with
+   * no record; `future` has not happened yet.
+   */
+  state: "hit" | "late" | "partial" | "empty" | "future";
   today: boolean;
 };
+
+/** A day is late if any of its five prayers was prayed as qada. */
+export function hasQada(day: DeenDay): boolean {
+  return (["fajr", "dhuhr", "asr", "maghrib", "isha"] as const).some(
+    (prayer) => day[prayer] === "qada",
+  );
+}
 
 /**
  * One mark per day of the cycle. Without a cycle start date it is the
@@ -167,11 +178,13 @@ export function cycleStrip(
     const state =
       date > today
         ? ("future" as const)
-        : completion >= 0.5
-          ? ("hit" as const)
-          : completion > 0
-            ? ("partial" as const)
-            : ("empty" as const);
+        : day && hasQada(day)
+          ? ("late" as const)
+          : completion >= 0.5
+            ? ("hit" as const)
+            : completion > 0
+              ? ("partial" as const)
+              : ("empty" as const);
     return { date, state, today: date === today };
   });
 }

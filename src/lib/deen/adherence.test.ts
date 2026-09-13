@@ -4,6 +4,7 @@ import {
   cycleStrip,
   dayCompletion,
   daysInCycleWindow,
+  hasQada,
   overallAdherence,
 } from "./adherence";
 import { emptyDay } from "./schemas";
@@ -196,8 +197,10 @@ describe("cycleStrip", () => {
   it("marks a cycle day by day, and today with itself", () => {
     const marks = cycleStrip(days, "2026-09-01", "2026-09-04", 100);
     expect(marks).toHaveLength(40);
+    // 09-01 kept most of the day but prayed Asr late, so it reads amber, not
+    // green: lateness outranks a high count.
     expect(marks.slice(0, 5).map((mark) => mark.state)).toEqual([
-      "hit",
+      "late",
       "partial",
       "empty",
       "empty",
@@ -214,6 +217,42 @@ describe("cycleStrip", () => {
     expect(marks.at(-1)?.date).toBe("2026-09-04");
     expect(marks.at(0)?.date).toBe("2026-07-27");
     expect(marks.every((mark) => mark.state !== "future")).toBe(true);
+  });
+});
+
+describe("a late day in the strip", () => {
+  it("reads late whatever else the day holds", () => {
+    const whole = makeDay("2026-09-01", {
+      fajr: "ontime",
+      dhuhr: "ontime",
+      asr: "ontime",
+      maghrib: "ontime",
+      isha: "qada",
+      morning_adhkar: true,
+      evening_adhkar: true,
+      night_ayat_kursi: true,
+      night_baqarah: true,
+      night_three_suras: true,
+      ruqyah: true,
+      istighfar_count: 100,
+    });
+    expect(hasQada(whole)).toBe(true);
+    expect(cycleStrip([whole], null, "2026-09-01", 100).at(-1)?.state).toBe(
+      "late",
+    );
+  });
+  it("reads hit when nothing was late", () => {
+    const day = makeDay("2026-09-01", {
+      fajr: "ontime",
+      dhuhr: "ontime",
+      asr: "ontime",
+      maghrib: "ontime",
+      isha: "ontime",
+      morning_adhkar: true,
+      evening_adhkar: true,
+    });
+    expect(hasQada(day)).toBe(false);
+    expect(cycleStrip([day], null, "2026-09-01", 100).at(-1)?.state).toBe("hit");
   });
 });
 

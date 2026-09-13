@@ -151,7 +151,7 @@ function HistoryPage() {
                     : fajr === "ontime"
                       ? "bg-positive/15 text-positive"
                       : fajr === "qada"
-                        ? "bg-chart-3/20"
+                        ? "bg-warning/20 text-warning"
                         : fajr === "missed"
                           ? "bg-negative/15 text-negative"
                           : d

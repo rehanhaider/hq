@@ -7,7 +7,7 @@ import { useNewPage } from "@/queries/content";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Dot } from "@/components/content/properties";
 import { relativeTime } from "@/lib/content";
-import { cycleStrip, type PrayerStatus } from "@/lib/deen";
+import { cycleStrip, type DayMark, type PrayerStatus } from "@/lib/deen";
 import { defaultFilters } from "@/lib/model";
 import { cn } from "@/lib/utils";
 
@@ -125,22 +125,17 @@ function HomePage() {
               <li key={label} className="text-center">
                 <span
                   aria-hidden
+                  title={`${label} — ${statusLabel(status)}`}
                   className={cn(
                     "block h-1.5 rounded-full",
                     status === "ontime"
                       ? "bg-positive"
-                      : status === "missed"
-                        ? "bg-negative"
-                        : "bg-track",
+                      : status === "qada"
+                        ? "bg-warning"
+                        : status === "missed"
+                          ? "bg-negative"
+                          : "bg-track",
                   )}
-                  style={
-                    status === "qada"
-                      ? {
-                          background:
-                            "linear-gradient(90deg, var(--positive) 50%, var(--track) 50%)",
-                        }
-                      : undefined
-                  }
                 />
                 <span className="mt-2 block text-xs text-muted-foreground">
                   {label}
@@ -233,11 +228,13 @@ function HomePage() {
                     "block aspect-square rounded-[3px]",
                     mark.state === "hit"
                       ? "bg-positive"
-                      : mark.state === "partial"
-                        ? "bg-positive/35"
-                        : mark.state === "empty"
-                          ? "bg-track"
-                          : "bg-track/50",
+                      : mark.state === "late"
+                        ? "bg-warning"
+                        : mark.state === "partial"
+                          ? "bg-positive/35"
+                          : mark.state === "empty"
+                            ? "bg-track"
+                            : "bg-track/50",
                     mark.today && "outline-2 outline-offset-1 outline-primary",
                   )}
                 />
@@ -478,14 +475,16 @@ function statusLabel(status: PrayerStatus) {
         : "not logged";
 }
 
-function markLabel(state: "hit" | "partial" | "empty" | "future") {
+function markLabel(state: DayMark["state"]) {
   return state === "hit"
     ? "most of the day kept"
-    : state === "partial"
-      ? "partly kept"
-      : state === "empty"
-        ? "not logged"
-        : "still to come";
+    : state === "late"
+      ? "a prayer made up late"
+      : state === "partial"
+        ? "partly kept"
+        : state === "empty"
+          ? "not logged"
+          : "still to come";
 }
 
 function weekday(day: string) {

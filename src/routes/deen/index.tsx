@@ -271,7 +271,7 @@ function statusLabel(value: PrayerStatus) {
 
 function statusTone(value: PrayerStatus) {
   if (value === "ontime") return "bg-positive/10 text-positive";
-  if (value === "qada") return "bg-chart-3/15";
+  if (value === "qada") return "bg-warning/15 text-warning";
   if (value === "missed") return "bg-negative/10 text-negative";
   return "bg-muted text-muted-foreground";
 }
