@@ -3,8 +3,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, Outlet, useLocation } from "@tanstack/react-router";
 import {
   BookOpen,
+  FilePlus2,
   FolderGit2,
   House,
+  MoreHorizontal,
   Moon,
   Sun,
   PanelLeftOpen,
@@ -12,10 +14,13 @@ import {
   NotebookPen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/ui/menu";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { ModuleTabs } from "@/components/ModuleTabs";
 import { useUI } from "@/store/ui";
 import { defaultFilters } from "@/lib/model";
 import { statusQuery } from "@/queries/dashboard";
+import { useNewPage } from "@/queries/content";
 
 export function Shell() {
   const { pathname } = useLocation();
@@ -84,6 +89,8 @@ export function Shell() {
     return () => window.removeEventListener("keydown", keydown);
   }, [sidebarOpen]);
   const ui = useUI();
+  const newPage = useNewPage();
+  const [creating, setCreating] = useState(false);
   const queryClient = useQueryClient();
   const status = useQuery(statusQuery);
   const previousStatus = useRef<string | null>(null);
@@ -230,52 +237,76 @@ export function Shell() {
         inert={mobileOpen}
         className={`min-h-dvh min-w-0 transition-[margin] duration-150 motion-reduce:transition-none ${sidebarOpen ? "md:ml-64" : "md:ml-14"}`}
       >
-        <header className="sticky top-0 z-10 flex h-12 items-center gap-3 border-b bg-background/95 px-4 md:px-6">
-          <Button
-            ref={mobileTrigger}
-            variant="ghost"
-            size="icon-sm"
-            className="md:hidden"
-            aria-label="Open navigation"
-            aria-expanded={mobileOpen}
-            aria-controls="sidebar-navigation"
-            onClick={() => setMobileOpen(true)}
-          >
-            <PanelLeftOpen />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="hidden md:inline-flex"
-            aria-label={
-              sidebarOpen ? "Collapse navigation" : "Expand navigation"
-            }
-            title={
-              sidebarOpen
-                ? "Collapse navigation (Ctrl+B)"
-                : "Expand navigation (Ctrl+B)"
-            }
-            aria-expanded={sidebarOpen}
-            aria-controls="sidebar-navigation"
-            onClick={toggleSidebar}
-          >
-            {sidebarOpen ? <PanelLeftClose /> : <PanelLeftOpen />}
-          </Button>
-          <Breadcrumbs />
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="ml-auto"
-            aria-label={
-              ui.theme === "dark"
-                ? "Switch to light theme"
-                : "Switch to dark theme"
-            }
-            onClick={ui.toggleTheme}
-          >
-            {ui.theme === "dark" ? <Sun /> : <Moon />}
-          </Button>
-        </header>
+        <div className="sticky top-0 z-10 bg-background/95 backdrop-blur">
+          <header className="flex h-12 items-center gap-3 border-b px-4 md:px-6 lg:px-8">
+            <Button
+              ref={mobileTrigger}
+              variant="ghost"
+              size="icon-sm"
+              className="md:hidden"
+              aria-label="Open navigation"
+              aria-expanded={mobileOpen}
+              aria-controls="sidebar-navigation"
+              onClick={() => setMobileOpen(true)}
+            >
+              <PanelLeftOpen />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="hidden md:inline-flex"
+              aria-label={
+                sidebarOpen ? "Collapse navigation" : "Expand navigation"
+              }
+              title={
+                sidebarOpen
+                  ? "Collapse navigation (Ctrl+B)"
+                  : "Expand navigation (Ctrl+B)"
+              }
+              aria-expanded={sidebarOpen}
+              aria-controls="sidebar-navigation"
+              onClick={toggleSidebar}
+            >
+              {sidebarOpen ? <PanelLeftClose /> : <PanelLeftOpen />}
+            </Button>
+            <Breadcrumbs />
+            {/* The top bar does work now: a page can be started from
+                anywhere, and appearance moves into the overflow menu. */}
+            <Button
+              variant="outline"
+              className="ml-auto"
+              disabled={creating}
+              onClick={() => {
+                setCreating(true);
+                void newPage().finally(() => setCreating(false));
+              }}
+            >
+              <FilePlus2 />
+              <span className="hidden sm:inline">New page</span>
+              <span className="sr-only sm:hidden">New page</span>
+            </Button>
+            <Menu>
+              <MenuTrigger
+                render={
+                  <Button variant="ghost" size="icon-sm" aria-label="More" />
+                }
+              >
+                <MoreHorizontal />
+              </MenuTrigger>
+              <MenuContent align="end">
+                <MenuItem onClick={ui.toggleTheme}>
+                  {ui.theme === "dark" ? (
+                    <Sun className="size-4" />
+                  ) : (
+                    <Moon className="size-4" />
+                  )}
+                  {ui.theme === "dark" ? "Light theme" : "Dark theme"}
+                </MenuItem>
+              </MenuContent>
+            </Menu>
+          </header>
+          <ModuleTabs />
+        </div>
         <main id="main" className="min-w-0 px-4 py-6 md:px-6 lg:px-8">
           <Outlet />
         </main>

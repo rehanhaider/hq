@@ -1,5 +1,6 @@
-import { queryOptions } from "@tanstack/react-query";
-import { getContentProperties, getPage, getPages } from "@/server/fns";
+import { queryOptions, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
+import { createPage, getContentProperties, getPage, getPages } from "@/server/fns";
 
 export const contentKeys = {
   all: ["content"] as const,
@@ -26,3 +27,21 @@ export const contentPropertiesQuery = queryOptions({
   queryKey: contentKeys.properties,
   queryFn: () => getContentProperties(),
 });
+
+/**
+ * Starts a page and opens it. The top bar and the homepage both create pages
+ * from outside Content, so the call sits beside the queries it has to
+ * invalidate rather than being copied into each of them.
+ */
+export function useNewPage() {
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  return async () => {
+    const created = await createPage({
+      data: { title: "Untitled", parentId: null },
+    });
+    queryClient.setQueryData(contentKeys.detail(created.id), created);
+    await queryClient.invalidateQueries({ queryKey: contentKeys.lists });
+    await navigate({ to: "/content", search: { page: created.id } });
+  };
+}
