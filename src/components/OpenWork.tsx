@@ -1,14 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import {
-  createColumnHelper,
-  createSortedRowModel,
-  rowSortingFeature,
-  sortFn_alphanumeric,
-  sortFn_basic,
-  tableFeatures,
-  useTable,
-} from "@tanstack/react-table";
 import {
   ArrowUpRight,
   CircleAlert,
@@ -16,173 +8,118 @@ import {
   GitPullRequest,
   Inbox,
   RefreshCw,
+  Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { DataTable } from "./DataTable";
 import { openWorkQuery } from "@/queries/dashboard";
-import { age, labelChip } from "@/lib/openWork";
-import type { WorkItem } from "@/lib/openWork";
+import { age, arrangeWork, repoOptions, tabItems } from "@/lib/openWork";
+import type { WorkItem, WorkKind, WorkSort, WorkTab } from "@/lib/openWork";
 import { cn } from "@/lib/utils";
 
-const emptyRows: WorkItem[] = [];
-const features = tableFeatures({
-  rowSortingFeature,
-  sortedRowModel: createSortedRowModel(),
-  sortFns: { alphanumeric: sortFn_alphanumeric, basic: sortFn_basic },
-  columnMeta: {} as { className?: string },
-});
-const helper = createColumnHelper<typeof features, WorkItem>();
-const columns = helper.columns([
-  helper.accessor("kind", {
-    header: "Kind",
-    meta: { className: "w-[1%]" },
-    cell: ({ row }) => <Kind item={row.original} />,
-  }),
-  helper.accessor("repo", {
-    header: "Repo",
-    meta: { className: "w-[1%] whitespace-nowrap" },
-    cell: ({ getValue }) => (
-      <span className="text-muted-foreground">{getValue()}</span>
-    ),
-  }),
-  helper.accessor("title", {
-    header: "Title",
-    cell: ({ row }) => <TitleLink item={row.original} />,
-  }),
-  helper.accessor("author", {
-    header: "Author",
-    meta: {
-      className: "hidden w-[1%] whitespace-nowrap text-muted-foreground sm:table-cell",
-    },
-    cell: ({ getValue }) => `@${getValue()}`,
-  }),
-  helper.accessor("updatedAt", {
-    id: "age",
-    header: "Age",
-    meta: { className: "w-[1%] text-right font-mono whitespace-nowrap" },
-    cell: ({ row }) => (
-      <span title={`Updated ${row.original.updatedAt}`}>
-        {age(row.original.updatedAt)}
-      </span>
-    ),
-  }),
-  helper.display({
-    id: "labels",
-    header: "Labels",
-    meta: { className: "hidden md:table-cell" },
-    cell: ({ row }) => <Labels item={row.original} />,
-  }),
-]);
+/** One screenful. 166 rows at once is a wall, not a list. */
+const PAGE = 50;
+const emptyItems: WorkItem[] = [];
+const TABS = [
+  {
+    value: "assigned",
+    label: "Assigned to me",
+    empty: "Nothing assigned to you.",
+  },
+  { value: "reviews", label: "Reviews waiting", empty: "No reviews requested." },
+  { value: "authored", label: "Authored", empty: "Nothing open of yours." },
+  {
+    value: "all",
+    label: "All open",
+    empty: "Nothing open. Everything the token can see is closed.",
+  },
+] as const;
 
-function Kind({ item }: { item: WorkItem }) {
-  const Icon = item.kind === "pr" ? GitPullRequest : CircleDot;
-  return (
-    <span
-      className={cn(
-        "flex size-6 items-center justify-center rounded-md bg-muted",
-        item.kind === "pr" ? "text-primary" : "text-muted-foreground",
-        item.draft && "text-muted-foreground",
-      )}
-      title={item.draft ? "Draft pull request" : item.kind === "pr" ? "Pull request" : "Issue"}
-    >
-      <Icon className="size-3.5" aria-hidden />
-      <span className="sr-only">
-        {item.draft ? "Draft pull request" : item.kind === "pr" ? "Pull request" : "Issue"}
-      </span>
-    </span>
-  );
-}
-
-function TitleLink({ item }: { item: WorkItem }) {
-  return (
-    <a
-      className="group flex items-start gap-1 font-medium hover:text-primary"
-      href={item.url}
-      target="_blank"
-      rel="noreferrer"
-    >
-      <span className="break-words">
-        <span className="font-mono text-muted-foreground">#{item.number}</span>{" "}
-        {item.title}
-        {item.draft ? (
-          <span className="ml-2 text-xs text-muted-foreground">Draft</span>
-        ) : null}
-      </span>
-      <ArrowUpRight className="mt-0.5 size-3 shrink-0 text-muted-foreground" />
-    </a>
-  );
-}
-
-function Labels({ item }: { item: WorkItem }) {
-  if (!item.labels.length) return null;
-  return (
-    <span className="flex flex-wrap gap-1">
-      {item.labels.slice(0, 4).map((label) => (
-        <span
-          key={label.name}
-          className="inline-flex h-[1.125rem] max-w-36 items-center truncate rounded-sm px-1.5 text-[0.6875rem] font-medium"
-          style={labelChip(label.color)}
-        >
-          {label.name}
-        </span>
-      ))}
-    </span>
-  );
-}
-
-/** The GitHub module's Work view: what is open, everywhere the token reaches. */
+/**
+ * The GitHub module's Work view: one list at a time. The tab picks the list,
+ * the row below narrows it, and the rows are grouped by repository so the eye
+ * has somewhere to land.
+ */
 export function OpenWork() {
   const work = useQuery(openWorkQuery);
   const data = work.data;
-  const [kind, setKind] = useState<"all" | "issue" | "pr">("all");
+  const [tab, setTab] = useState<WorkTab>("assigned");
+  const [kind, setKind] = useState<WorkKind>("both");
   const [repo, setRepo] = useState("all");
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<WorkSort>("recent");
+  const [limit, setLimit] = useState(PAGE);
   // A clock, so "Updated 12s ago" is true a minute after it was rendered.
   const [, tick] = useState(0);
   useEffect(() => {
     const timer = setInterval(() => tick((n) => n + 1), 15000);
     return () => clearInterval(timer);
   }, []);
-  const rows = data?.all ?? emptyRows;
+
+  const items = data ? tabItems(data, tab) : emptyItems;
   const repos = useMemo(
-    () => [...new Set(rows.map((row) => row.repo))].sort(),
-    [rows],
+    () => repoOptions(items.filter((item) => kind === "both" || item.kind === kind)),
+    [items, kind],
   );
-  const filtered = useMemo(
-    () =>
-      rows.filter(
-        (row) =>
-          (kind === "all" || row.kind === kind) &&
-          (repo === "all" || row.repo === repo),
-      ),
-    [rows, kind, repo],
+  const { total, shown, groups } = useMemo(
+    () => arrangeWork(items, { kind, repo, search, sort, limit }),
+    [items, kind, repo, search, sort, limit],
   );
-  const table = useTable({
-    features,
-    columns,
-    data: filtered.length ? filtered : emptyRows,
-    getRowId: (row) => String(row.id),
-    initialState: { sorting: [{ id: "age", desc: false }] },
-  });
+
+  function narrow<T>(set: (value: T) => void) {
+    return (value: T) => {
+      set(value);
+      setLimit(PAGE);
+    };
+  }
+  const chooseTab = (value: WorkTab) => {
+    setTab(value);
+    setRepo("all");
+    setLimit(PAGE);
+  };
 
   if (work.isPending)
     return (
       <div className="space-y-4" aria-label="Loading open work">
-        <div className="h-24 animate-pulse rounded-xl bg-muted" />
-        <div className="h-64 animate-pulse rounded-xl bg-muted" />
+        <div className="h-10 animate-pulse rounded-xl bg-muted" />
+        <div className="h-96 animate-pulse rounded-xl bg-muted" />
       </div>
     );
 
-  const counts = data?.counts;
   const connected = data?.connected ?? false;
+  const counts = {
+    assigned: data?.me.assigned.length ?? 0,
+    reviews: data?.me.reviewRequested.length ?? 0,
+    authored: data?.me.authored.length ?? 0,
+    all: data?.all.length ?? 0,
+  };
+  const empty = TABS.find((entry) => entry.value === tab)?.empty ?? "";
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-          <Figure label="Assigned to me" value={counts?.assigned ?? 0} />
-          <Figure label="Reviews waiting" value={counts?.reviewRequested ?? 0} />
-          <Figure label="Open PRs" value={counts?.openPrs ?? 0} />
-          <Figure label="Open issues" value={counts?.openIssues ?? 0} />
+        <div
+          role="tablist"
+          aria-label="Open work"
+          className="flex min-w-0 flex-wrap gap-1 rounded-xl border bg-muted/60 p-1"
+        >
+          {TABS.map((entry) => (
+            <button
+              key={entry.value}
+              role="tab"
+              aria-selected={tab === entry.value}
+              onClick={() => chooseTab(entry.value)}
+              className={cn(
+                "inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-[0.8125rem] font-medium",
+                tab === entry.value
+                  ? "bg-background text-foreground shadow-xs"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {entry.label}
+              <span className="font-mono text-xs tabular-nums opacity-70">
+                {counts[entry.value]}
+              </span>
+            </button>
+          ))}
         </div>
         <div className="flex items-center gap-3">
           {data ? (
@@ -221,99 +158,109 @@ export function OpenWork() {
         />
       ) : (
         <>
-          <section className="min-w-0">
-            <h2 className="section-title">Mine</h2>
-            <p className="mt-1 text-xs text-muted-foreground">
-              What is waiting on you, oldest first
-            </p>
-            <div className="mt-5 grid gap-6 lg:grid-cols-3 lg:gap-8">
-              <Group
-                title="Assigned to me"
-                items={data?.me.assigned ?? []}
-                empty="Nothing assigned to you."
-              />
-              <Group
-                title="Reviews waiting on me"
-                items={data?.me.reviewRequested ?? []}
-                empty="No reviews requested."
-              />
-              <Group
-                title="Authored by me"
-                items={data?.me.authored ?? []}
-                empty="Nothing open of yours."
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex gap-1" role="group" aria-label="Kind">
+              {(
+                [
+                  ["issue", "Issues"],
+                  ["pr", "PRs"],
+                  ["both", "Both"],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  aria-pressed={kind === value}
+                  onClick={() => narrow(setKind)(value)}
+                  className={cn(
+                    "inline-flex h-8 items-center rounded-lg border px-2.5 text-xs font-medium",
+                    kind === value
+                      ? "border-foreground/20 bg-foreground/10 text-foreground"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <select
+              aria-label="Repository"
+              className="field max-w-52 min-w-0"
+              value={repo}
+              onChange={(event) => narrow(setRepo)(event.target.value)}
+            >
+              <option value="all">All repositories</option>
+              {repos.map((option) => (
+                <option key={option.repo} value={option.repo}>
+                  {option.repo} ({option.count})
+                </option>
+              ))}
+            </select>
+            <div className="relative w-full min-w-0 sm:w-auto sm:flex-1 sm:max-w-64">
+              <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="search"
+                aria-label="Search titles"
+                placeholder="Search titles"
+                className="field w-full pl-8"
+                value={search}
+                onChange={(event) => narrow(setSearch)(event.target.value)}
               />
             </div>
-          </section>
+            <select
+              aria-label="Sort"
+              className="field"
+              value={sort}
+              onChange={(event) => narrow(setSort)(event.target.value as WorkSort)}
+            >
+              <option value="recent">Recently updated</option>
+              <option value="oldest">Oldest</option>
+            </select>
+          </div>
 
-          <section className="section min-w-0 pt-6">
-            <div className="flex flex-wrap items-end justify-between gap-3">
-              <div>
-                <h2 className="section-title">All open</h2>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {filtered.length === rows.length
-                    ? `${rows.length} open across every repository the token reaches`
-                    : `${filtered.length} of ${rows.length} open`}
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="flex gap-1.5" role="group" aria-label="Kind">
-                  {(
-                    [
-                      ["all", "All"],
-                      ["issue", "Issues"],
-                      ["pr", "PRs"],
-                    ] as const
-                  ).map(([value, label]) => (
-                    <button
-                      key={value}
-                      aria-pressed={kind === value}
-                      onClick={() => setKind(value)}
-                      className={cn(
-                        "inline-flex h-8 items-center rounded-md border px-2.5 text-xs font-medium",
-                        kind === value
-                          ? "border-primary bg-primary text-primary-foreground"
-                          : "text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      {label}
-                    </button>
+          <section className="section min-w-0 pt-5">
+            <p className="text-xs text-muted-foreground" role="status">
+              {total
+                ? `Showing ${shown} of ${total} across ${groups.length} ${groups.length === 1 ? "repository" : "repositories"}`
+                : ""}
+            </p>
+            {groups.length ? (
+              <>
+                <div className="mt-4 space-y-6">
+                  {groups.map((group) => (
+                    <section key={group.repo} className="min-w-0">
+                      <div className="flex items-baseline gap-2 border-b pb-1.5">
+                        <h3 className="truncate font-mono text-xs font-medium text-foreground">
+                          {group.repo}
+                        </h3>
+                        <span className="font-mono text-xs text-muted-foreground tabular-nums">
+                          {group.items.length}
+                        </span>
+                      </div>
+                      <ul className="list min-w-0">
+                        {group.items.map((item) => (
+                          <Row key={item.id} item={item} />
+                        ))}
+                      </ul>
+                    </section>
                   ))}
                 </div>
-                <div className="flex items-center gap-2">
-                  <Label
-                    htmlFor="work-repo"
-                    className="text-xs font-normal text-muted-foreground"
-                  >
-                    Repository
-                  </Label>
-                  <select
-                    id="work-repo"
-                    className="field max-w-56"
-                    value={repo}
-                    onChange={(event) => setRepo(event.target.value)}
-                  >
-                    <option value="all">All</option>
-                    {repos.map((name) => (
-                      <option key={name} value={name}>
-                        {name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </div>
-            <div className="mt-4 overflow-x-auto">
-              <DataTable
-                table={table}
-                empty={
-                  <p className="py-6 text-muted-foreground">
-                    {rows.length
-                      ? "Nothing matches this filter."
-                      : "Nothing open. Everything the token can see is closed."}
-                  </p>
-                }
-              />
-            </div>
+                {total > limit ? (
+                  <div className="mt-6 flex justify-center">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setLimit((value) => value + PAGE)}
+                    >
+                      Show {Math.min(PAGE, total - limit)} more
+                    </Button>
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <p className="py-10 text-center text-sm text-muted-foreground">
+                {items.length ? "Nothing matches this filter." : empty}
+              </p>
+            )}
           </section>
         </>
       )}
@@ -321,57 +268,78 @@ export function OpenWork() {
   );
 }
 
-function Figure({ label, value }: { label: string; value: number }) {
+/** A row is the whole width: icon, number, title, then the meta, right. */
+function Row({ item }: { item: WorkItem }) {
+  const more = Math.max(0, item.labels.length - 3);
   return (
-    <div className="min-w-0">
-      <p className="section-label">{label}</p>
-      <p className="figure mt-1.5">{value.toLocaleString("en-GB")}</p>
-    </div>
+    <li className="min-w-0">
+      <a
+        href={item.url}
+        target="_blank"
+        rel="noreferrer"
+        className="group -mx-2 flex min-h-11 flex-wrap items-center gap-x-3 gap-y-0.5 rounded-lg px-2 py-2 hover:bg-muted/60"
+      >
+        <span className="flex min-w-0 flex-[1_1_100%] items-center gap-2.5 sm:flex-1">
+          <Kind item={item} />
+          <span className="font-mono text-xs text-muted-foreground tabular-nums">
+            #{item.number}
+          </span>
+          <span className="min-w-0 flex-1 truncate group-hover:text-primary">
+            {item.title}
+          </span>
+        </span>
+        <span className="flex shrink-0 items-center gap-2 pl-8 text-xs text-muted-foreground sm:pl-0">
+          {item.draft ? <Chip>Draft</Chip> : null}
+          <span className="hidden items-center gap-1 lg:flex">
+            {item.labels.slice(0, 3).map((label) => (
+              <Chip key={label.name}>{label.name}</Chip>
+            ))}
+            {more ? <span className="tabular-nums">+{more}</span> : null}
+          </span>
+          <span className="hidden max-w-32 truncate sm:inline">
+            @{item.author}
+          </span>
+          <span
+            className="w-8 text-right font-mono tabular-nums"
+            title={`Updated ${item.updatedAt}`}
+          >
+            {age(item.updatedAt)}
+          </span>
+          <ArrowUpRight className="size-3 shrink-0 opacity-60" aria-hidden />
+        </span>
+      </a>
+    </li>
   );
 }
 
-function Group({
-  title,
-  items,
-  empty,
-}: {
-  title: string;
-  items: WorkItem[];
-  empty: string;
-}) {
+/** Labels without their colours: the rainbow was noise, the words are not. */
+function Chip({ children }: { children: ReactNode }) {
   return (
-    <section className="min-w-0">
-      <div className="flex items-baseline justify-between gap-2">
-        <h3 className="text-[0.8125rem] font-semibold">{title}</h3>
-        <span className="font-mono text-xs text-muted-foreground tabular-nums">
-          {items.length}
-        </span>
-      </div>
-      {items.length ? (
-        <ul className="list mt-1">
-          {items.slice(0, 10).map((item) => (
-            <li key={item.id} className="flex items-start gap-2.5 py-2.5">
-              <Kind item={item} />
-              <div className="min-w-0 flex-1">
-                <TitleLink item={item} />
-                <p className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-muted-foreground">
-                  <span className="break-all">{item.repo}</span>
-                  <span>@{item.author}</span>
-                  <span className="font-mono tabular-nums">
-                    {age(item.updatedAt)}
-                  </span>
-                </p>
-                <div className="mt-1.5">
-                  <Labels item={item} />
-                </div>
-              </div>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="mt-3 text-xs text-muted-foreground">{empty}</p>
+    <span className="inline-flex h-5 max-w-28 items-center truncate rounded border px-1.5 text-[0.6875rem] font-medium text-muted-foreground">
+      {children}
+    </span>
+  );
+}
+
+function Kind({ item }: { item: WorkItem }) {
+  const Icon = item.kind === "pr" ? GitPullRequest : CircleDot;
+  const what = item.draft
+    ? "Draft pull request"
+    : item.kind === "pr"
+      ? "Pull request"
+      : "Issue";
+  return (
+    <span
+      className={cn(
+        "flex size-6 shrink-0 items-center justify-center rounded-md bg-muted",
+        item.kind === "pr" && !item.draft ? "text-primary" : "text-muted-foreground",
+        item.draft && "opacity-60",
       )}
-    </section>
+      title={what}
+    >
+      <Icon className="size-3.5" aria-hidden />
+      <span className="sr-only">{what}</span>
+    </span>
   );
 }
 

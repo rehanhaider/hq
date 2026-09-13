@@ -252,21 +252,73 @@ export function age(iso: string, now = Date.now()) {
   return `${Math.floor(days / 365)}y`;
 }
 
+
 /**
- * A label keeps its own colour, and the text on it is picked so it can be
- * read: GitHub stores the background only, and half of them are pale.
+ * How the Work view is being read: one list at a time. The tab is the first
+ * filter, the rest narrow it, and the arranging below is pure so the view can
+ * stay a rendering of it.
  */
-export function labelChip(color: string) {
-  const hex = /^[0-9a-fA-F]{6}$/.test(color) ? color : null;
-  if (!hex) return { background: "var(--track)", color: "var(--foreground)" };
-  const channel = (start: number) => {
-    const value = parseInt(hex.slice(start, start + 2), 16) / 255;
-    return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
-  };
-  const luminance =
-    0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4);
-  return {
-    background: `#${hex}`,
-    color: luminance > 0.35 ? "#1c1b19" : "#ffffff",
-  };
+export type WorkTab = "assigned" | "reviews" | "authored" | "all";
+export type WorkKind = "both" | "issue" | "pr";
+export type WorkSort = "recent" | "oldest";
+export type WorkView = {
+  kind: WorkKind;
+  repo: string;
+  search: string;
+  sort: WorkSort;
+  limit: number;
+};
+export type WorkGroup = { repo: string; items: WorkItem[] };
+
+/** The one list a tab stands for. */
+export function tabItems(work: OpenWork | undefined, tab: WorkTab): WorkItem[] {
+  if (!work) return [];
+  if (tab === "assigned") return work.me.assigned;
+  if (tab === "reviews") return work.me.reviewRequested;
+  if (tab === "authored") return work.me.authored;
+  return work.all;
+}
+
+export function matchesWork(
+  item: WorkItem,
+  filter: { kind: WorkKind; repo: string; search: string },
+) {
+  if (filter.kind !== "both" && item.kind !== filter.kind) return false;
+  if (filter.repo !== "all" && item.repo !== filter.repo) return false;
+  const needle = filter.search.trim().toLowerCase();
+  return !needle || item.title.toLowerCase().includes(needle);
+}
+
+export function byRecentUpdated(a: WorkItem, b: WorkItem) {
+  return -byOldestUpdated(a, b);
+}
+
+/** The repositories in a list, the fullest first, for the repository select. */
+export function repoOptions(items: WorkItem[]) {
+  const counts = new Map<string, number>();
+  for (const item of items)
+    counts.set(item.repo, (counts.get(item.repo) ?? 0) + 1);
+  return [...counts]
+    .map(([repo, count]) => ({ repo, count }))
+    .sort((a, b) => b.count - a.count || a.repo.localeCompare(b.repo));
+}
+
+/**
+ * Filter, sort, cut to what is on screen, then gather into repositories in
+ * the order they first appear — so the groups follow the sort rather than
+ * fighting it.
+ */
+export function arrangeWork(items: WorkItem[], view: WorkView) {
+  const matched = items.filter((item) => matchesWork(item, view));
+  const sorted = [...matched].sort(
+    view.sort === "oldest" ? byOldestUpdated : byRecentUpdated,
+  );
+  const shown = sorted.slice(0, Math.max(0, view.limit));
+  const groups = new Map<string, WorkGroup>();
+  for (const item of shown) {
+    const group = groups.get(item.repo);
+    if (group) group.items.push(item);
+    else groups.set(item.repo, { repo: item.repo, items: [item] });
+  }
+  return { total: matched.length, shown: shown.length, groups: [...groups.values()] };
 }
