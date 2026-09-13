@@ -135,6 +135,23 @@ describe("backup", () => {
     expect(listed("uploads", "daily")).toHaveLength(7);
   });
 
+  it("treats a blank HQ_UPLOADS_DIR as unset rather than the working directory", () => {
+    // resolve("") is cwd. Copying that would put .env, including GITHUB_TOKEN,
+    // into backups/uploads/. Blank matches how the database variables work.
+    writeFileSync(join(dir, "secret.env"), "GITHUB_TOKEN=x");
+    mkdirSync(join(dataDir(), "uploads"), { recursive: true });
+    writeFileSync(join(dataDir(), "uploads", "abc.png"), "pixels");
+    run({ HQ_UPLOADS_DIR: "" });
+    const copy = listed("uploads", "daily")[0];
+    expect(copy).toBeDefined();
+    expect(
+      readFileSync(join(backupDir(), "uploads", "daily", copy, "abc.png"), "utf8"),
+    ).toBe("pixels");
+    expect(existsSync(join(backupDir(), "uploads", "daily", copy, "secret.env"))).toBe(
+      false,
+    );
+  });
+
   it("fails when the configured uploads directory does not exist", () => {
     let threw = false;
     try {

@@ -816,6 +816,10 @@ export class ContentStore {
     return { ok: true as const, upload: this.upload(input.id)! };
   }
 
+  hasPage(id: string) {
+    return Boolean(this.db.prepare("SELECT 1 FROM pages WHERE id = ?").get(id));
+  }
+
   /** One stored file, by id. Any row will do: they all describe the same bytes. */
   upload(id: string): StoredUpload | null {
     const row = this.db

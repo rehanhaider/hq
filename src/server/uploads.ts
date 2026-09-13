@@ -58,9 +58,13 @@ export class UploadStore {
         error: rejection,
       };
 
+    if (!this.content.hasPage(input.pageId))
+      return { ok: false, status: 404, error: "That page is no longer available." };
+
     const id = `${createHash("sha256").update(input.bytes).digest("hex")}.${uploadExtension(name, mime)}`;
     const target = this.path(id);
-    if (!existsSync(target)) {
+    const created = !existsSync(target);
+    if (created) {
       mkdirSync(this.directory, { recursive: true });
       const staged = `${target}.${randomUUID()}.tmp`;
       try {
@@ -73,8 +77,13 @@ export class UploadStore {
     }
 
     const recorded = this.content.recordUpload({ id, pageId: input.pageId, name, mime, size });
-    if (!recorded.ok)
+    if (!recorded.ok) {
+      // This call created the file and no page recorded it, so nothing else
+      // will ever purge it. A file that was already on disk stays: another
+      // page may still show it.
+      if (created) this.purge([id]);
       return { ok: false, status: 404, error: "That page is no longer available." };
+    }
     return { ok: true, upload: recorded.upload, url: uploadUrl(id) };
   }
 
@@ -130,7 +139,8 @@ export function resolveUploadsDirectory(
   env: NodeJS.ProcessEnv = process.env,
   cwd = process.cwd(),
 ) {
-  return resolve(cwd, env.HQ_UPLOADS_DIR ?? "data/uploads");
+  const named = env.HQ_UPLOADS_DIR?.trim();
+  return resolve(cwd, named || "data/uploads");
 }
 
 let store: UploadStore | undefined;

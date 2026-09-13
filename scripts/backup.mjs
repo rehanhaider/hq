@@ -187,8 +187,10 @@ function sources() {
  * to yet.
  */
 function uploadsSource() {
-  const named = process.env.HQ_UPLOADS_DIR;
-  const path = resolve(named ?? "data/uploads");
+  // Blank is unset, matching the database variables: HQ_UPLOADS_DIR= in an
+  // env file is not a path, and resolve("") is the working directory.
+  const named = process.env.HQ_UPLOADS_DIR?.trim();
+  const path = resolve(named || "data/uploads");
   if (named && !existsSync(path))
     return { path, missing: { env: "HQ_UPLOADS_DIR", path } };
   return { path: existsSync(path) ? path : null, missing: null };

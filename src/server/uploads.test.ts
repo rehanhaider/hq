@@ -248,6 +248,7 @@ describe("upload store", () => {
         pageId: "c0ffee00-0000-4000-8000-000000000000",
       }),
     ).toMatchObject({ ok: false, status: 404 });
+    expect(files()).toEqual([]);
   });
 });
 
@@ -257,6 +258,12 @@ describe("resolveUploadsDirectory", () => {
     expect(resolveUploadsDirectory({ HQ_UPLOADS_DIR: "media" }, "/srv/hq")).toBe("/srv/hq/media");
     expect(resolveUploadsDirectory({ HQ_UPLOADS_DIR: "/mnt/media" }, "/srv/hq")).toBe(
       "/mnt/media",
+    );
+    expect(resolveUploadsDirectory({ HQ_UPLOADS_DIR: "" }, "/srv/hq")).toBe(
+      "/srv/hq/data/uploads",
+    );
+    expect(resolveUploadsDirectory({ HQ_UPLOADS_DIR: "  " }, "/srv/hq")).toBe(
+      "/srv/hq/data/uploads",
     );
   });
 });
