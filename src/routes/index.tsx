@@ -232,9 +232,11 @@ function HomePage() {
           </div>
 
           <Rule />
+          {/* The streak is not windowed, so its row says so: the eyebrow above
+              covers only the ring and the strip. */}
           <div className="flex items-center justify-between gap-3">
             <span className="text-[0.8125rem] text-muted-foreground">
-              Fajr streak
+              Fajr streak, all time
             </span>
             <span className="font-mono text-[0.8125rem] tabular-nums">
               {deen.fajrStreak.current}{" "}
