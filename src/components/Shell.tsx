@@ -6,7 +6,6 @@ import {
   FilePlus2,
   FolderGit2,
   House,
-  MoreHorizontal,
   Moon,
   Sun,
   PanelLeftOpen,
@@ -14,7 +13,6 @@ import {
   NotebookPen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/ui/menu";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { ModuleTabs } from "@/components/ModuleTabs";
 import { useUI } from "@/store/ui";
@@ -233,6 +231,28 @@ export function Shell() {
             </Link>
           ))}
         </nav>
+        {/* Appearance lives at the foot of the rail, next to the things it
+            changes, rather than behind an overflow menu in the top bar. */}
+        <div className="shrink-0 border-t border-sidebar-border p-1.5">
+          <button
+            type="button"
+            onClick={ui.toggleTheme}
+            title={ui.theme === "dark" ? "Light theme" : "Dark theme"}
+            aria-label={
+              ui.theme === "dark" ? "Switch to light theme" : "Switch to dark theme"
+            }
+            className={`${navClass} w-full`}
+          >
+            {ui.theme === "dark" ? (
+              <Sun className="size-4 shrink-0" />
+            ) : (
+              <Moon className="size-4 shrink-0" />
+            )}
+            <span className={labelClass}>
+              {ui.theme === "dark" ? "Light" : "Dark"}
+            </span>
+          </button>
+        </div>
       </aside>
       <div
         inert={mobileOpen}
@@ -271,9 +291,8 @@ export function Shell() {
               {sidebarOpen ? <PanelLeftClose /> : <PanelLeftOpen />}
             </Button>
             <Breadcrumbs />
-            {/* The top bar does work now: a page can be started from
-                anywhere but Content, which has its own New page, and
-                appearance moves into the overflow menu. */}
+            {/* The top bar does one job: a page can be started from anywhere
+                but Content, which has its own New page. */}
             <div className="ml-auto flex items-center gap-2">
               {!inContent && (
                 <Button
@@ -289,25 +308,6 @@ export function Shell() {
                   <span className="sr-only sm:hidden">New page</span>
                 </Button>
               )}
-              <Menu>
-                <MenuTrigger
-                  render={
-                    <Button variant="ghost" size="icon-sm" aria-label="More" />
-                  }
-                >
-                  <MoreHorizontal />
-                </MenuTrigger>
-                <MenuContent align="end">
-                  <MenuItem onClick={ui.toggleTheme}>
-                    {ui.theme === "dark" ? (
-                      <Sun className="size-4" />
-                    ) : (
-                      <Moon className="size-4" />
-                    )}
-                    {ui.theme === "dark" ? "Light theme" : "Dark theme"}
-                  </MenuItem>
-                </MenuContent>
-              </Menu>
             </div>
           </header>
           <ModuleTabs />
