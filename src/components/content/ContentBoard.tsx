@@ -248,17 +248,7 @@ export function ContentBoard() {
   const total = buckets.reduce((sum, bucket) => sum + bucket.pages.length, 0);
 
   return (
-    <section aria-labelledby="board-heading" className="space-y-5">
-      <header className="page-header">
-        <div>
-          <h1 id="board-heading" className="page-title">
-            Board
-          </h1>
-          <p className="page-description">
-            Every page as a card. Drag between columns to move it through the pipeline.
-          </p>
-        </div>
-      </header>
+    <section aria-label="Board" className="space-y-5">
       <ContentToolbar
         properties={properties}
         search={search}

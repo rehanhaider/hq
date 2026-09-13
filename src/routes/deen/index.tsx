@@ -87,36 +87,34 @@ function TodayPage() {
   }
   return (
     <div className="space-y-8">
-      <header className="page-header">
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            disabled={update.isPending}
-            aria-label="Previous day"
-            onClick={() => setOffset((value) => value - 1)}
-          >
-            <ChevronLeft />
-          </Button>
-          <div>
-            <h1 className="page-title">
-              {isToday ? "Today" : "Previous day"}
-            </h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {readableDate}
-            </p>
-          </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Next day"
-            disabled={isToday || update.isPending}
-            onClick={() => setOffset((value) => Math.min(0, value + 1))}
-          >
-            <ChevronRight />
-          </Button>
-        </div>
-      </header>
+      <div className="flex min-h-10 items-center justify-between gap-2 sm:justify-end">
+        <Button
+          variant="ghost"
+          size="icon"
+          disabled={update.isPending}
+          aria-label="Previous day"
+          onClick={() => setOffset((value) => value - 1)}
+        >
+          <ChevronLeft />
+        </Button>
+        <p className="text-sm font-medium">
+          {readableDate}
+          {!isToday && (
+            <span className="ml-2 font-normal text-muted-foreground">
+              Previous day
+            </span>
+          )}
+        </p>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Next day"
+          disabled={isToday || update.isPending}
+          onClick={() => setOffset((value) => Math.min(0, value + 1))}
+        >
+          <ChevronRight />
+        </Button>
+      </div>
 
       {update.isError && (
         <p role="alert" className="text-sm text-negative">

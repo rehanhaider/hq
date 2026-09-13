@@ -22,8 +22,7 @@ import { Route as ContentTrashRouteImport } from './routes/content/trash'
 import { Route as DeenIndexRouteImport } from './routes/deen/index'
 import { Route as DeenHistoryRouteImport } from './routes/deen/history'
 import { Route as DeenSettingsRouteImport } from './routes/deen/settings'
-import { Route as NotesIndexRouteImport } from './routes/notes/index'
-import { Route as NotesTrashRouteImport } from './routes/notes/trash'
+import { Route as NotesSplatRouteImport } from './routes/notes/$'
 import { Route as ApiUploadsIdRouteImport } from './routes/api/uploads.$id'
 
 const IndexRoute = IndexRouteImport.update({
@@ -91,14 +90,9 @@ const DeenSettingsRoute = DeenSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => DeenRoute,
 } as any)
-const NotesIndexRoute = NotesIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => NotesRoute,
-} as any)
-const NotesTrashRoute = NotesTrashRouteImport.update({
-  id: '/trash',
-  path: '/trash',
+const NotesSplatRoute = NotesSplatRouteImport.update({
+  id: '/$',
+  path: '/$',
   getParentRoute: () => NotesRoute,
 } as any)
 const ApiUploadsIdRoute = ApiUploadsIdRouteImport.update({
@@ -119,25 +113,24 @@ export interface FileRoutesByFullPath {
   '/content/trash': typeof ContentTrashRoute
   '/deen/history': typeof DeenHistoryRoute
   '/deen/settings': typeof DeenSettingsRoute
-  '/notes/trash': typeof NotesTrashRoute
+  '/notes/$': typeof NotesSplatRoute
   '/content/': typeof ContentIndexRoute
   '/deen/': typeof DeenIndexRoute
-  '/notes/': typeof NotesIndexRoute
   '/api/uploads/$id': typeof ApiUploadsIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/github': typeof GithubRoute
+  '/notes': typeof NotesRouteWithChildren
   '/api/uploads': typeof ApiUploadsRouteWithChildren
   '/content/board': typeof ContentBoardRoute
   '/content/settings': typeof ContentSettingsRoute
   '/content/trash': typeof ContentTrashRoute
   '/deen/history': typeof DeenHistoryRoute
   '/deen/settings': typeof DeenSettingsRoute
-  '/notes/trash': typeof NotesTrashRoute
+  '/notes/$': typeof NotesSplatRoute
   '/content': typeof ContentIndexRoute
   '/deen': typeof DeenIndexRoute
-  '/notes': typeof NotesIndexRoute
   '/api/uploads/$id': typeof ApiUploadsIdRoute
 }
 export interface FileRoutesById {
@@ -153,10 +146,9 @@ export interface FileRoutesById {
   '/content/trash': typeof ContentTrashRoute
   '/deen/history': typeof DeenHistoryRoute
   '/deen/settings': typeof DeenSettingsRoute
-  '/notes/trash': typeof NotesTrashRoute
+  '/notes/$': typeof NotesSplatRoute
   '/content/': typeof ContentIndexRoute
   '/deen/': typeof DeenIndexRoute
-  '/notes/': typeof NotesIndexRoute
   '/api/uploads/$id': typeof ApiUploadsIdRoute
 }
 export interface FileRouteTypes {
@@ -173,25 +165,24 @@ export interface FileRouteTypes {
     | '/content/trash'
     | '/deen/history'
     | '/deen/settings'
-    | '/notes/trash'
+    | '/notes/$'
     | '/content/'
     | '/deen/'
-    | '/notes/'
     | '/api/uploads/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/github'
+    | '/notes'
     | '/api/uploads'
     | '/content/board'
     | '/content/settings'
     | '/content/trash'
     | '/deen/history'
     | '/deen/settings'
-    | '/notes/trash'
+    | '/notes/$'
     | '/content'
     | '/deen'
-    | '/notes'
     | '/api/uploads/$id'
   id:
     | '__root__'
@@ -206,10 +197,9 @@ export interface FileRouteTypes {
     | '/content/trash'
     | '/deen/history'
     | '/deen/settings'
-    | '/notes/trash'
+    | '/notes/$'
     | '/content/'
     | '/deen/'
-    | '/notes/'
     | '/api/uploads/$id'
   fileRoutesById: FileRoutesById
 }
@@ -315,18 +305,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DeenSettingsRouteImport
       parentRoute: typeof DeenRoute
     }
-    '/notes/': {
-      id: '/notes/'
-      path: '/'
-      fullPath: '/notes/'
-      preLoaderRoute: typeof NotesIndexRouteImport
-      parentRoute: typeof NotesRoute
-    }
-    '/notes/trash': {
-      id: '/notes/trash'
-      path: '/trash'
-      fullPath: '/notes/trash'
-      preLoaderRoute: typeof NotesTrashRouteImport
+    '/notes/$': {
+      id: '/notes/$'
+      path: '/$'
+      fullPath: '/notes/$'
+      preLoaderRoute: typeof NotesSplatRouteImport
       parentRoute: typeof NotesRoute
     }
     '/api/uploads/$id': {
@@ -371,13 +354,11 @@ const DeenRouteChildren: DeenRouteChildren = {
 const DeenRouteWithChildren = DeenRoute._addFileChildren(DeenRouteChildren)
 
 interface NotesRouteChildren {
-  NotesTrashRoute: typeof NotesTrashRoute
-  NotesIndexRoute: typeof NotesIndexRoute
+  NotesSplatRoute: typeof NotesSplatRoute
 }
 
 const NotesRouteChildren: NotesRouteChildren = {
-  NotesTrashRoute: NotesTrashRoute,
-  NotesIndexRoute: NotesIndexRoute,
+  NotesSplatRoute: NotesSplatRoute,
 }
 
 const NotesRouteWithChildren = NotesRoute._addFileChildren(NotesRouteChildren)

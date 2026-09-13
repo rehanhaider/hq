@@ -45,17 +45,11 @@ function HistoryPage() {
 
   return (
     <div className="space-y-8">
-      <header className="page-header">
-        <div>
-          <h1 className="page-title">Progress</h1>
-          <p className="page-description">Adherence across the 40-day cycle.</p>
+      {cycleDay !== null && (
+        <div className="flex min-h-10 items-center justify-end text-sm text-muted-foreground">
+          {cycleComplete ? "Cycle complete" : `Day ${cycleDay} / 40`}
         </div>
-        {cycleDay !== null && (
-          <span className="text-sm text-muted-foreground">
-            {cycleComplete ? "Cycle complete" : `Day ${cycleDay} / 40`}
-          </span>
-        )}
-      </header>
+      )}
 
       {nothingLogged ? (
         <p className="max-w-prose text-sm leading-6 text-muted-foreground">

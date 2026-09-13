@@ -132,15 +132,9 @@ export function Connections({ importing }: { importing: boolean }) {
 
   return (
     <div className="space-y-5">
-      <div className="page-header">
-        <div className="min-w-0">
-          <h1 className="page-title">Repositories</h1>
-          <p className="page-description">
-            Add or remove repositories. See fetch status and how much is stored.
-          </p>
-        </div>
+      <div className="flex min-h-10 items-center justify-end">
         <Button
-          size="lg"
+          className="h-10 px-4"
           variant="default"
           onClick={() => setShowAdd((open) => !open)}
           aria-expanded={showAdd}

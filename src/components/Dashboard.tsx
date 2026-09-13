@@ -55,13 +55,6 @@ export function Dashboard() {
   };
   const importing = status.data?.state === "running";
   const hasData = Boolean(data?.repositories.length);
-  const title =
-    filters.view === "overview"
-      ? "Activity overview"
-      : filters.view === "projects" || filters.view === "connections"
-        ? "Repositories"
-        : "Activity history";
-
   return (
     <div className="space-y-5">
       {status.data &&
@@ -102,9 +95,6 @@ export function Dashboard() {
         <Connections importing={importing} />
       ) : (
         <>
-          <div className="page-header">
-            <h1 className="page-title">{title}</h1>
-          </div>
           <ActivityFilters
             filters={filters}
             repositories={data?.repositories ?? []}

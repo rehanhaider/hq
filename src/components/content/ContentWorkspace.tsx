@@ -432,16 +432,10 @@ export function ContentWorkspace() {
   };
 
   return (
-    <section aria-labelledby="content-heading">
-      <header className="page-header">
-        <div>
-          <h1 id="content-heading" className="page-title">Pages</h1>
-          <p className="page-description">
-            Every page is a piece of content: write it here, track it on the board.
-          </p>
-        </div>
-        <Button disabled={recovering} onClick={() => void addPage(null)}><FilePlus2 /> New page</Button>
-      </header>
+    <section aria-label="Pages">
+      <div className="flex min-h-10 items-center justify-end">
+        <Button className="h-10 px-4" disabled={recovering} onClick={() => void addPage(null)}><FilePlus2 /> New page</Button>
+      </div>
       {actionError && (
         <p
           className="mt-3 rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive"
