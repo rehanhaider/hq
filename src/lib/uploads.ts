@@ -8,6 +8,20 @@
 export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 
 /**
+ * Multipart Content-Length. Null means the body must not be read: missing,
+ * zero, or not a whole number of bytes, so a chunked or undeclared request
+ * cannot fill memory before the size check runs.
+ */
+export function declaredUploadBytes(header: string | null) {
+  if (header == null) return null;
+  const trimmed = header.trim();
+  if (!/^\d+$/.test(trimmed)) return null;
+  const n = Number(trimmed);
+  if (!Number.isSafeInteger(n) || n <= 0) return null;
+  return n;
+}
+
+/**
  * Images and videos are taken by family, because the editor renders whatever
  * the browser can. Everything else is a named list: a page attachment should be
  * a document, not an arbitrary executable.

@@ -237,6 +237,31 @@ describe("backup", () => {
     expect(written).toEqual([]);
   });
 
+  it("refuses a database named uploads, which is reserved for the file copies", () => {
+    // backups/uploads/ is where the media directory is copied. A database of
+    // that name would share it, so weekly eligibility and retention would mix
+    // .sqlite snapshots with directory copies.
+    makeDb(join(dataDir(), "uploads.sqlite"));
+    mkdirSync(join(dataDir(), "uploads"), { recursive: true });
+    writeFileSync(join(dataDir(), "uploads", "abc.png"), "pixels");
+
+    let failure;
+    try {
+      run();
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toBeDefined();
+    expect(failure.status).toBe(1);
+    const stderr = String(failure.stderr);
+    expect(stderr).toContain('A database is named "uploads"');
+    expect(stderr).toContain(join(dataDir(), "uploads.sqlite"));
+    const written = existsSync(backupDir())
+      ? readdirSync(backupDir()).filter((f) => f !== ".lock")
+      : [];
+    expect(written).toEqual([]);
+  });
+
   // flock(1) is util-linux; the script degrades to running unlocked without it.
   const onLinux = it.runIf(process.platform === "linux");
   const lockPath = () => join(backupDir(), ".lock");

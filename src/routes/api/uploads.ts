@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { MAX_UPLOAD_BYTES, formatBytes } from "@/lib/uploads";
+import { MAX_UPLOAD_BYTES, declaredUploadBytes, formatBytes } from "@/lib/uploads";
 import { getUploadStore, uploadFromRequest } from "@/server/uploads";
 
 const tooLarge = `A file may be at most ${formatBytes(MAX_UPLOAD_BYTES)}.`;
@@ -12,8 +12,12 @@ export const Route = createFileRoute("/api/uploads")({
     handlers: {
       POST: async ({ request }) => {
         // Refused on the declared length before the body is read, so an
-        // oversized video is not buffered into memory only to be rejected.
-        const declared = Number(request.headers.get("content-length") ?? 0);
+        // oversized or undeclared body is not buffered into memory only to
+        // be rejected. Missing, zero, and non-integer lengths are treated
+        // as undeclared; browsers and curl -F always send a real length.
+        const declared = declaredUploadBytes(request.headers.get("content-length"));
+        if (declared == null)
+          return Response.json({ error: "The upload could not be read." }, { status: 400 });
         if (declared > MAX_UPLOAD_BYTES + BODY_ALLOWANCE)
           return Response.json({ error: tooLarge }, { status: 413 });
 

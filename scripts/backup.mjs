@@ -36,6 +36,10 @@ const backupDir = process.env.HQ_BACKUP_DIR ?? join(root, "backups");
 
 const KEEP = { daily: 7, weekly: 4 };
 
+// Reserved: media copies live under backups/uploads/, so a database of that
+// name would share the directory and mix retention with the file snapshots.
+const UPLOADS_LABEL = "uploads";
+
 const LOCK_CONFLICT = 75;
 
 /**
@@ -150,7 +154,9 @@ function sources() {
   // a distinct name for them is guesswork, and the guessing is what produced
   // silent data loss twice: a dropped database, and one stealing another's
   // history. An ambiguous configuration is refused instead, loudly and before
-  // anything is written.
+  // anything is written. The uploads label is reserved the same way: media
+  // copies live under it, and sharing it would mix retention and weekly
+  // eligibility with a database of that name.
   const byLabel = new Map();
   for (const path of [...found].sort()) {
     const label = basename(path, ".sqlite");
@@ -162,6 +168,13 @@ function sources() {
       );
     }
     byLabel.set(label, path);
+  }
+  const reserved = byLabel.get(UPLOADS_LABEL);
+  if (reserved) {
+    throw new Error(
+      `A database is named "${UPLOADS_LABEL}":\n  ${reserved}\n` +
+        "That name is reserved for Content's uploaded files. Rename the database, or move it out of the directories being scanned.",
+    );
   }
   return { byLabel, missing };
 }
@@ -187,8 +200,6 @@ function stamp(date) {
 }
 
 const tierDir = (label, tier) => join(backupDir, label, tier);
-
-const UPLOADS_LABEL = "uploads";
 
 // A finished snapshot: a verified database, or a complete copy of the uploads
 // directory. A staged .tmp is deliberately neither.
