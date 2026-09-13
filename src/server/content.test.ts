@@ -256,10 +256,84 @@ describe("page document validation", () => {
     expect(validateContentDocument(JSON.parse(JSON.stringify(table)))).toBe(true);
   });
 
-  it("rejects media blocks, unsafe links, and unknown fields", () => {
+  it("accepts an image, a video, and a file block", () => {
+    const media = [
+      {
+        id: randomUUID(),
+        type: "image",
+        props: {
+          backgroundColor: "default",
+          textAlignment: "left",
+          name: "shot.png",
+          url: "/api/uploads/" + "a".repeat(64) + ".png",
+          caption: "The board",
+          showPreview: true,
+          previewWidth: 512,
+        },
+        children: [],
+      },
+      {
+        id: randomUUID(),
+        type: "video",
+        props: {
+          backgroundColor: "default",
+          textAlignment: "left",
+          name: "clip.mp4",
+          url: "/api/uploads/" + "b".repeat(64) + ".mp4",
+          caption: "",
+          showPreview: true,
+          previewWidth: undefined,
+        },
+        children: [],
+      },
+      {
+        id: randomUUID(),
+        type: "file",
+        props: {
+          backgroundColor: "default",
+          name: "plan.pdf",
+          url: "https://example.com/plan.pdf",
+          caption: "",
+        },
+        children: [],
+      },
+    ];
+    expect(validateContentDocument(media)).toBe(true);
+    expect(validateContentDocument(JSON.parse(JSON.stringify(media)))).toBe(true);
+  });
+
+  it("rejects malformed media blocks, unsafe links, and unknown fields", () => {
     expect(
       validateContentDocument([
         { id: randomUUID(), type: "image", props: {}, content: undefined, children: [] },
+      ]),
+    ).toBe(false);
+    expect(
+      validateContentDocument([
+        {
+          id: randomUUID(),
+          type: "image",
+          props: {
+            backgroundColor: "default",
+            textAlignment: "left",
+            name: "shot.png",
+            url: "javascript:alert(1)",
+            caption: "",
+            showPreview: true,
+            previewWidth: 512,
+          },
+          children: [],
+        },
+      ]),
+    ).toBe(false);
+    expect(
+      validateContentDocument([
+        {
+          id: randomUUID(),
+          type: "audio",
+          props: { backgroundColor: "default", name: "podcast.mp3", url: "", caption: "" },
+          children: [],
+        },
       ]),
     ).toBe(false);
     expect(

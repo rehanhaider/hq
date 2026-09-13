@@ -1,6 +1,7 @@
 import {
   cloneElement,
   isValidElement,
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -16,8 +17,9 @@ import {
 } from "@blocknote/core";
 import { useCreateBlockNote } from "@blocknote/react";
 import { BlockNoteView, ShadCNDefaultComponents } from "@blocknote/shadcn";
-import { Download, Link as LinkIcon, Upload } from "lucide-react";
-import { validateContentDocument, type ContentBlock, type PageDetail } from "@/lib/content";
+import { Link as LinkIcon } from "lucide-react";
+import type { ContentBlock, PageDetail } from "@/lib/content";
+import { MAX_UPLOAD_BYTES, formatBytes, uploadRejection } from "@/lib/uploads";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -33,10 +35,7 @@ import { useUI } from "@/store/ui";
 const {
   audio: _audio,
   divider: _divider,
-  file: _file,
-  image: _image,
   toggleListItem: _toggleListItem,
-  video: _video,
   ...noteBlockSpecs
 } = defaultBlockSpecs;
 const { bold, italic, underline } = defaultStyleSpecs;
@@ -92,11 +91,6 @@ function DragSafeDropdownMenuTrigger({
   return <DefaultDropdownMenuTrigger render={child} {...props} />;
 }
 
-function downloadName(title: string) {
-  const safe = title.trim().replace(/[^\p{L}\p{N}._-]+/gu, "-").replace(/^-+|-+$/g, "");
-  return `${safe || "page"}.md`;
-}
-
 function normalizedLink(value: string) {
   const link = value.trim();
   if (!link) return null;
@@ -109,22 +103,82 @@ export function ContentEditor({
   page,
   editable = true,
   onDocumentChange,
+  onUploadStart,
+  onUploadEnd,
 }: {
   page: PageDetail;
   editable?: boolean;
   onDocumentChange: (document: ContentBlock[]) => void;
+  onUploadStart?: () => void;
+  onUploadEnd?: () => void;
 }) {
   const ui = useUI();
-  const file = useRef<HTMLInputElement>(null);
   const editorHost = useRef<HTMLDivElement>(null);
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
   const [linkText, setLinkText] = useState("");
   const [linkError, setLinkError] = useState("");
-  const [importError, setImportError] = useState("");
+  const [uploadError, setUploadError] = useState("");
   const linkPosition = useRef<number | undefined>(undefined);
   const editingExistingLink = useRef(false);
-  const importRun = useRef(0);
+  const pageId = page.id;
+  const onUploadStartRef = useRef(onUploadStart);
+  const onUploadEndRef = useRef(onUploadEnd);
+  const onDocumentChangeRef = useRef(onDocumentChange);
+  onUploadStartRef.current = onUploadStart;
+  onUploadEndRef.current = onUploadEnd;
+  onDocumentChangeRef.current = onDocumentChange;
+  const editorRef = useRef<ReturnType<typeof useCreateBlockNote> | null>(null);
+
+  /**
+   * Where a pasted, dropped, or chosen file goes. The editor only learns that
+   * an upload failed, so the reason is kept here and shown under the page.
+   *
+   * The URL is written onto the block before this returns, so a page change
+   * that waited for the POST still has something to save. BlockNote would do
+   * the same write after we return, which is then a no-op.
+   */
+  const uploadFile = useCallback(
+    async (selected: File, blockId?: string) => {
+      const refusal = uploadRejection({
+        name: selected.name,
+        mime: selected.type,
+        size: selected.size,
+      });
+      if (refusal) {
+        setUploadError(refusal);
+        throw new Error(refusal);
+      }
+      onUploadStartRef.current?.();
+      const body = new FormData();
+      body.append("file", selected);
+      body.append("pageId", pageId);
+      try {
+        const response = await fetch("/api/uploads", { method: "POST", body });
+        const payload = (await response.json()) as { url?: string; error?: string };
+        if (!response.ok || !payload?.url)
+          throw new Error(payload?.error || "The file could not be uploaded.");
+        const current = editorRef.current;
+        if (blockId && current?.getBlock(blockId)) {
+          current.updateBlock(blockId, { props: { url: payload.url } });
+          onDocumentChangeRef.current(current.document as unknown as ContentBlock[]);
+        }
+        setUploadError("");
+        return payload.url;
+      } catch (error) {
+        const message =
+          error instanceof Error && error.message
+            ? error.message
+            : "The file could not be uploaded.";
+        setUploadError(message);
+        throw new Error(message);
+      } finally {
+        onUploadEndRef.current?.();
+      }
+    },
+    [pageId],
+  );
+
   const editor = useCreateBlockNote({
     schema: noteSchema,
     initialContent: page.document as PartialBlock<
@@ -135,8 +189,10 @@ export function ContentEditor({
     links: {
       isValidLink: (href) => normalizedLink(href) === href,
     },
+    uploadFile,
     defaultStyles: true,
   });
+  editorRef.current = editor;
 
   useEffect(() => {
     const host = editorHost.current;
@@ -159,17 +215,6 @@ export function ContentEditor({
     return () => host.removeEventListener("keydown", keydown, true);
   }, [editable, editor]);
 
-  useEffect(
-    () => () => {
-      importRun.current += 1;
-    },
-    [],
-  );
-
-  useEffect(() => {
-    if (!editable) importRun.current += 1;
-  }, [editable]);
-
   const saveLink = () => {
     const href = normalizedLink(linkUrl);
     if (!href) {
@@ -190,16 +235,6 @@ export function ContentEditor({
     editor.focus();
   };
 
-  const exportMarkdown = () => {
-    const markdown = editor.blocksToMarkdownLossy();
-    const url = URL.createObjectURL(new Blob([markdown], { type: "text/markdown;charset=utf-8" }));
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = downloadName(page.title);
-    anchor.click();
-    URL.revokeObjectURL(url);
-  };
-
   return (
     <div className="content-editor-shell" ref={editorHost}>
       <BlockNoteView
@@ -218,65 +253,15 @@ export function ContentEditor({
         className="min-h-[28rem]"
         data-testid="content-editor"
       />
-      <div className="flex flex-wrap items-center gap-2 border-t px-3 py-2 sm:px-4">
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={!editable}
-          onClick={() => file.current?.click()}
-        >
-          <Upload /> Import .md
-        </Button>
-        <input
-          ref={file}
-          className="sr-only"
-          type="file"
-          accept=".md,text/markdown,text/plain"
-          aria-label="Import Markdown file"
-          disabled={!editable}
-          onChange={async (event) => {
-            const input = event.currentTarget;
-            const selected = input.files?.[0];
-            if (!selected) return;
-            const run = ++importRun.current;
-            const original = editor.document;
-            let replacing = false;
-            try {
-              const markdown = await selected.text();
-              if (run !== importRun.current) return;
-              const blocks = editor.tryParseMarkdownToBlocks(markdown);
-              if (!validateContentDocument(blocks))
-                throw new Error("This Markdown file contains content this editor cannot save.");
-              replacing = true;
-              editor.replaceBlocks(editor.document, blocks);
-              if (run !== importRun.current) return;
-              onDocumentChange(editor.document as unknown as ContentBlock[]);
-              setImportError("");
-            } catch (error) {
-              if (run !== importRun.current) return;
-              if (replacing && editor.document !== original)
-                editor.replaceBlocks(editor.document, original);
-              setImportError(
-                error instanceof Error && error.message.startsWith("This Markdown file")
-                  ? error.message
-                  : "The Markdown file could not be imported.",
-              );
-            } finally {
-              if (run === importRun.current) input.value = "";
-            }
-          }}
-        />
-        <Button variant="outline" size="sm" onClick={exportMarkdown}>
-          <Download /> Export .md
-        </Button>
-        <span className="ml-auto hidden text-xs text-muted-foreground sm:inline">
-          Type / for blocks
-        </span>
+      <div className="flex flex-wrap items-center gap-2 border-t px-3 py-2 text-xs text-muted-foreground sm:px-4">
+        <span>Type / for blocks, or drop an image, video, or file onto the page.</span>
+        <span className="ml-auto hidden sm:inline">Up to {formatBytes(MAX_UPLOAD_BYTES)} a file</span>
       </div>
-      {importError && <p className="bg-destructive/10 px-4 py-2 text-xs text-destructive" role="alert">{importError}</p>}
-      <p className="px-4 pb-3 text-xs leading-5 text-muted-foreground">
-        Markdown is a portable copy and may simplify tables or rich formatting. The saved page keeps the full block document.
-      </p>
+      {uploadError && (
+        <p className="bg-destructive/10 px-4 py-2 text-xs text-destructive" role="alert">
+          {uploadError}
+        </p>
+      )}
       <Dialog
         open={linkOpen}
         onOpenChange={(open) => {

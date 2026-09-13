@@ -8,6 +8,7 @@ import { github } from "./github";
 import { ensureRefreshLoop, startImport } from "./import";
 import { getDeenStore } from "./deen";
 import { getContentStore } from "./content";
+import { getUploadStore } from "./uploads";
 import {
   DEEN_CONTENT,
   calculateAdherence,
@@ -179,6 +180,19 @@ export const trashPage = createServerFn({ method: "POST" })
 export const restorePage = createServerFn({ method: "POST" })
   .validator(changePageStateSchema)
   .handler(({ data }) => getContentStore().restore(data.id, data.revision));
+/**
+ * The only paths that delete a file. Trashing keeps everything a page holds,
+ * because a restore has to bring it back whole.
+ */
+export const deletePageForever = createServerFn({ method: "POST" })
+  .validator(changePageStateSchema)
+  .handler(({ data }) => {
+    const result = getUploadStore().deletePageForever(data.id, data.revision);
+    return result.ok ? { ok: true as const } : { ok: false as const, code: result.code };
+  });
+export const emptyContentTrash = createServerFn({ method: "POST" }).handler(() =>
+  getUploadStore().emptyTrash(),
+);
 
 export const getConnections = createServerFn({ method: "GET" }).handler(() => {
   ensureRefreshLoop();

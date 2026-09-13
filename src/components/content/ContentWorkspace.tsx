@@ -9,15 +9,7 @@ import {
 } from "react";
 import { ClientOnly, useBlocker, useNavigate, useSearch } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  ArrowLeft,
-  ChevronRight,
-  FilePlus2,
-  FileText,
-  RotateCcw,
-  Search,
-  Trash2,
-} from "lucide-react";
+import { ArrowLeft, ChevronRight, FilePlus2, FileText, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -27,7 +19,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import {
   filterPages,
   hasFilters,
@@ -36,6 +27,7 @@ import {
   type ContentProperties,
   type PageDetail,
 } from "@/lib/content";
+import { createUploadGate } from "@/lib/uploads";
 import {
   contentKeys,
   contentPropertiesQuery,
@@ -45,12 +37,12 @@ import {
 import {
   createContentProperty,
   createPage,
-  restorePage,
   savePage,
   setPageProperties,
   trashPage,
 } from "@/server/fns";
 import { ContentToolbar, type ToolbarPatch } from "./ContentToolbar";
+import { SearchBox } from "./SearchBox";
 import { PropertyPanel, type PropertyPatch } from "./PropertyPanel";
 
 const ContentEditor = lazy(() =>
@@ -98,18 +90,18 @@ function pageRows(pages: ContentPage[], searching: boolean) {
   return rows;
 }
 
-export function ContentWorkspace({ trashed }: { trashed: boolean }) {
+export function ContentWorkspace() {
   const search = useSearch({ from: "/content" });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const list = useQuery(pagesQuery(search.q, trashed));
+  const list = useQuery(pagesQuery(search.q));
   const propertyQuery = useQuery(contentPropertiesQuery);
   const properties: ContentProperties = propertyQuery.data ?? {
     statuses: [],
     types: [],
     tags: [],
   };
-  const selectedId = trashed ? undefined : search.page;
+  const selectedId = search.page;
   const detail = useQuery(pageQuery(selectedId ?? ""));
   const [draft, setDraft] = useState<PageDetail | null>(null);
   const draftRef = useRef<PageDetail | null>(null);
@@ -127,6 +119,17 @@ export function ContentWorkspace({ trashed }: { trashed: boolean }) {
   const [actionError, setActionError] = useState("");
   const staleRevision = useRef<number | null>(null);
   const recoveringRef = useRef(false);
+  const uploads = useRef(createUploadGate()).current;
+  const [uploadBusy, setUploadBusy] = useState(false);
+
+  const onUploadStart = useCallback(() => {
+    uploads.start();
+    setUploadBusy(true);
+  }, [uploads]);
+  const onUploadEnd = useCallback(() => {
+    uploads.end();
+    setUploadBusy(uploads.busy);
+  }, [uploads]);
 
   const applyFreshDetail = useCallback(
     (next: PageDetail) => {
@@ -138,6 +141,7 @@ export function ContentWorkspace({ trashed }: { trashed: boolean }) {
         (next.revision <= current.revision ||
           saved.current < changed.current ||
           drainPromise.current !== null ||
+          uploads.busy ||
           recoveringRef.current)
       )
         return false;
@@ -170,7 +174,12 @@ export function ContentWorkspace({ trashed }: { trashed: boolean }) {
     }
     if (drainPromise.current) return drainPromise.current;
     const work = (async () => {
-      while (saved.current < changed.current) {
+      for (;;) {
+        await uploads.idle();
+        if (saved.current >= changed.current) {
+          setSaveState("saved");
+          return true;
+        }
         const sequence = changed.current;
         const snapshot = draftRef.current;
         if (!snapshot) return true;
@@ -236,8 +245,6 @@ export function ContentWorkspace({ trashed }: { trashed: boolean }) {
           return false;
         }
       }
-      setSaveState("saved");
-      return true;
     })();
     drainPromise.current = work;
     void work.finally(() => {
@@ -268,7 +275,8 @@ export function ContentWorkspace({ trashed }: { trashed: boolean }) {
     [drain],
   );
 
-  const hasUnsaved = saveState !== "saved" || saved.current < changed.current;
+  const hasUnsaved =
+    saveState !== "saved" || saved.current < changed.current || uploadBusy;
   const blocker = useBlocker({
     shouldBlockFn: ({ current, next }) => {
       const currentPage = (current.search as { page?: string }).page;
@@ -277,22 +285,19 @@ export function ContentWorkspace({ trashed }: { trashed: boolean }) {
     },
     enableBeforeUnload: () => hasUnsaved,
     withResolver: true,
-    disabled: trashed,
   });
 
   // The server already searched titles and body text, so only the property
   // filters are applied here. Filtering flattens the tree: a match whose parent
   // was filtered out still has to be reachable.
   const rows = useMemo(() => {
-    const pages = trashed
-      ? (list.data ?? [])
-      : filterPages(list.data ?? [], {
-          status: search.status,
-          type: search.type,
-          tag: search.tag,
-        });
+    const pages = filterPages(list.data ?? [], {
+      status: search.status,
+      type: search.type,
+      tag: search.tag,
+    });
     return pageRows(pages, Boolean(search.q) || hasFilters({ ...search, q: undefined }));
-  }, [list.data, search, trashed]);
+  }, [list.data, search]);
 
   const updateSearch = (patch: ToolbarPatch) =>
     void navigate({
@@ -380,6 +385,7 @@ export function ContentWorkspace({ trashed }: { trashed: boolean }) {
 
   const saveAsNewPage = async (openCopy = true) => {
     if (recoveringRef.current) return false;
+    await uploads.idle();
     const snapshot = draftRef.current;
     if (!snapshot) return false;
     recoveringRef.current = true;
@@ -425,57 +431,6 @@ export function ContentWorkspace({ trashed }: { trashed: boolean }) {
     }
   };
 
-  if (trashed)
-    return (
-      <section aria-labelledby="trash-heading">
-        <header className="page-header">
-          <div>
-            <h1 id="trash-heading" className="page-title">Trash</h1>
-            <p className="page-description">Restore pages to their original place in the page tree. Trashed pages never appear on the board.</p>
-          </div>
-        </header>
-        <SearchBox value={search.q ?? ""} onChange={(q) => void navigate({ to: "/content/trash", search: { ...search, q: q || undefined, page: undefined }, replace: true })} label="Search trash" />
-        {actionError && <p className="mt-3 rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert">{actionError}</p>}
-        <div className="panel mt-4 divide-y">
-          {list.isPending ? (
-            <p className="p-4 text-muted-foreground">Loading trash…</p>
-          ) : rows.length ? (
-            rows.map(({ page }) => (
-              <div key={page.id} className="flex min-h-14 items-center gap-3 px-4 py-2">
-                <FileText className="size-4 shrink-0 text-muted-foreground" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium">{page.title}</p>
-                  <p className="truncate text-xs text-muted-foreground">{page.preview || "Empty page"}</p>
-                </div>
-                <Button
-                  variant="outline"
-                  onClick={async () => {
-                    try {
-                      const result = await restorePage({ data: { id: page.id, revision: page.revision } });
-                      if (result.ok) {
-                        setActionError("");
-                        await queryClient.invalidateQueries({ queryKey: contentKeys.all });
-                      } else {
-                        setActionError("This page changed before it could be restored. The list has been refreshed.");
-                        void list.refetch();
-                      }
-                    } catch (error) {
-                      setActionError(readableError(error, "The page could not be restored."));
-                    }
-                  }}
-                  aria-label={`Restore ${page.title}`}
-                >
-                  <RotateCcw /> Restore
-                </Button>
-              </div>
-            ))
-          ) : (
-            <p className="p-6 text-center text-muted-foreground">{search.q ? "No trashed pages match your search." : "Trash is empty."}</p>
-          )}
-        </div>
-      </section>
-    );
-
   return (
     <section aria-labelledby="content-heading">
       <header className="page-header">
@@ -503,7 +458,7 @@ export function ContentWorkspace({ trashed }: { trashed: boolean }) {
         />
       </div>
       <div className="content-workspace mt-4">
-        <aside className={`${selectedId ? "hidden md:flex" : "flex"} min-h-[34rem] flex-col border-r bg-card`} aria-label="Content pages">
+        <aside className={`${selectedId ? "hidden lg:flex" : "flex"} min-h-[34rem] flex-col border-r bg-card`} aria-label="Content pages">
           <div className="min-h-0 flex-1 overflow-y-auto px-2 py-3">
             {list.isPending ? (
               <p className="p-3 text-muted-foreground">Loading pages…</p>
@@ -527,7 +482,7 @@ export function ContentWorkspace({ trashed }: { trashed: boolean }) {
             )}
           </div>
         </aside>
-        <div className={`${selectedId ? "block" : "hidden md:block"} min-w-0 bg-card`}>
+        <div className={`${selectedId ? "block" : "hidden lg:block"} min-w-0 bg-card`}>
           {!selectedId ? (
             <div className="flex min-h-[34rem] items-center justify-center p-6 text-center text-muted-foreground">
               <div><FileText className="mx-auto mb-3 size-8" /><p>Choose a page or create one.</p></div>
@@ -545,7 +500,7 @@ export function ContentWorkspace({ trashed }: { trashed: boolean }) {
           ) : (
             <div>
               <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2 sm:px-4">
-                <Button variant="ghost" size="icon" className="md:hidden" disabled={recovering} aria-label="Back to page list" onClick={() => void selectPage(undefined)}><ArrowLeft /></Button>
+                <Button variant="ghost" size="icon" className="lg:hidden" disabled={recovering} aria-label="Back to page list" onClick={() => void selectPage(undefined)}><ArrowLeft /></Button>
                 <span className="flex-1" />
                 <span className={`text-xs ${saveState === "error" ? "text-destructive" : "text-muted-foreground"}`} role="status" aria-live="polite">
                   {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved" : saveState === "error" ? "Save failed" : "Unsaved"}
@@ -667,6 +622,8 @@ export function ContentWorkspace({ trashed }: { trashed: boolean }) {
                     key={`${draft.id}:${editorGeneration}`}
                     page={draft}
                     editable={!recovering}
+                    onUploadStart={onUploadStart}
+                    onUploadEnd={onUploadEnd}
                     onDocumentChange={(document: ContentBlock[]) => {
                       const current = draftRef.current;
                       if (
@@ -709,14 +666,5 @@ export function ContentWorkspace({ trashed }: { trashed: boolean }) {
         </DialogContent>
       </Dialog>
     </section>
-  );
-}
-
-function SearchBox({ value, onChange, label }: { value: string; onChange: (value: string) => void; label: string }) {
-  return (
-    <label className="relative m-3 block">
-      <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-      <Input aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} placeholder="Search pages" className="pl-8" />
-    </label>
   );
 }

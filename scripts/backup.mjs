@@ -11,10 +11,16 @@
 // Each database gets its own directory. Retention and weekly scheduling are
 // then scoped by directory rather than by filename prefix, so one database can
 // neither prune nor suppress the backups of another.
+//
+// The Content pages link to uploaded images, videos, and files, which live in a
+// directory rather than in SQLite. They are copied under the same tiers and the
+// same retention, because a page whose pictures are missing is only half a
+// restore.
 
 import { DatabaseSync } from "node:sqlite";
 import { spawnSync } from "node:child_process";
 import {
+  cpSync,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -29,6 +35,10 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const backupDir = process.env.HQ_BACKUP_DIR ?? join(root, "backups");
 
 const KEEP = { daily: 7, weekly: 4 };
+
+// Reserved: media copies live under backups/uploads/, so a database of that
+// name would share the directory and mix retention with the file snapshots.
+const UPLOADS_LABEL = "uploads";
 
 const LOCK_CONFLICT = 75;
 
@@ -144,7 +154,9 @@ function sources() {
   // a distinct name for them is guesswork, and the guessing is what produced
   // silent data loss twice: a dropped database, and one stealing another's
   // history. An ambiguous configuration is refused instead, loudly and before
-  // anything is written.
+  // anything is written. The uploads label is reserved the same way: media
+  // copies live under it, and sharing it would mix retention and weekly
+  // eligibility with a database of that name.
   const byLabel = new Map();
   for (const path of [...found].sort()) {
     const label = basename(path, ".sqlite");
@@ -157,7 +169,31 @@ function sources() {
     }
     byLabel.set(label, path);
   }
+  const reserved = byLabel.get(UPLOADS_LABEL);
+  if (reserved) {
+    throw new Error(
+      `A database is named "${UPLOADS_LABEL}":\n  ${reserved}\n` +
+        "That name is reserved for Content's uploaded files. Rename the database, or move it out of the directories being scanned.",
+    );
+  }
   return { byLabel, missing };
+}
+
+/**
+ * The uploaded files the Content pages point at. HQ_UPLOADS_DIR moves them the
+ * way the database variables move a database, and, like those, a directory
+ * named explicitly must exist: silently skipping it would report healthy runs
+ * while every image went unsaved. A missing default has simply not been written
+ * to yet.
+ */
+function uploadsSource() {
+  // Blank is unset, matching the database variables: HQ_UPLOADS_DIR= in an
+  // env file is not a path, and resolve("") is the working directory.
+  const named = process.env.HQ_UPLOADS_DIR?.trim();
+  const path = resolve(named || "data/uploads");
+  if (named && !existsSync(path))
+    return { path, missing: { env: "HQ_UPLOADS_DIR", path } };
+  return { path: existsSync(path) ? path : null, missing: null };
 }
 
 function stamp(date) {
@@ -167,10 +203,17 @@ function stamp(date) {
 
 const tierDir = (label, tier) => join(backupDir, label, tier);
 
+// A finished snapshot: a verified database, or a complete copy of the uploads
+// directory. A staged .tmp is deliberately neither.
+const isSnapshot = (label, name) =>
+  label === UPLOADS_LABEL
+    ? name.startsWith(`${UPLOADS_LABEL}-`) && !name.endsWith(".tmp")
+    : name.endsWith(".sqlite");
+
 function snapshots(label, tier) {
   try {
     return readdirSync(tierDir(label, tier))
-      .filter((f) => f.endsWith(".sqlite"))
+      .filter((name) => isSnapshot(label, name))
       .sort();
   } catch {
     return [];
@@ -182,7 +225,7 @@ function snapshots(label, tier) {
 function prune(label, tier, keep) {
   const dir = tierDir(label, tier);
   for (const stale of snapshots(label, tier).reverse().slice(keep)) {
-    rmSync(join(dir, stale));
+    rmSync(join(dir, stale), { recursive: true, force: true });
     console.log(`  pruned ${label}/${tier}/${stale}`);
   }
 }
@@ -273,6 +316,39 @@ function snapshot(sourcePath, label, tier, at) {
   prune(label, tier, KEEP[tier]);
 }
 
+/**
+ * Copies the uploads directory whole. Staged under a name nothing counts and
+ * renamed into place, for the same reason the databases are: a copy interrupted
+ * halfway must not be mistaken for a complete one.
+ */
+function snapshotUploads(source, tier, at) {
+  const dir = tierDir(UPLOADS_LABEL, tier);
+  mkdirSync(dir, { recursive: true });
+
+  let name = stamp(at);
+  for (let n = 2; existsSync(join(dir, `${UPLOADS_LABEL}-${name}`)); n++) {
+    name = `${stamp(at)}-${n}`;
+  }
+  const target = join(dir, `${UPLOADS_LABEL}-${name}`);
+  const staged = `${target}.tmp`;
+
+  for (const file of readdirSync(dir)) {
+    if (file.endsWith(".tmp")) rmSync(join(dir, file), { recursive: true, force: true });
+  }
+
+  try {
+    cpSync(source, staged, { recursive: true });
+  } catch (error) {
+    rmSync(staged, { recursive: true, force: true });
+    throw error;
+  }
+  renameSync(staged, target);
+
+  const count = readdirSync(target).length;
+  console.log(`  ${UPLOADS_LABEL}/${tier}/${basename(target)} (${count} file${count === 1 ? "" : "s"})`);
+  prune(UPLOADS_LABEL, tier, KEEP[tier]);
+}
+
 const relayed = runUnderFlock();
 if (relayed !== null) process.exit(relayed);
 
@@ -298,6 +374,7 @@ if (!byLabel.size) {
   process.exit(1);
 }
 
+
 for (const [label, path] of byLabel) {
   const tiers = weeklyIsDue(label, now) ? ["daily", "weekly"] : ["daily"];
   console.log(`${label} <- ${path} (${tiers.join(", ")})`);
@@ -307,6 +384,23 @@ for (const [label, path] of byLabel) {
     } catch (error) {
       failed++;
       console.error(`  FAILED ${label}/${tier}: ${error.message}`);
+    }
+  }
+}
+
+const media = uploadsSource();
+if (media.missing) {
+  failed++;
+  console.error(`FAILED ${media.missing.env}: ${media.missing.path} does not exist`);
+} else if (media.path) {
+  const tiers = weeklyIsDue(UPLOADS_LABEL, now) ? ["daily", "weekly"] : ["daily"];
+  console.log(`${UPLOADS_LABEL} <- ${media.path} (${tiers.join(", ")})`);
+  for (const tier of tiers) {
+    try {
+      snapshotUploads(media.path, tier, now);
+    } catch (error) {
+      failed++;
+      console.error(`  FAILED ${UPLOADS_LABEL}/${tier}: ${error.message}`);
     }
   }
 }

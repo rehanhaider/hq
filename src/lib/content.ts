@@ -65,6 +65,16 @@ export type PageDetail = ContentPage & {
   document: ContentBlock[];
 };
 
+/** A file attached to a page. The id is its content hash plus an extension. */
+export type StoredUpload = {
+  id: string;
+  pageId: string;
+  name: string;
+  mime: string;
+  size: number;
+  createdAt: string;
+};
+
 const idSchema = z.string().uuid();
 export const pageTitleSchema = z.string().trim().min(1).max(200);
 export const propertyNameSchema = z.string().trim().min(1).max(60);
@@ -183,7 +193,12 @@ const supportedBlockTypes = new Set([
   "quote",
   "codeBlock",
   "table",
+  "image",
+  "video",
+  "file",
 ]);
+/** Blocks that hold a file rather than text: no inline content, a url instead. */
+const fileBlockTypes = new Set(["image", "video", "file"]);
 const alignments = new Set(["left", "center", "right", "justify"]);
 const allowedProtocols = new Set(["http:", "https:", "mailto:", "tel:"]);
 
@@ -240,9 +255,54 @@ function validateInline(value: unknown, totals: { text: number }): boolean {
   return value.content.every((item) => validateStyledText(item, totals));
 }
 
+/**
+ * An image, video, or file block. The url is either one of this app's own
+ * uploads or a link the editor's embed tab accepted, so it is held to the same
+ * protocols as a link, and the preview width has to be a real pixel count.
+ */
+function validateFileProps(type: string, value: Record<string, unknown>) {
+  const keys =
+    type === "file"
+      ? ["backgroundColor", "name", "url", "caption"]
+      : [
+          "backgroundColor",
+          "textAlignment",
+          "name",
+          "url",
+          "caption",
+          "showPreview",
+          "previewWidth",
+        ];
+  if (!hasOnlyKeys(value, keys)) return false;
+  if (typeof value.backgroundColor !== "string" || value.backgroundColor.length > 64)
+    return false;
+  if (
+    "textAlignment" in value &&
+    (typeof value.textAlignment !== "string" || !alignments.has(value.textAlignment))
+  )
+    return false;
+  for (const text of [value.name, value.caption])
+    if (typeof text !== "string" || text.length > 2_048) return false;
+  if (typeof value.url !== "string" || (value.url !== "" && !isSafeLink(value.url)))
+    return false;
+  if ("showPreview" in value && typeof value.showPreview !== "boolean") return false;
+  if (
+    "previewWidth" in value &&
+    value.previewWidth !== undefined &&
+    value.previewWidth !== null &&
+    (typeof value.previewWidth !== "number" ||
+      !Number.isFinite(value.previewWidth) ||
+      value.previewWidth <= 0 ||
+      value.previewWidth > 10_000)
+  )
+    return false;
+  return true;
+}
+
 function validateProps(type: string, value: unknown) {
   if (!isObject(value)) return false;
   const base = ["backgroundColor", "textColor", "textAlignment"];
+  if (fileBlockTypes.has(type)) return validateFileProps(type, value);
   const keys =
     type === "heading"
       ? [...base, "level", "isToggleable"]
@@ -354,6 +414,9 @@ export function validateContentDocument(value: unknown): value is ContentBlock[]
         !visit(item.children, depth + 1)
       )
         return false;
+      // A file block carries its file in props and has no inline content.
+      if (fileBlockTypes.has(item.type))
+        return item.content === undefined || (Array.isArray(item.content) && !item.content.length);
       if (item.type === "table") return validateTable(item.content, totals);
       if (item.type === "codeBlock") {
         return (

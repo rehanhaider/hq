@@ -4,6 +4,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   readdirSync,
   rmSync,
   utimesSync,
@@ -19,12 +20,14 @@ let dir;
 
 const dataDir = () => join(dir, "data");
 const backupDir = () => join(dir, "backups");
-// Only finished snapshots: a staged .tmp is deliberately not one.
+// Only finished snapshots: a staged .tmp is deliberately not one. Uploads are
+// copied as a directory rather than vacuumed into a file, so they are named
+// rather than suffixed.
 const listed = (label, tier) => {
+  const finished = (name) =>
+    label === "uploads" ? name.startsWith("uploads-") && !name.endsWith(".tmp") : name.endsWith(".sqlite");
   try {
-    return readdirSync(join(backupDir(), label, tier))
-      .filter((f) => f.endsWith(".sqlite"))
-      .sort();
+    return readdirSync(join(backupDir(), label, tier)).filter(finished).sort();
   } catch {
     return [];
   }
@@ -110,6 +113,59 @@ describe("backup", () => {
     expect(listed("content", "daily")[0]).toBeDefined();
   });
 
+  it("copies the uploads directory beside the databases", () => {
+    // A page whose pictures are missing is only half a restore, and the files
+    // live in a directory rather than in any of the databases.
+    mkdirSync(join(dataDir(), "uploads"), { recursive: true });
+    writeFileSync(join(dataDir(), "uploads", "abc.png"), "pixels");
+    run();
+    const copy = listed("uploads", "daily")[0];
+    expect(copy).toBeDefined();
+    expect(
+      readFileSync(join(backupDir(), "uploads", "daily", copy, "abc.png"), "utf8"),
+    ).toBe("pixels");
+    expect(listed("uploads", "weekly")).toHaveLength(1);
+  });
+
+  it("follows HQ_UPLOADS_DIR and keeps 7 daily copies of it", () => {
+    const moved = join(dir, "media");
+    mkdirSync(moved, { recursive: true });
+    writeFileSync(join(moved, "abc.png"), "pixels");
+    for (let i = 0; i < 9; i++) run({ HQ_UPLOADS_DIR: moved });
+    expect(listed("uploads", "daily")).toHaveLength(7);
+  });
+
+  it("treats a blank HQ_UPLOADS_DIR as unset rather than the working directory", () => {
+    // resolve("") is cwd. Copying that would put .env, including GITHUB_TOKEN,
+    // into backups/uploads/. Blank matches how the database variables work.
+    writeFileSync(join(dir, "secret.env"), "GITHUB_TOKEN=x");
+    mkdirSync(join(dataDir(), "uploads"), { recursive: true });
+    writeFileSync(join(dataDir(), "uploads", "abc.png"), "pixels");
+    run({ HQ_UPLOADS_DIR: "" });
+    const copy = listed("uploads", "daily")[0];
+    expect(copy).toBeDefined();
+    expect(
+      readFileSync(join(backupDir(), "uploads", "daily", copy, "abc.png"), "utf8"),
+    ).toBe("pixels");
+    expect(existsSync(join(backupDir(), "uploads", "daily", copy, "secret.env"))).toBe(
+      false,
+    );
+  });
+
+  it("fails when the configured uploads directory does not exist", () => {
+    let threw = false;
+    try {
+      run({ HQ_UPLOADS_DIR: join(dir, "not-mounted") });
+    } catch (error) {
+      threw = true;
+      expect(error.status).toBe(1);
+      expect(String(error.stderr)).toContain("HQ_UPLOADS_DIR");
+    }
+    expect(threw).toBe(true);
+    // The databases are still backed up: one missing mount is not the run.
+    expect(listed("deen", "daily")).toHaveLength(1);
+  });
+
   it("keeps 7 daily copies", () => {
     for (let i = 0; i < 9; i++) run();
     expect(listed("deen", "daily")).toHaveLength(7);
@@ -192,6 +248,31 @@ describe("backup", () => {
     expect(stderr).toContain(a);
     expect(stderr).toContain(b);
     // The lock file is created first; what matters is that no snapshot was.
+    const written = existsSync(backupDir())
+      ? readdirSync(backupDir()).filter((f) => f !== ".lock")
+      : [];
+    expect(written).toEqual([]);
+  });
+
+  it("refuses a database named uploads, which is reserved for the file copies", () => {
+    // backups/uploads/ is where the media directory is copied. A database of
+    // that name would share it, so weekly eligibility and retention would mix
+    // .sqlite snapshots with directory copies.
+    makeDb(join(dataDir(), "uploads.sqlite"));
+    mkdirSync(join(dataDir(), "uploads"), { recursive: true });
+    writeFileSync(join(dataDir(), "uploads", "abc.png"), "pixels");
+
+    let failure;
+    try {
+      run();
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toBeDefined();
+    expect(failure.status).toBe(1);
+    const stderr = String(failure.stderr);
+    expect(stderr).toContain('A database is named "uploads"');
+    expect(stderr).toContain(join(dataDir(), "uploads.sqlite"));
     const written = existsSync(backupDir())
       ? readdirSync(backupDir()).filter((f) => f !== ".lock")
       : [];

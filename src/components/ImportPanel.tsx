@@ -103,7 +103,7 @@ export function ImportPanel({
             <Check className="size-3.5" /> Connected as @
             {connection.data?.login}
           </div>
-          <div className="mt-4 grid gap-4 md:grid-cols-[1fr_200px]">
+          <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_200px]">
             <div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>

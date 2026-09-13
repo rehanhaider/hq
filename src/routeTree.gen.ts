@@ -14,6 +14,7 @@ import { Route as ContentRouteImport } from './routes/content'
 import { Route as DeenRouteImport } from './routes/deen'
 import { Route as GithubRouteImport } from './routes/github'
 import { Route as NotesRouteImport } from './routes/notes'
+import { Route as ApiUploadsRouteImport } from './routes/api/uploads'
 import { Route as ContentIndexRouteImport } from './routes/content/index'
 import { Route as ContentBoardRouteImport } from './routes/content/board'
 import { Route as ContentSettingsRouteImport } from './routes/content/settings'
@@ -23,6 +24,7 @@ import { Route as DeenHistoryRouteImport } from './routes/deen/history'
 import { Route as DeenSettingsRouteImport } from './routes/deen/settings'
 import { Route as NotesIndexRouteImport } from './routes/notes/index'
 import { Route as NotesTrashRouteImport } from './routes/notes/trash'
+import { Route as ApiUploadsIdRouteImport } from './routes/api/uploads.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -47,6 +49,11 @@ const GithubRoute = GithubRouteImport.update({
 const NotesRoute = NotesRouteImport.update({
   id: '/notes',
   path: '/notes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiUploadsRoute = ApiUploadsRouteImport.update({
+  id: '/api/uploads',
+  path: '/api/uploads',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ContentIndexRoute = ContentIndexRouteImport.update({
@@ -94,6 +101,11 @@ const NotesTrashRoute = NotesTrashRouteImport.update({
   path: '/trash',
   getParentRoute: () => NotesRoute,
 } as any)
+const ApiUploadsIdRoute = ApiUploadsIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => ApiUploadsRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -101,6 +113,7 @@ export interface FileRoutesByFullPath {
   '/deen': typeof DeenRouteWithChildren
   '/github': typeof GithubRoute
   '/notes': typeof NotesRouteWithChildren
+  '/api/uploads': typeof ApiUploadsRouteWithChildren
   '/content/board': typeof ContentBoardRoute
   '/content/settings': typeof ContentSettingsRoute
   '/content/trash': typeof ContentTrashRoute
@@ -110,10 +123,12 @@ export interface FileRoutesByFullPath {
   '/content/': typeof ContentIndexRoute
   '/deen/': typeof DeenIndexRoute
   '/notes/': typeof NotesIndexRoute
+  '/api/uploads/$id': typeof ApiUploadsIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/github': typeof GithubRoute
+  '/api/uploads': typeof ApiUploadsRouteWithChildren
   '/content/board': typeof ContentBoardRoute
   '/content/settings': typeof ContentSettingsRoute
   '/content/trash': typeof ContentTrashRoute
@@ -123,6 +138,7 @@ export interface FileRoutesByTo {
   '/content': typeof ContentIndexRoute
   '/deen': typeof DeenIndexRoute
   '/notes': typeof NotesIndexRoute
+  '/api/uploads/$id': typeof ApiUploadsIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -131,6 +147,7 @@ export interface FileRoutesById {
   '/deen': typeof DeenRouteWithChildren
   '/github': typeof GithubRoute
   '/notes': typeof NotesRouteWithChildren
+  '/api/uploads': typeof ApiUploadsRouteWithChildren
   '/content/board': typeof ContentBoardRoute
   '/content/settings': typeof ContentSettingsRoute
   '/content/trash': typeof ContentTrashRoute
@@ -140,6 +157,7 @@ export interface FileRoutesById {
   '/content/': typeof ContentIndexRoute
   '/deen/': typeof DeenIndexRoute
   '/notes/': typeof NotesIndexRoute
+  '/api/uploads/$id': typeof ApiUploadsIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -149,6 +167,7 @@ export interface FileRouteTypes {
     | '/deen'
     | '/github'
     | '/notes'
+    | '/api/uploads'
     | '/content/board'
     | '/content/settings'
     | '/content/trash'
@@ -158,10 +177,12 @@ export interface FileRouteTypes {
     | '/content/'
     | '/deen/'
     | '/notes/'
+    | '/api/uploads/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/github'
+    | '/api/uploads'
     | '/content/board'
     | '/content/settings'
     | '/content/trash'
@@ -171,6 +192,7 @@ export interface FileRouteTypes {
     | '/content'
     | '/deen'
     | '/notes'
+    | '/api/uploads/$id'
   id:
     | '__root__'
     | '/'
@@ -178,6 +200,7 @@ export interface FileRouteTypes {
     | '/deen'
     | '/github'
     | '/notes'
+    | '/api/uploads'
     | '/content/board'
     | '/content/settings'
     | '/content/trash'
@@ -187,6 +210,7 @@ export interface FileRouteTypes {
     | '/content/'
     | '/deen/'
     | '/notes/'
+    | '/api/uploads/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -195,6 +219,7 @@ export interface RootRouteChildren {
   DeenRoute: typeof DeenRouteWithChildren
   GithubRoute: typeof GithubRoute
   NotesRoute: typeof NotesRouteWithChildren
+  ApiUploadsRoute: typeof ApiUploadsRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -232,6 +257,13 @@ declare module '@tanstack/react-router' {
       path: '/notes'
       fullPath: '/notes'
       preLoaderRoute: typeof NotesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/uploads': {
+      id: '/api/uploads'
+      path: '/api/uploads'
+      fullPath: '/api/uploads'
+      preLoaderRoute: typeof ApiUploadsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/content/': {
@@ -297,6 +329,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof NotesTrashRouteImport
       parentRoute: typeof NotesRoute
     }
+    '/api/uploads/$id': {
+      id: '/api/uploads/$id'
+      path: '/$id'
+      fullPath: '/api/uploads/$id'
+      preLoaderRoute: typeof ApiUploadsIdRouteImport
+      parentRoute: typeof ApiUploadsRoute
+    }
   }
 }
 
@@ -343,12 +382,25 @@ const NotesRouteChildren: NotesRouteChildren = {
 
 const NotesRouteWithChildren = NotesRoute._addFileChildren(NotesRouteChildren)
 
+interface ApiUploadsRouteChildren {
+  ApiUploadsIdRoute: typeof ApiUploadsIdRoute
+}
+
+const ApiUploadsRouteChildren: ApiUploadsRouteChildren = {
+  ApiUploadsIdRoute: ApiUploadsIdRoute,
+}
+
+const ApiUploadsRouteWithChildren = ApiUploadsRoute._addFileChildren(
+  ApiUploadsRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ContentRoute: ContentRouteWithChildren,
   DeenRoute: DeenRouteWithChildren,
   GithubRoute: GithubRoute,
   NotesRoute: NotesRouteWithChildren,
+  ApiUploadsRoute: ApiUploadsRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

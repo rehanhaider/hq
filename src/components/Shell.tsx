@@ -277,9 +277,7 @@ export function Shell() {
           </Button>
         </header>
         <main id="main" className="min-w-0 px-4 py-6 md:px-6 lg:px-8">
-          <div className="mx-auto max-w-7xl">
-            <Outlet />
-          </div>
+          <Outlet />
         </main>
       </div>
     </div>
