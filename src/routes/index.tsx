@@ -90,6 +90,7 @@ function HomePage() {
   );
   const week = github.week;
   const peak = Math.max(...week.days.map((entry) => entry.commits), 0);
+  const chart = github.repositories > 0 && peak > 0;
 
   return (
     <div className="space-y-6 lg:space-y-8">
@@ -109,10 +110,10 @@ function HomePage() {
       </header>
 
       <div className="grid items-stretch gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] lg:gap-8">
-        <section className="card flex flex-col p-5" aria-labelledby="today-heading">
+        <section className="card flex flex-col p-5" aria-labelledby="nasr-heading">
           <div className="flex items-center justify-between gap-3">
-            <h2 id="today-heading" className="section-title">
-              Today
+            <h2 id="nasr-heading" className="section-title">
+              Nasr
             </h2>
             <span className="font-mono text-[0.8125rem] text-muted-foreground tabular-nums">
               {logged} / 5 salah
@@ -191,28 +192,18 @@ function HomePage() {
             />
           </div>
 
-          <div className="mt-5 flex-1" />
-          <Link
-            to="/deen"
-            className={cn(buttonVariants(), "h-10 self-start px-4")}
-          >
-            Log today <ArrowRight className="size-4" />
-          </Link>
-        </section>
+          <div className="section my-5" />
 
-        <section className="card p-5" aria-labelledby="cycle-heading">
           <div className="flex items-center justify-between gap-3">
-            <h2 id="cycle-heading" className="section-title">
-              The cycle
-            </h2>
+            <p className="section-label">The cycle</p>
             <span className="text-[0.8125rem] text-muted-foreground">
               {deen.settings.cycle_start_date ? "40-day" : "Last 40 days"}
             </span>
           </div>
 
-          <div className="mt-4 flex items-center gap-5 sm:block">
+          <div className="mt-4 flex items-center gap-5">
             <div
-              className="grid size-24 shrink-0 place-items-center rounded-full sm:mx-auto sm:size-[8.25rem]"
+              className="grid size-24 shrink-0 place-items-center rounded-full sm:size-[8.25rem]"
               style={{
                 background: `conic-gradient(var(--primary) 0 ${deen.overall.percentage}%, var(--track) ${deen.overall.percentage}% 100%)`,
               }}
@@ -230,7 +221,7 @@ function HomePage() {
             </div>
 
             <div
-              className="grid flex-1 grid-cols-10 gap-1 sm:mt-5 sm:grid-cols-[repeat(20,minmax(0,1fr))]"
+              className="grid flex-1 grid-cols-10 gap-1 sm:grid-cols-[repeat(20,minmax(0,1fr))]"
               aria-label="One mark per day of the cycle"
               role="img"
             >
@@ -279,6 +270,109 @@ function HomePage() {
               </Link>{" "}
               to measure a real cycle.
             </p>
+          )}
+
+          <div className="mt-5 flex-1" />
+          <Link
+            to="/deen"
+            className={cn(buttonVariants(), "h-10 self-start px-4")}
+          >
+            Log today <ArrowRight className="size-4" />
+          </Link>
+        </section>
+
+        <section
+          className={cn(
+            "card p-5",
+            chart ? "flex min-h-[18rem] flex-col" : "self-start",
+          )}
+          aria-labelledby="code-heading"
+        >
+          <div className="flex items-center justify-between gap-3">
+            <h2 id="code-heading" className="section-title">
+              Last 7 days in code
+            </h2>
+            <Link
+              to="/github"
+              search={defaultFilters()}
+              className="text-[0.8125rem] font-medium text-primary"
+            >
+              Open GitHub <ArrowRight className="inline size-3.5" />
+            </Link>
+          </div>
+
+          {github.repositories === 0 ? (
+            <>
+              <p className="mt-4 text-muted-foreground">
+                No repositories imported yet. Add them once and commits land here
+                on their own.
+              </p>
+              <Link
+                to="/github"
+                search={{ ...defaultFilters(), view: "projects" }}
+                className={cn(
+                  buttonVariants({ variant: "outline" }),
+                  "mt-4 h-10 px-4",
+                )}
+              >
+                Add repositories <ArrowRight className="size-4" />
+              </Link>
+            </>
+          ) : (
+            <>
+              <dl className="mt-3.5 flex flex-wrap gap-x-8 gap-y-4">
+                <div>
+                  <dt className="section-label">Commits</dt>
+                  <dd className="figure mt-1.5">{number(week.commits)}</dd>
+                </div>
+                <div>
+                  <dt className="section-label">Requests merged</dt>
+                  <dd className="figure mt-1.5">{number(week.authoredPrs)}</dd>
+                </div>
+                <div>
+                  <dt className="section-label">Lines changed</dt>
+                  <dd className="figure mt-1.5">
+                    <span className="text-positive">
+                      +{number(week.additions)}
+                    </span>
+                    <span className="font-normal text-muted-foreground"> / </span>
+                    <span className="text-negative">
+                      &minus;{number(week.deletions)}
+                    </span>
+                  </dd>
+                </div>
+              </dl>
+              {peak === 0 ? (
+                <p className="mt-5 text-[0.8125rem] text-muted-foreground">
+                  No commits in the last 7 days.
+                </p>
+              ) : (
+                <div className="mt-5 flex flex-1 flex-col">
+                  <div className="flex flex-1 items-end gap-1.5">
+                    {week.days.map((entry) => (
+                      <span
+                        key={entry.day}
+                        title={`${entry.day} — ${entry.commits} commits`}
+                        className="flex-1 rounded-t-[3px] bg-primary/85"
+                        style={{
+                          height: `${Math.max(2, (entry.commits / peak) * 100)}%`,
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <div className="mt-2 flex gap-1.5">
+                    {week.days.map((entry) => (
+                      <span
+                        key={entry.day}
+                        className="flex-1 text-center text-[0.6875rem] text-muted-foreground"
+                      >
+                        {weekday(entry.day)}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </section>
       </div>
@@ -367,95 +461,6 @@ function HomePage() {
             >
               <FilePlus2 /> New page
             </Button>
-          </>
-        )}
-      </section>
-
-      <section className="card p-5" aria-labelledby="code-heading">
-        <div className="flex items-center justify-between gap-3">
-          <h2 id="code-heading" className="section-title">
-            Last 7 days in code
-          </h2>
-          <Link
-            to="/github"
-            search={defaultFilters()}
-            className="text-[0.8125rem] font-medium text-primary"
-          >
-            Open GitHub <ArrowRight className="inline size-3.5" />
-          </Link>
-        </div>
-
-        {github.repositories === 0 ? (
-          <>
-            <p className="mt-4 text-muted-foreground">
-              No repositories imported yet. Add them once and commits land here
-              on their own.
-            </p>
-            <Link
-              to="/github"
-              search={{ ...defaultFilters(), view: "projects" }}
-              className={cn(
-                buttonVariants({ variant: "outline" }),
-                "mt-4 h-10 px-4",
-              )}
-            >
-              Add repositories <ArrowRight className="size-4" />
-            </Link>
-          </>
-        ) : (
-          <>
-            <dl className="mt-3.5 flex flex-wrap gap-x-8 gap-y-4">
-              <div>
-                <dt className="section-label">Commits</dt>
-                <dd className="figure mt-1.5">{number(week.commits)}</dd>
-              </div>
-              <div>
-                <dt className="section-label">Requests merged</dt>
-                <dd className="figure mt-1.5">{number(week.authoredPrs)}</dd>
-              </div>
-              <div>
-                <dt className="section-label">Lines changed</dt>
-                <dd className="figure mt-1.5">
-                  <span className="text-positive">
-                    +{number(week.additions)}
-                  </span>
-                  <span className="font-normal text-muted-foreground"> / </span>
-                  <span className="text-negative">
-                    &minus;{number(week.deletions)}
-                  </span>
-                </dd>
-              </div>
-            </dl>
-            {peak === 0 ? (
-              <p className="mt-5 text-[0.8125rem] text-muted-foreground">
-                No commits in the last 7 days.
-              </p>
-            ) : (
-              <div className="mt-5 max-w-md">
-                <div className="flex h-14 items-end gap-1.5">
-                  {week.days.map((entry) => (
-                    <span
-                      key={entry.day}
-                      title={`${entry.day} — ${entry.commits} commits`}
-                      className="flex-1 rounded-t-[3px] bg-primary/85"
-                      style={{
-                        height: `${Math.max(2, (entry.commits / peak) * 100)}%`,
-                      }}
-                    />
-                  ))}
-                </div>
-                <div className="mt-2 flex gap-1.5">
-                  {week.days.map((entry) => (
-                    <span
-                      key={entry.day}
-                      className="flex-1 text-center text-[0.6875rem] text-muted-foreground"
-                    >
-                      {weekday(entry.day)}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
           </>
         )}
       </section>
