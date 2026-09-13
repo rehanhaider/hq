@@ -25,7 +25,7 @@ describe("shiftDate", () => {
 });
 
 describe("windowDates", () => {
-  it("ends on today and runs back 40 days", () => {
+  it("ends on today and holds 40 days", () => {
     const dates = windowDates("2025-02-09");
     expect(dates).toHaveLength(40);
     expect(dates[0]).toBe("2025-01-01");

@@ -201,7 +201,7 @@ describe("windowStrip", () => {
     ]);
   });
 
-  it("empties every day that was never logged", () => {
+  it("empties a day with nothing kept, logged or not", () => {
     const marks = windowStrip(days, "2026-09-04", 100);
     // 09-01 kept most of the day but prayed Asr late, so it reads amber, not
     // green: lateness outranks a high count.

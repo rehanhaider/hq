@@ -221,9 +221,7 @@ function HomePage() {
                         ? "bg-warning"
                         : mark.state === "partial"
                           ? "bg-positive/35"
-                          : mark.state === "empty"
-                            ? "bg-track"
-                            : "bg-track/50",
+                          : "bg-track",
                     mark.today && "outline-2 outline-offset-1 outline-primary",
                   )}
                 />
@@ -473,7 +471,7 @@ function markLabel(state: DayMark["state"]) {
       ? "a prayer made up late"
       : state === "partial"
         ? "partly kept"
-        : "not logged";
+        : "nothing kept";
 }
 
 function weekday(day: string) {

@@ -133,7 +133,7 @@ export type DayMark = {
   /**
    * `late` is a day holding a prayer prayed outside its window; it outranks
    * `hit` because lateness is the thing worth seeing. `empty` is a day with
-   * no record.
+   * nothing kept, whether it was logged that way or never logged.
    */
   state: "hit" | "late" | "partial" | "empty";
   today: boolean;
@@ -147,9 +147,9 @@ export function hasQada(day: DeenDay): boolean {
 }
 
 /**
- * One mark per day of the rolling window, today last. It is the same window
- * adherence uses, so the strip and the ring never disagree, and it holds no
- * future day: the window ends where the record does.
+ * One mark per day of the rolling window, today last. It is the window
+ * adherence draws from, though adherence scores only the logged days, and it
+ * holds no future day: the window ends today.
  */
 export function windowStrip(
   days: DeenDay[],

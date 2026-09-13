@@ -4,7 +4,7 @@ Personal dashboard for planning and daily tracking. Content, Nasr, the 40-day pr
 
 ## Application foundation and pages
 
-Navigation has two levels. The left sidebar contains only Home and primary modules: Nasr, Content, and GitHub. Each module owns a horizontal page-navigation bar above its content. Module pages must not be flattened into the primary sidebar. The desktop sidebar collapses to an icon rail and remembers its state. Hover or keyboard focus previews the expanded rail without moving the content. Ctrl/Cmd+B toggles collapse outside text fields and editors. On phones, the sidebar opens as a dismissible drawer. A utility top bar holds the sidebar toggle and appearance control; module tabs remain above the content.
+Navigation has two levels. The left sidebar contains only Home and primary modules: Nasr, Content, and GitHub. Each module owns a horizontal page-navigation bar above its content. Module pages must not be flattened into the primary sidebar. The desktop sidebar collapses to an icon rail and remembers its state. Hover or keyboard focus previews the expanded rail without moving the content. Ctrl/Cmd+B toggles collapse outside text fields and editors. On phones, the sidebar opens as a dismissible drawer. A utility top bar holds the sidebar toggle; the appearance control sits at the foot of the sidebar; module tabs remain above the content.
 
 TanStack Start is the application framework. Its Vite plugin builds the client and server, file-based Router routes own page navigation, and Start server functions own database access. The production command serves Start's generated server entry. There is no separate application framework or custom request router.
 
@@ -145,6 +145,6 @@ pnpm typecheck
 pnpm build
 ```
 
-Tests cover UTC date boundaries, attribution, merge exclusion, category rules, snapshot replacement, account isolation, pagination, commit reuse, failure preservation, deen cycle arithmetic, streaks, adherence, Content data safety and validation, property migration and seeding, board moves, filters and sorts, upload limits and deduplication, permanent deletion of a page's files, copies of those files on other pages, a write that cannot record a page, a blank uploads path, the zip types Windows sends, an upload still in flight when leaving the page, and backup rotation.
+Tests cover UTC date boundaries, attribution, merge exclusion, category rules, snapshot replacement, account isolation, pagination, commit reuse, failure preservation, deen rolling-window dates, streaks, adherence, Content data safety and validation, property migration and seeding, board moves, filters and sorts, upload limits and deduplication, permanent deletion of a page's files, copies of those files on other pages, a write that cannot record a page, a blank uploads path, the zip types Windows sends, an upload still in flight when leaving the page, and backup rotation.
 
 Server functions in `src/server/fns.ts` own the data boundary. Server-derived data belongs to Query. Shareable dates, repository, record type, page, Content search, filters, sort, grouping, and view belong to Router search parameters. Zustand owns the theme preference. Secrets and database imports stay on the server.

@@ -243,14 +243,13 @@ export function Shell() {
             }
             className={`${navClass} w-full`}
           >
-            {ui.theme === "dark" ? (
-              <Sun className="size-4 shrink-0" />
-            ) : (
-              <Moon className="size-4 shrink-0" />
-            )}
-            <span className={labelClass}>
-              {ui.theme === "dark" ? "Light" : "Dark"}
-            </span>
+            {/* Both icons and labels render; the stylesheet shows the pair for
+                the document's theme, so a stored light preference reads right
+                from the server's paint instead of after the store hydrates. */}
+            <Sun className="hidden size-4 shrink-0 dark:block" />
+            <Moon className="size-4 shrink-0 dark:hidden" />
+            <span className={`${labelClass} dark:hidden`}>Dark</span>
+            <span className={`${labelClass} hidden dark:inline`}>Light</span>
           </button>
         </div>
       </aside>
