@@ -71,13 +71,13 @@ const columns = helper.columns([
   helper.accessor((row) => row.metrics.pullRequests.ready, {
     id: "requests",
     header: "Requests",
-    meta: { className: "w-[1%] text-right font-mono" },
+    meta: { className: "hidden w-[1%] text-right font-mono md:table-cell" },
     cell: ({ getValue }) => number(getValue()),
   }),
   helper.accessor((row) => row.metrics.additions + row.metrics.deletions, {
     id: "lines",
     header: "Lines + / −",
-    meta: { className: "w-[1%] text-right font-mono whitespace-nowrap" },
+    meta: { className: "hidden w-[1%] text-right font-mono whitespace-nowrap lg:table-cell" },
     cell: ({ row }) => (
       <>
         <span className="text-positive">
@@ -93,7 +93,8 @@ const columns = helper.columns([
     id: "fetched",
     header: "Last fetched (UTC)",
     meta: {
-      className: "w-[1%] text-right whitespace-nowrap text-muted-foreground",
+      className:
+        "hidden w-[1%] text-right whitespace-nowrap text-muted-foreground lg:table-cell",
     },
     cell: ({ row }) =>
       row.original.lastSuccessAt
