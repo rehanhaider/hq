@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   contentSearchSchema,
+  contentSummary,
   filterPages,
   groupPages,
   hasFilters,
@@ -164,5 +165,68 @@ describe("relativeTime", () => {
     expect(relativeTime("2026-02-24T12:00:00.000Z", now)).toBe("2w ago");
     expect(relativeTime("2025-11-01T12:00:00.000Z", now)).toBe("2025-11-01");
     expect(relativeTime("not a date", now)).toBe("");
+  });
+});
+
+describe("contentSummary", () => {
+  const pages = [
+    page("Stream plan", {
+      id: "a",
+      typeId: "video",
+      updatedAt: "2026-09-10T09:00:00.000Z",
+    }),
+    page("Blog draft", {
+      id: "b",
+      statusId: "published",
+      updatedAt: "2026-09-12T09:00:00.000Z",
+    }),
+    page("Loose page", {
+      id: "c",
+      statusId: null,
+      updatedAt: "2026-09-11T09:00:00.000Z",
+    }),
+  ];
+
+  it("counts every status in the order Settings gives them", () => {
+    const summary = contentSummary(pages, properties);
+    expect(summary.total).toBe(3);
+    expect(summary.counts.map((entry) => [entry.name, entry.count])).toEqual([
+      ["Idea", 1],
+      ["Published", 1],
+      ["No status", 1],
+    ]);
+  });
+
+  it("leaves out the no-status bucket when every page has one", () => {
+    const summary = contentSummary(pages.slice(0, 2), properties);
+    expect(summary.counts.map((entry) => entry.name)).toEqual([
+      "Idea",
+      "Published",
+    ]);
+  });
+
+  it("lists the most recently touched pages first, with their properties", () => {
+    const summary = contentSummary(pages, properties, 2);
+    expect(summary.recent.map((entry) => entry.title)).toEqual([
+      "Blog draft",
+      "Loose page",
+    ]);
+    expect(summary.recent[0]).toMatchObject({
+      status: "Published",
+      statusColor: "green",
+      type: null,
+    });
+    expect(contentSummary(pages, properties).recent[2]).toMatchObject({
+      title: "Stream plan",
+      type: "YouTube video",
+      status: "Idea",
+    });
+  });
+
+  it("summarises an empty pipeline without inventing rows", () => {
+    const summary = contentSummary([], properties);
+    expect(summary.total).toBe(0);
+    expect(summary.recent).toEqual([]);
+    expect(summary.counts.every((entry) => entry.count === 0)).toBe(true);
   });
 });

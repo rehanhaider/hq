@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { categorize, summarize, groupLanguages } from "./metrics";
+import { categorize, dailySeries, summarize, groupLanguages } from "./metrics";
 import { daySchema, importSchema, searchSchema } from "./model";
 import type { Dataset, Snapshot } from "./model";
 
@@ -237,4 +237,34 @@ it("groups shares at or below one percent exactly once and last in both language
   expect(grouped.at(-1)?.additions).toBe(19);
   expect(grouped.reduce((sum, row) => sum + row.additions, 0)).toBe(1000);
   expect(groupLanguages([])).toEqual([]);
+});
+
+describe("dailySeries", () => {
+  const daily = [
+    { day: "2026-09-09", commits: 3, prs: 1, additions: 10, deletions: 2 },
+    { day: "2026-09-11", commits: 5, prs: 0, additions: 20, deletions: 4 },
+  ];
+
+  it("zero-fills every day of the range, in order", () => {
+    const series = dailySeries(daily, "2026-09-08", "2026-09-12");
+    expect(series.map((entry) => entry.day)).toEqual([
+      "2026-09-08",
+      "2026-09-09",
+      "2026-09-10",
+      "2026-09-11",
+      "2026-09-12",
+    ]);
+    expect(series.map((entry) => entry.commits)).toEqual([0, 3, 0, 5, 0]);
+  });
+
+  it("returns one entry for a single day, and none for a reversed range", () => {
+    expect(dailySeries(daily, "2026-09-09", "2026-09-09")).toEqual([daily[0]]);
+    expect(dailySeries(daily, "2026-09-12", "2026-09-08")).toEqual([]);
+  });
+
+  it("ignores days outside the range", () => {
+    const series = dailySeries(daily, "2026-09-10", "2026-09-11");
+    expect(series).toHaveLength(2);
+    expect(series.map((entry) => entry.commits)).toEqual([0, 5]);
+  });
 });

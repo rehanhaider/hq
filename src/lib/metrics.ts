@@ -248,3 +248,37 @@ export function groupLanguages(
     });
   return visible;
 }
+
+export type DayTotals = {
+  day: string;
+  commits: number;
+  prs: number;
+  additions: number;
+  deletions: number;
+};
+
+/**
+ * One entry per UTC day between `from` and `to`, zero-filled.
+ *
+ * `summarize` only records days that carry activity, which is right for a
+ * chart that plots dates but wrong for a fixed-width sparkline: seven bars
+ * have to be seven days, in order, whether or not anything happened on them.
+ */
+export function dailySeries(
+  daily: DayTotals[],
+  from: string,
+  to: string,
+): DayTotals[] {
+  const byDay = new Map(daily.map((entry) => [entry.day, entry]));
+  const series: DayTotals[] = [];
+  const cursor = new Date(`${from}T00:00:00.000Z`);
+  const end = new Date(`${to}T00:00:00.000Z`);
+  while (cursor <= end) {
+    const day = cursor.toISOString().slice(0, 10);
+    series.push(
+      byDay.get(day) ?? { day, commits: 0, prs: 0, additions: 0, deletions: 0 },
+    );
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return series;
+}

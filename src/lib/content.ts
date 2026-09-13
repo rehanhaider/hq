@@ -564,3 +564,66 @@ export function relativeTime(iso: string, now = Date.now()) {
   if (weeks < 8) return `${weeks}w ago`;
   return new Date(then).toISOString().slice(0, 10);
 }
+
+/** What the homepage shows of Content: the pipeline, and what is moving. */
+export type ContentSummary = {
+  total: number;
+  counts: { id: string; name: string; color: PropertyColor; count: number }[];
+  recent: {
+    id: string;
+    title: string;
+    updatedAt: string;
+    status: string | null;
+    statusColor: PropertyColor | null;
+    type: string | null;
+  }[];
+};
+
+/**
+ * The pipeline as counts per status, in the order Settings gives them, plus
+ * the pages touched most recently. Pages without a status are counted under
+ * their own bucket rather than being dropped, because a count that does not
+ * add up to the total is worse than an extra column.
+ */
+export function contentSummary(
+  pages: ContentPage[],
+  properties: ContentProperties,
+  limit = 4,
+): ContentSummary {
+  const statuses = new Map(properties.statuses.map((s) => [s.id, s]));
+  const types = new Map(properties.types.map((t) => [t.id, t]));
+  const counts = properties.statuses.map((status) => ({
+    id: status.id,
+    name: status.name,
+    color: status.color,
+    count: pages.filter((page) => page.statusId === status.id).length,
+  }));
+  const unassigned = pages.filter(
+    (page) => !page.statusId || !statuses.has(page.statusId),
+  ).length;
+  if (unassigned)
+    counts.push({
+      id: "none",
+      name: "No status",
+      color: "slate",
+      count: unassigned,
+    });
+  const recent = [...pages]
+    .sort(
+      (a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id),
+    )
+    .slice(0, limit)
+    .map((page) => {
+      const status = page.statusId ? statuses.get(page.statusId) : undefined;
+      const type = page.typeId ? types.get(page.typeId) : undefined;
+      return {
+        id: page.id,
+        title: page.title,
+        updatedAt: page.updatedAt,
+        status: status?.name ?? null,
+        statusColor: status?.color ?? null,
+        type: type?.name ?? null,
+      };
+    });
+  return { total: pages.length, counts, recent };
+}
