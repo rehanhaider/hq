@@ -14,7 +14,6 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
-import { ModuleTabs } from "@/components/ModuleTabs";
 import { useUI } from "@/store/ui";
 import { defaultFilters } from "@/lib/model";
 import { statusQuery } from "@/queries/dashboard";
@@ -310,7 +309,6 @@ export function Shell() {
               )}
             </div>
           </header>
-          <ModuleTabs />
         </div>
         <main id="main" className="min-w-0 px-4 py-6 md:px-6 lg:px-8">
           <Outlet />
