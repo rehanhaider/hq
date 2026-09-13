@@ -38,32 +38,31 @@ function HistoryPage() {
         </p>
       ) : (
         <>
-          <div className="space-y-3">
-            <p className="section-label">The last 40 days</p>
-            <div className="flex flex-wrap items-end gap-x-12 gap-y-6">
-              {/* Adherence is windowed; an empty window has no percentage to show. */}
-              {!emptyWindow && (
-                <div>
-                  <p className="section-label">Fajr on time</p>
-                  <p className="mt-2 flex items-baseline gap-2">
-                    <span className="display">
-                      {adherence.fajr_ontime?.percentage ?? 0}
-                    </span>
-                    <span className="text-base font-normal text-muted-foreground">% of days</span>
-                  </p>
-                </div>
-              )}
-              {/* The streak runs over the full history, so it stays visible even
-                  when the window is empty — Today and Home both show it. */}
+          {/* Each figure names the span it covers: only adherence is windowed,
+              so a shared "last 40 days" heading would misdescribe the streak. */}
+          <div className="flex flex-wrap items-end gap-x-12 gap-y-6">
+            {/* Adherence is windowed; an empty window has no percentage to show. */}
+            {!emptyWindow && (
               <div>
-                <p className="section-label">Fajr streak</p>
-                <p className="mt-2 text-2xl font-semibold tabular-nums tracking-tight">
-                  {fajrStreak.current}
-                  <span className="ml-2 text-sm font-normal text-muted-foreground">
-                    best {fajrStreak.longest}
+                <p className="section-label">Fajr on time, last 40 days</p>
+                <p className="mt-2 flex items-baseline gap-2">
+                  <span className="display">
+                    {adherence.fajr_ontime?.percentage ?? 0}
                   </span>
+                  <span className="text-base font-normal text-muted-foreground">% of days</span>
                 </p>
               </div>
+            )}
+            {/* The streak runs over the full history, so it stays visible even
+                when the window is empty — Today and Home both show it. */}
+            <div>
+              <p className="section-label">Fajr streak, all time</p>
+              <p className="mt-2 text-2xl font-semibold tabular-nums tracking-tight">
+                {fajrStreak.current}
+                <span className="ml-2 text-sm font-normal text-muted-foreground">
+                  best {fajrStreak.longest}
+                </span>
+              </p>
             </div>
           </div>
 
