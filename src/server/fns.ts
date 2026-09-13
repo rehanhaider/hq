@@ -5,6 +5,7 @@ import { connectionRow } from "../lib/connections";
 import { getStore, idleStatus } from "./db";
 import type { ImportStatus } from "../lib/model";
 import { github } from "./github";
+import { loadOpenWork } from "./openWork";
 import { ensureRefreshLoop, startImport } from "./import";
 import { getDeenStore } from "./deen";
 import { getContentStore } from "./content";
@@ -258,6 +259,13 @@ export const getConnection = createServerFn({ method: "GET" }).handler(
       };
     }
   },
+);
+/**
+ * Every open issue and request the token can see, read live from GitHub
+ * search rather than the imported snapshots.
+ */
+export const getOpenWork = createServerFn({ method: "GET" }).handler(() =>
+  loadOpenWork(),
 );
 export const getRepositories = createServerFn({ method: "GET" }).handler(
   async () => {
