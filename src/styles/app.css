@@ -222,14 +222,32 @@
   .list-row {
     @apply flex min-h-11 items-center justify-between gap-4 py-3;
   }
-  .section-tabs {
-    @apply flex gap-5 overflow-x-auto border-b;
+  /* The Work view, split: issues on one side, pull requests on the other.
+     Below `lg` they stack and read as an accordion; above it they share the
+     row until one is expanded and the other steps back into a rail. The
+     width is a grid track so the change can be animated rather than jumped.
+     (The reduced-motion rule at the foot of this file stops the animation.) */
+  .work-panes {
+    /* A card is as tall as its list — except the one holding a rail, which
+       has to run the height of the pane it is standing beside. */
+    @apply grid items-start gap-4;
+    grid-template-columns: minmax(0, 1fr);
   }
-  .section-tab {
-    @apply flex min-h-11 shrink-0 items-center border-b-2 border-transparent px-1 text-sm text-muted-foreground transition-colors hover:text-foreground;
-  }
-  .section-tab[aria-current="page"] {
-    @apply border-primary font-medium text-foreground;
+  @media (min-width: 64rem) {
+    .work-panes {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      transition: grid-template-columns 220ms ease;
+    }
+    .work-panes[data-pane="issue"] {
+      grid-template-columns: minmax(0, 1fr) 3rem;
+    }
+    .work-panes[data-pane="pr"] {
+      grid-template-columns: 3rem minmax(0, 1fr);
+    }
+    .work-panes[data-pane="issue"],
+    .work-panes[data-pane="pr"] {
+      align-items: stretch;
+    }
   }
   .content-workspace {
     /* Two columns only once there is room for both. Below `lg` the sidebar

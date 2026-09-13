@@ -1,6 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { searchSchema } from "@/lib/model";
-import { connectionsQuery, dashboardQuery } from "@/queries/dashboard";
+import {
+  connectionsQuery,
+  dashboardQuery,
+  openWorkQuery,
+} from "@/queries/dashboard";
 import { Dashboard } from "@/components/Dashboard";
 
 export const Route = createFileRoute("/github")({
@@ -14,6 +18,7 @@ export const Route = createFileRoute("/github")({
       return [
         { label: "Overview", view: "overview" },
         { label: "Activity history", view: "history" },
+        { label: "Work", view: "work" },
         { label: "Repositories", view: "projects" },
       ].map(({ label, view }) => ({
         label,
@@ -29,6 +34,8 @@ export const Route = createFileRoute("/github")({
   loader: ({ context, deps }) =>
     deps.view === "connections" || deps.view === "projects"
       ? context.queryClient.ensureQueryData(connectionsQuery)
-      : context.queryClient.ensureQueryData(dashboardQuery(deps)),
+      : deps.view === "work"
+        ? context.queryClient.ensureQueryData(openWorkQuery)
+        : context.queryClient.ensureQueryData(dashboardQuery(deps)),
   component: Dashboard,
 });

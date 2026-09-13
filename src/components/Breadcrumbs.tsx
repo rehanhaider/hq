@@ -6,6 +6,7 @@ import {
   useMatches,
   type LinkProps,
 } from "@tanstack/react-router";
+import { ChevronDown } from "lucide-react";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -14,7 +15,13 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import { pagePath, trailFromMatches, type Crumb } from "@/lib/breadcrumbs";
+import { Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/ui/menu";
+import {
+  pagePath,
+  trailFromMatches,
+  type Crumb,
+  type ViewOption,
+} from "@/lib/breadcrumbs";
 import { pagesQuery } from "@/queries/content";
 
 /** The crumbs and sibling views for the current location. */
@@ -44,9 +51,37 @@ function linkProps(target: { to: string; search?: Record<string, unknown> }) {
   return { to: target.to, search: target.search } as LinkProps;
 }
 
+function ViewSwitcher({ views }: { views: ViewOption[] }) {
+  const active = views.find((view) => view.active) ?? views[0];
+  if (!active) return null;
+  return (
+    <Menu>
+      <MenuTrigger className="inline-flex min-h-7 items-center gap-1 rounded-lg px-1.5 font-medium text-foreground transition-colors outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 aria-expanded:bg-muted">
+        <span className="truncate">{active.label}</span>
+        <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
+      </MenuTrigger>
+      <MenuContent>
+        {views.map((view) => (
+          <MenuItem
+            key={`${view.to}-${view.label}`}
+            aria-current={view.active ? "page" : undefined}
+            render={<Link {...linkProps(view)} />}
+          >
+            {view.label}
+          </MenuItem>
+        ))}
+      </MenuContent>
+    </Menu>
+  );
+}
+
 export function Breadcrumbs() {
-  // Sibling views are a tab row under the top bar, not a step in the trail.
-  const { crumbs: items } = useTrail();
+  const { crumbs, views, viewsAt } = useTrail();
+  // Each entry is a crumb, or the view switcher sitting where its module does.
+  const items: Array<Crumb | "views"> =
+    views.length > 0
+      ? [...crumbs.slice(0, viewsAt), "views", ...crumbs.slice(viewsAt)]
+      : crumbs;
 
   return (
     <Breadcrumb className="min-w-0 flex-1">
@@ -54,10 +89,14 @@ export function Breadcrumbs() {
         {items.map((item, index) => {
           const last = index === items.length - 1;
           return (
-            <Fragment key={`${index}-${item.label}`}>
+            <Fragment
+              key={item === "views" ? "views" : `${index}-${item.label}`}
+            >
               {index > 0 && <BreadcrumbSeparator />}
               <BreadcrumbItem className="min-w-0">
-                {last ? (
+                {item === "views" ? (
+                  <ViewSwitcher views={views} />
+                ) : last ? (
                   <BreadcrumbPage className="truncate">
                     {item.label}
                   </BreadcrumbPage>

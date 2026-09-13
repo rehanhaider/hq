@@ -5,6 +5,7 @@ import {
   getConnections,
   getDashboard,
   getImportStatus,
+  getOpenWork,
   getRepositories,
 } from "@/server/fns";
 
@@ -29,6 +30,11 @@ export const connectionsQuery = queryOptions({
   queryKey: ["connections"],
   queryFn: () => getConnections(),
   staleTime: 5000,
+});
+export const openWorkQuery = queryOptions({
+  queryKey: ["open-work"],
+  queryFn: () => getOpenWork(),
+  staleTime: 60000,
 });
 export const statusQuery = queryOptions({
   queryKey: ["import-status"],

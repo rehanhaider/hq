@@ -22,6 +22,7 @@ import { LanguageMetrics } from "./LanguageMetrics";
 import { ActivityFilters } from "./ActivityFilters";
 import { ActivityChart } from "./ActivityChart";
 import { Connections } from "./Connections";
+import { OpenWork } from "./OpenWork";
 import { dashboardQuery, statusQuery } from "@/queries/dashboard";
 import { categories } from "@/lib/model";
 import { utcDay, utcStamp } from "@/lib/activity";
@@ -36,7 +37,10 @@ export function Dashboard() {
   const navigate = Route.useNavigate();
   const dashboard = useQuery({
     ...dashboardQuery(filters),
-    enabled: filters.view !== "connections" && filters.view !== "projects",
+    enabled:
+      filters.view !== "connections" &&
+      filters.view !== "projects" &&
+      filters.view !== "work",
   });
   const status = useQuery(statusQuery);
   const data = dashboard.data;
@@ -93,6 +97,8 @@ export function Dashboard() {
 
       {filters.view === "connections" || filters.view === "projects" ? (
         <Connections importing={importing} />
+      ) : filters.view === "work" ? (
+        <OpenWork />
       ) : (
         <>
           <ActivityFilters

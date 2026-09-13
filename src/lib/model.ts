@@ -18,7 +18,7 @@ export const searchSchema = z.object({
   to: daySchema.catch(() => daysAgo(0)),
   repo: z.union([z.string(), z.array(z.string())]).catch("all"),
   view: z
-    .enum(["overview", "projects", "history", "connections"])
+    .enum(["overview", "projects", "history", "connections", "work"])
     .catch("overview"),
   kind: z.enum(["all", "commit", "pr"]).catch("all"),
   metric: z.enum(["commits", "prs", "lines"]).catch("commits"),
