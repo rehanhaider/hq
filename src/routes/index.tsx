@@ -84,8 +84,10 @@ function HomePage() {
   const istighfar = target > 0 ? Math.min(100, (day.istighfar_count / target) * 100) : 0;
   const marks = windowStrip(deen.days, deen.today, target);
   const week = github.week;
-  const peak = Math.max(...week.days.map((entry) => entry.commits), 0);
-  const chart = github.repositories > 0 && peak > 0;
+  // The bars count requests merged, not commits: the headline figures already
+  // carry the commits, and a merged request is the unit of finished work.
+  const peak = Math.max(...week.days.map((entry) => entry.prs), 0);
+  const chart = github.repositories > 0;
 
   return (
     <div className="space-y-6 lg:space-y-8">
@@ -317,36 +319,45 @@ function HomePage() {
                   </dd>
                 </div>
               </dl>
-              {peak === 0 ? (
-                <p className="mt-5 text-[0.8125rem] text-muted-foreground">
-                  No commits in the last 7 days.
-                </p>
-              ) : (
-                <div className="mt-5 flex flex-1 flex-col">
-                  <div className="flex flex-1 items-end gap-1.5">
-                    {week.days.map((entry) => (
-                      <span
-                        key={entry.day}
-                        title={`${entry.day} — ${entry.commits} commits`}
-                        className="flex-1 rounded-t-[3px] bg-primary/85"
-                        style={{
-                          height: `${Math.max(2, (entry.commits / peak) * 100)}%`,
-                        }}
-                      />
-                    ))}
-                  </div>
-                  <div className="mt-2 flex gap-1.5">
-                    {week.days.map((entry) => (
-                      <span
-                        key={entry.day}
-                        className="flex-1 text-center text-[0.6875rem] text-muted-foreground"
-                      >
-                        {weekday(entry.day)}
-                      </span>
-                    ))}
-                  </div>
+              <div className="mt-5 flex flex-1 flex-col">
+                <p className="section-label">Requests merged per day</p>
+                {/* The axis is drawn whether or not anything was merged: a week
+                    of nothing is a fact about the week, not a missing chart. */}
+                <div
+                  className="mt-3 flex flex-1 items-end gap-1.5 border-b"
+                  role="img"
+                  aria-label={`Requests merged per day, ${week.days.map((entry) => `${weekday(entry.day)} ${entry.prs}`).join(", ")}`}
+                >
+                  {week.days.map((entry) => (
+                    <span
+                      key={entry.day}
+                      title={`${entry.day} — ${entry.prs} ${entry.prs === 1 ? "request" : "requests"} merged`}
+                      className="flex-1 rounded-t-[3px] bg-primary/85"
+                      style={{
+                        height:
+                          peak > 0
+                            ? `${Math.max(2, (entry.prs / peak) * 100)}%`
+                            : 0,
+                      }}
+                    />
+                  ))}
                 </div>
-              )}
+                <div className="mt-2 flex gap-1.5">
+                  {week.days.map((entry) => (
+                    <span
+                      key={entry.day}
+                      className="flex-1 text-center text-[0.6875rem] text-muted-foreground"
+                    >
+                      {weekday(entry.day)}
+                    </span>
+                  ))}
+                </div>
+                {peak === 0 && (
+                  <p className="mt-3 text-[0.8125rem] text-muted-foreground">
+                    Nothing merged in the last 7 days.
+                  </p>
+                )}
+              </div>
             </>
           )}
         </section>
