@@ -30,6 +30,8 @@ export const ALLOWED_FILE_MIMES = new Set([
   "application/pdf",
   "application/json",
   "application/zip",
+  "application/x-zip-compressed",
+  "application/x-zip",
   "application/msword",
   "application/vnd.ms-excel",
   "application/vnd.ms-powerpoint",
@@ -59,6 +61,8 @@ const MIME_EXTENSIONS: Record<string, string> = {
   "application/pdf": "pdf",
   "application/json": "json",
   "application/zip": "zip",
+  "application/x-zip-compressed": "zip",
+  "application/x-zip": "zip",
   "application/msword": "doc",
   "application/vnd.ms-excel": "xls",
   "application/vnd.ms-powerpoint": "ppt",
@@ -178,4 +182,34 @@ export function uploadIdsInDocument(value: unknown): string[] {
   };
   visit(value);
   return [...found];
+}
+
+/**
+ * In-flight editor uploads. BlockNote inserts an empty file block, then writes
+ * the URL after POST returns. Saving and remounting in that gap keeps the empty
+ * block and drops the picture.
+ */
+export function createUploadGate() {
+  let inflight = 0;
+  const waiters: Array<() => void> = [];
+  const release = () => {
+    if (inflight !== 0) return;
+    waiters.splice(0).forEach((waiter) => waiter());
+  };
+  return {
+    get busy() {
+      return inflight > 0;
+    },
+    start() {
+      inflight += 1;
+    },
+    end() {
+      inflight = Math.max(0, inflight - 1);
+      release();
+    },
+    idle() {
+      if (inflight === 0) return Promise.resolve();
+      return new Promise<void>((resolve) => waiters.push(resolve));
+    },
+  };
 }

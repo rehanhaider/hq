@@ -27,6 +27,7 @@ import {
   type ContentProperties,
   type PageDetail,
 } from "@/lib/content";
+import { createUploadGate } from "@/lib/uploads";
 import {
   contentKeys,
   contentPropertiesQuery,
@@ -118,6 +119,17 @@ export function ContentWorkspace() {
   const [actionError, setActionError] = useState("");
   const staleRevision = useRef<number | null>(null);
   const recoveringRef = useRef(false);
+  const uploads = useRef(createUploadGate()).current;
+  const [uploadBusy, setUploadBusy] = useState(false);
+
+  const onUploadStart = useCallback(() => {
+    uploads.start();
+    setUploadBusy(true);
+  }, [uploads]);
+  const onUploadEnd = useCallback(() => {
+    uploads.end();
+    setUploadBusy(uploads.busy);
+  }, [uploads]);
 
   const applyFreshDetail = useCallback(
     (next: PageDetail) => {
@@ -129,6 +141,7 @@ export function ContentWorkspace() {
         (next.revision <= current.revision ||
           saved.current < changed.current ||
           drainPromise.current !== null ||
+          uploads.busy ||
           recoveringRef.current)
       )
         return false;
@@ -161,7 +174,12 @@ export function ContentWorkspace() {
     }
     if (drainPromise.current) return drainPromise.current;
     const work = (async () => {
-      while (saved.current < changed.current) {
+      for (;;) {
+        await uploads.idle();
+        if (saved.current >= changed.current) {
+          setSaveState("saved");
+          return true;
+        }
         const sequence = changed.current;
         const snapshot = draftRef.current;
         if (!snapshot) return true;
@@ -227,8 +245,6 @@ export function ContentWorkspace() {
           return false;
         }
       }
-      setSaveState("saved");
-      return true;
     })();
     drainPromise.current = work;
     void work.finally(() => {
@@ -259,7 +275,8 @@ export function ContentWorkspace() {
     [drain],
   );
 
-  const hasUnsaved = saveState !== "saved" || saved.current < changed.current;
+  const hasUnsaved =
+    saveState !== "saved" || saved.current < changed.current || uploadBusy;
   const blocker = useBlocker({
     shouldBlockFn: ({ current, next }) => {
       const currentPage = (current.search as { page?: string }).page;
@@ -368,6 +385,7 @@ export function ContentWorkspace() {
 
   const saveAsNewPage = async (openCopy = true) => {
     if (recoveringRef.current) return false;
+    await uploads.idle();
     const snapshot = draftRef.current;
     if (!snapshot) return false;
     recoveringRef.current = true;
@@ -604,6 +622,8 @@ export function ContentWorkspace() {
                     key={`${draft.id}:${editorGeneration}`}
                     page={draft}
                     editable={!recovering}
+                    onUploadStart={onUploadStart}
+                    onUploadEnd={onUploadEnd}
                     onDocumentChange={(document: ContentBlock[]) => {
                       const current = draftRef.current;
                       if (

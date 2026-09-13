@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { declaredUploadBytes, uploadIdFromUrl, uploadIdsInDocument } from "./uploads";
+import {
+  createUploadGate,
+  declaredUploadBytes,
+  uploadExtension,
+  uploadIdFromUrl,
+  uploadIdsInDocument,
+  uploadRejection,
+} from "./uploads";
 
 describe("declaredUploadBytes", () => {
   it("accepts a positive whole number of bytes", () => {
@@ -31,5 +38,41 @@ describe("uploadIdsInDocument", () => {
         { type: "file", props: { url: "https://example.com/plan.pdf" }, children: [] },
       ]),
     ).toEqual([id]);
+  });
+});
+
+describe("zip MIME types", () => {
+  it("accepts the types Windows Chrome and Edge send for a .zip", () => {
+    for (const mime of [
+      "application/zip",
+      "application/x-zip-compressed",
+      "application/x-zip",
+    ]) {
+      expect(uploadRejection({ name: "bundle.zip", mime, size: 12 })).toBeNull();
+      expect(uploadExtension("bundle", mime)).toBe("zip");
+    }
+  });
+});
+
+describe("createUploadGate", () => {
+  it("lets a waiter proceed only after every start has an end", async () => {
+    const gate = createUploadGate();
+    expect(gate.busy).toBe(false);
+    await gate.idle();
+    gate.start();
+    gate.start();
+    expect(gate.busy).toBe(true);
+    let released = false;
+    const waiting = gate.idle().then(() => {
+      released = true;
+    });
+    await Promise.resolve();
+    expect(released).toBe(false);
+    gate.end();
+    await Promise.resolve();
+    expect(released).toBe(false);
+    gate.end();
+    await waiting;
+    expect(gate.busy).toBe(false);
   });
 });

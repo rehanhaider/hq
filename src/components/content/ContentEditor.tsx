@@ -103,10 +103,14 @@ export function ContentEditor({
   page,
   editable = true,
   onDocumentChange,
+  onUploadStart,
+  onUploadEnd,
 }: {
   page: PageDetail;
   editable?: boolean;
   onDocumentChange: (document: ContentBlock[]) => void;
+  onUploadStart?: () => void;
+  onUploadEnd?: () => void;
 }) {
   const ui = useUI();
   const editorHost = useRef<HTMLDivElement>(null);
@@ -118,13 +122,24 @@ export function ContentEditor({
   const linkPosition = useRef<number | undefined>(undefined);
   const editingExistingLink = useRef(false);
   const pageId = page.id;
+  const onUploadStartRef = useRef(onUploadStart);
+  const onUploadEndRef = useRef(onUploadEnd);
+  const onDocumentChangeRef = useRef(onDocumentChange);
+  onUploadStartRef.current = onUploadStart;
+  onUploadEndRef.current = onUploadEnd;
+  onDocumentChangeRef.current = onDocumentChange;
+  const editorRef = useRef<ReturnType<typeof useCreateBlockNote> | null>(null);
 
   /**
    * Where a pasted, dropped, or chosen file goes. The editor only learns that
    * an upload failed, so the reason is kept here and shown under the page.
+   *
+   * The URL is written onto the block before this returns, so a page change
+   * that waited for the POST still has something to save. BlockNote would do
+   * the same write after we return, which is then a no-op.
    */
   const uploadFile = useCallback(
-    async (selected: File) => {
+    async (selected: File, blockId?: string) => {
       const refusal = uploadRejection({
         name: selected.name,
         mime: selected.type,
@@ -134,15 +149,22 @@ export function ContentEditor({
         setUploadError(refusal);
         throw new Error(refusal);
       }
+      onUploadStartRef.current?.();
       const body = new FormData();
       body.append("file", selected);
       body.append("pageId", pageId);
-      let payload: { url?: string; error?: string } | null = null;
       try {
         const response = await fetch("/api/uploads", { method: "POST", body });
-        payload = (await response.json()) as { url?: string; error?: string };
+        const payload = (await response.json()) as { url?: string; error?: string };
         if (!response.ok || !payload?.url)
           throw new Error(payload?.error || "The file could not be uploaded.");
+        const current = editorRef.current;
+        if (blockId && current?.getBlock(blockId)) {
+          current.updateBlock(blockId, { props: { url: payload.url } });
+          onDocumentChangeRef.current(current.document as unknown as ContentBlock[]);
+        }
+        setUploadError("");
+        return payload.url;
       } catch (error) {
         const message =
           error instanceof Error && error.message
@@ -150,9 +172,9 @@ export function ContentEditor({
             : "The file could not be uploaded.";
         setUploadError(message);
         throw new Error(message);
+      } finally {
+        onUploadEndRef.current?.();
       }
-      setUploadError("");
-      return payload.url!;
     },
     [pageId],
   );
@@ -170,6 +192,7 @@ export function ContentEditor({
     uploadFile,
     defaultStyles: true,
   });
+  editorRef.current = editor;
 
   useEffect(() => {
     const host = editorHost.current;
