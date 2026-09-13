@@ -262,6 +262,13 @@ describe("dailySeries", () => {
     expect(dailySeries(daily, "2026-09-12", "2026-09-08")).toEqual([]);
   });
 
+  it("carries merged requests per day, zero-filled", () => {
+    // The home page's bars are requests merged, so a day with none has to be
+    // a zero in the series rather than a gap.
+    const series = dailySeries(daily, "2026-09-08", "2026-09-12");
+    expect(series.map((entry) => entry.prs)).toEqual([0, 1, 0, 0, 0]);
+  });
+
   it("ignores days outside the range", () => {
     const series = dailySeries(daily, "2026-09-10", "2026-09-11");
     expect(series).toHaveLength(2);

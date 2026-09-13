@@ -83,13 +83,11 @@ export const deenContentSchema = z.object({
 
 export const settingsSchema = z.object({
   timezone: z.string().default("Asia/Kolkata"),
-  cycle_start_date: dateString.nullable(),
   istighfar_target: z.coerce.number().int().positive().default(100),
 });
 
 export const settingsUpdateSchema = z.object({
   timezone: z.string().optional(),
-  cycle_start_date: dateString.nullable().optional(),
   istighfar_target: z.coerce.number().int().positive().optional(),
 });
 

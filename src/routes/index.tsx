@@ -7,7 +7,7 @@ import { useNewPage } from "@/queries/content";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Dot } from "@/components/content/properties";
 import { relativeTime } from "@/lib/content";
-import { cycleStrip, type PrayerStatus } from "@/lib/deen";
+import { windowStrip, type DayMark, type PrayerStatus } from "@/lib/deen";
 import { defaultFilters } from "@/lib/model";
 import { cn } from "@/lib/utils";
 
@@ -82,15 +82,12 @@ function HomePage() {
         : `${WORDS[logged]} ${logged === 1 ? "prayer" : "prayers"} logged, ${WORDS[5 - logged]?.toLowerCase()} to go.`;
   const target = deen.settings.istighfar_target;
   const istighfar = target > 0 ? Math.min(100, (day.istighfar_count / target) * 100) : 0;
-  const marks = cycleStrip(
-    deen.days,
-    deen.settings.cycle_start_date,
-    deen.today,
-    target,
-  );
+  const marks = windowStrip(deen.days, deen.today, target);
   const week = github.week;
-  const peak = Math.max(...week.days.map((entry) => entry.commits), 0);
-  const chart = github.repositories > 0 && peak > 0;
+  // The bars count requests merged, not commits: the headline figures already
+  // carry the commits, and a merged request is the unit of finished work.
+  const peak = Math.max(...week.days.map((entry) => entry.prs), 0);
+  const chart = github.repositories > 0;
 
   return (
     <div className="space-y-6 lg:space-y-8">
@@ -99,14 +96,6 @@ function HomePage() {
           <p className="section-label">{date}</p>
           <h1 className="title mt-2">{state}</h1>
         </div>
-        <span className="inline-flex h-6 items-center gap-2 rounded-md bg-muted px-2 text-xs font-medium text-muted-foreground">
-          <span className="size-1.5 rounded-full bg-primary" aria-hidden />
-          {deen.cycleDay === null
-            ? "No cycle set"
-            : deen.cycleComplete
-              ? "Cycle complete"
-              : `Day ${deen.cycleDay} of 40`}
-        </span>
       </header>
 
       <div className="grid items-stretch gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] lg:gap-8">
@@ -125,22 +114,17 @@ function HomePage() {
               <li key={label} className="text-center">
                 <span
                   aria-hidden
+                  title={`${label} — ${statusLabel(status)}`}
                   className={cn(
                     "block h-1.5 rounded-full",
                     status === "ontime"
                       ? "bg-positive"
-                      : status === "missed"
-                        ? "bg-negative"
-                        : "bg-track",
+                      : status === "qada"
+                        ? "bg-warning"
+                        : status === "missed"
+                          ? "bg-negative"
+                          : "bg-track",
                   )}
-                  style={
-                    status === "qada"
-                      ? {
-                          background:
-                            "linear-gradient(90deg, var(--positive) 50%, var(--track) 50%)",
-                        }
-                      : undefined
-                  }
                 />
                 <span className="mt-2 block text-xs text-muted-foreground">
                   {label}
@@ -195,9 +179,9 @@ function HomePage() {
           <div className="section my-5" />
 
           <div className="flex items-center justify-between gap-3">
-            <p className="section-label">The cycle</p>
+            <p className="section-label">The last 40 days</p>
             <span className="text-[0.8125rem] text-muted-foreground">
-              {deen.settings.cycle_start_date ? "40-day" : "Last 40 days"}
+              {deen.windowDays} of 40 days logged
             </span>
           </div>
 
@@ -208,7 +192,7 @@ function HomePage() {
                 background: `conic-gradient(var(--primary) 0 ${deen.overall.percentage}%, var(--track) ${deen.overall.percentage}% 100%)`,
               }}
               role="img"
-              aria-label={`${deen.overall.percentage}% adherence`}
+              aria-label={`${deen.overall.percentage}% adherence over ${deen.windowDays} logged days`}
             >
               <div className="grid size-[4.75rem] place-items-center rounded-full bg-card text-center sm:size-26">
                 <div>
@@ -222,7 +206,7 @@ function HomePage() {
 
             <div
               className="grid flex-1 grid-cols-10 gap-1 sm:grid-cols-[repeat(20,minmax(0,1fr))]"
-              aria-label="One mark per day of the cycle"
+              aria-label="One mark per day of the last 40 days"
               role="img"
             >
               {marks.map((mark) => (
@@ -233,11 +217,11 @@ function HomePage() {
                     "block aspect-square rounded-[3px]",
                     mark.state === "hit"
                       ? "bg-positive"
-                      : mark.state === "partial"
-                        ? "bg-positive/35"
-                        : mark.state === "empty"
-                          ? "bg-track"
-                          : "bg-track/50",
+                      : mark.state === "late"
+                        ? "bg-warning"
+                        : mark.state === "partial"
+                          ? "bg-positive/35"
+                          : "bg-track",
                     mark.today && "outline-2 outline-offset-1 outline-primary",
                   )}
                 />
@@ -246,9 +230,11 @@ function HomePage() {
           </div>
 
           <Rule />
+          {/* The streak is not windowed, so its row says so: the eyebrow above
+              covers only the ring and the strip. */}
           <div className="flex items-center justify-between gap-3">
             <span className="text-[0.8125rem] text-muted-foreground">
-              Fajr streak
+              Fajr streak, all time
             </span>
             <span className="font-mono text-[0.8125rem] tabular-nums">
               {deen.fajrStreak.current}{" "}
@@ -262,15 +248,6 @@ function HomePage() {
               {deen.fajrStreak.longest === 1 ? "day" : "days"}
             </span>
           </div>
-          {!deen.settings.cycle_start_date && (
-            <p className="mt-4 text-[0.8125rem] text-muted-foreground">
-              No cycle start date yet.{" "}
-              <Link to="/deen/settings" className="text-primary underline">
-                Set one
-              </Link>{" "}
-              to measure a real cycle.
-            </p>
-          )}
 
           <div className="mt-5 flex-1" />
           <Link
@@ -342,36 +319,45 @@ function HomePage() {
                   </dd>
                 </div>
               </dl>
-              {peak === 0 ? (
-                <p className="mt-5 text-[0.8125rem] text-muted-foreground">
-                  No commits in the last 7 days.
-                </p>
-              ) : (
-                <div className="mt-5 flex flex-1 flex-col">
-                  <div className="flex flex-1 items-end gap-1.5">
-                    {week.days.map((entry) => (
-                      <span
-                        key={entry.day}
-                        title={`${entry.day} — ${entry.commits} commits`}
-                        className="flex-1 rounded-t-[3px] bg-primary/85"
-                        style={{
-                          height: `${Math.max(2, (entry.commits / peak) * 100)}%`,
-                        }}
-                      />
-                    ))}
-                  </div>
-                  <div className="mt-2 flex gap-1.5">
-                    {week.days.map((entry) => (
-                      <span
-                        key={entry.day}
-                        className="flex-1 text-center text-[0.6875rem] text-muted-foreground"
-                      >
-                        {weekday(entry.day)}
-                      </span>
-                    ))}
-                  </div>
+              <div className="mt-5 flex flex-1 flex-col">
+                <p className="section-label">Requests merged per day</p>
+                {/* The axis is drawn whether or not anything was merged: a week
+                    of nothing is a fact about the week, not a missing chart. */}
+                <div
+                  className="mt-3 flex flex-1 items-end gap-1.5 border-b"
+                  role="img"
+                  aria-label={`Requests merged per day, ${week.days.map((entry) => `${weekday(entry.day)} ${entry.prs}`).join(", ")}`}
+                >
+                  {week.days.map((entry) => (
+                    <span
+                      key={entry.day}
+                      title={`${entry.day} — ${entry.prs} ${entry.prs === 1 ? "request" : "requests"} merged`}
+                      className="flex-1 rounded-t-[3px] bg-primary/85"
+                      style={{
+                        height:
+                          peak > 0
+                            ? `${Math.max(2, (entry.prs / peak) * 100)}%`
+                            : 0,
+                      }}
+                    />
+                  ))}
                 </div>
-              )}
+                <div className="mt-2 flex gap-1.5">
+                  {week.days.map((entry) => (
+                    <span
+                      key={entry.day}
+                      className="flex-1 text-center text-[0.6875rem] text-muted-foreground"
+                    >
+                      {weekday(entry.day)}
+                    </span>
+                  ))}
+                </div>
+                {peak === 0 && (
+                  <p className="mt-3 text-[0.8125rem] text-muted-foreground">
+                    Nothing merged in the last 7 days.
+                  </p>
+                )}
+              </div>
             </>
           )}
         </section>
@@ -478,14 +464,14 @@ function statusLabel(status: PrayerStatus) {
         : "not logged";
 }
 
-function markLabel(state: "hit" | "partial" | "empty" | "future") {
+function markLabel(state: DayMark["state"]) {
   return state === "hit"
     ? "most of the day kept"
-    : state === "partial"
-      ? "partly kept"
-      : state === "empty"
-        ? "not logged"
-        : "still to come";
+    : state === "late"
+      ? "a prayer made up late"
+      : state === "partial"
+        ? "partly kept"
+        : "nothing kept";
 }
 
 function weekday(day: string) {

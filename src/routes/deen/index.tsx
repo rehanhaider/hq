@@ -222,22 +222,6 @@ function TodayPage() {
               />
             </section>
             <div className="list">
-              {data?.cycleDay !== null && data?.cycleDay !== undefined && (
-                <div className="list-row">
-                  <span className="section-label">Cycle</span>
-                  {data.cycleComplete ? (
-                    <span className="text-sm font-medium">Cycle complete</span>
-                  ) : (
-                    <span className="text-2xl font-semibold tabular-nums">
-                      {data.cycleDay}
-                      <span className="text-sm font-normal text-muted-foreground">
-                        {" "}
-                        / 40
-                      </span>
-                    </span>
-                  )}
-                </div>
-              )}
               <div className="list-row">
                 <span className="section-label">Fajr streak</span>
                 {data?.fajrStreak.current ? (
@@ -271,7 +255,7 @@ function statusLabel(value: PrayerStatus) {
 
 function statusTone(value: PrayerStatus) {
   if (value === "ontime") return "bg-positive/10 text-positive";
-  if (value === "qada") return "bg-chart-3/15";
+  if (value === "qada") return "bg-warning/15 text-warning";
   if (value === "missed") return "bg-negative/10 text-negative";
   return "bg-muted text-muted-foreground";
 }
