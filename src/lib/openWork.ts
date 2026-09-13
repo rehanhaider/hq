@@ -234,15 +234,11 @@ export function age(iso: string, now = Date.now()) {
  * stay a rendering of it.
  */
 export type WorkTab = "mine" | "triage";
-export type WorkKind = "both" | "issue" | "pr";
+/** One kind of row, and the two panes the view is split into. */
+export type WorkKind = WorkItem["kind"];
 export type WorkSort = "recent" | "oldest";
-export type WorkView = {
-  kind: WorkKind;
-  repo: string;
-  search: string;
-  sort: WorkSort;
-  limit: number;
-};
+export type WorkFilter = { repo: string; search: string };
+export type WorkView = WorkFilter & { sort: WorkSort; limit: number };
 export type WorkGroup = { repo: string; items: WorkItem[] };
 
 /** The one list a tab stands for. */
@@ -255,23 +251,27 @@ export function tabItems(work: OpenWork | undefined, tab: WorkTab): WorkItem[] {
  * The number on each tab, read through the filters below it — otherwise the
  * tabs say one thing while the list shows another.
  */
-export function tabCounts(
-  work: OpenWork | undefined,
-  filter: { kind: WorkKind; repo: string; search: string },
-) {
+export function tabCounts(work: OpenWork | undefined, filter: WorkFilter) {
   const count = (tab: WorkTab) =>
     tabItems(work, tab).filter((item) => matchesWork(item, filter)).length;
   return { mine: count("mine"), triage: count("triage") };
 }
 
-export function matchesWork(
-  item: WorkItem,
-  filter: { kind: WorkKind; repo: string; search: string },
-) {
-  if (filter.kind !== "both" && item.kind !== filter.kind) return false;
+export function matchesWork(item: WorkItem, filter: WorkFilter) {
   if (filter.repo !== "all" && item.repo !== filter.repo) return false;
   const needle = filter.search.trim().toLowerCase();
   return !needle || item.title.toLowerCase().includes(needle);
+}
+
+/**
+ * The two panes: issues on one side, pull requests on the other. Order is
+ * kept, so whatever sorted the list still holds inside each half.
+ */
+export function splitByKind(items: WorkItem[]) {
+  const issue: WorkItem[] = [];
+  const pr: WorkItem[] = [];
+  for (const item of items) (item.kind === "pr" ? pr : issue).push(item);
+  return { issue, pr };
 }
 
 export function byRecentUpdated(a: WorkItem, b: WorkItem) {
@@ -284,11 +284,7 @@ export function byRecentUpdated(a: WorkItem, b: WorkItem) {
  */
 export function repoOptions(
   items: WorkItem[],
-  filter: { kind: WorkKind; repo: string; search: string } = {
-    kind: "both",
-    repo: "all",
-    search: "",
-  },
+  filter: WorkFilter = { repo: "all", search: "" },
 ) {
   const counts = new Map<string, number>();
   for (const item of items)

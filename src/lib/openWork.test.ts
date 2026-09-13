@@ -10,6 +10,7 @@ import {
   sweepQueries,
   arrangeWork,
   repoOptions,
+  splitByKind,
   tabCounts,
   tabItems,
   searchResponseSchema,
@@ -179,7 +180,7 @@ describe("arranging a list", () => {
     item({ id: 3, repo: "me/app", kind: "pr", updatedAt: "2026-09-07T00:00:00Z", title: "Tidy the sweep" }),
     item({ id: 4, repo: "me/app", updatedAt: "2026-09-01T00:00:00Z", title: "Import fixture" }),
   ];
-  const view = { kind: "both", repo: "all", search: "", sort: "recent", limit: 50 } as const;
+  const view = { repo: "all", search: "", sort: "recent", limit: 50 } as const;
 
   it("gathers the rows into repositories in the order they appear", () => {
     const { groups, total, shown } = arrangeWork(rows, view);
@@ -193,8 +194,12 @@ describe("arranging a list", () => {
     expect(oldest.groups.map((group) => group.repo)).toEqual(["me/app", "me/hq"]);
     expect(oldest.groups[0]?.items.map((row) => row.id)).toEqual([4, 1, 3]);
   });
-  it("filters by kind, repository, and a search over the title", () => {
-    expect(arrangeWork(rows, { ...view, kind: "pr" }).total).toBe(2);
+  it("splits the rows into issues and pull requests", () => {
+    const { issue, pr } = splitByKind(rows);
+    expect(issue.map((row) => row.id)).toEqual([1, 4]);
+    expect(pr.map((row) => row.id)).toEqual([2, 3]);
+  });
+  it("filters by repository and a search over the title", () => {
     expect(arrangeWork(rows, { ...view, repo: "me/app" }).total).toBe(3);
     expect(arrangeWork(rows, { ...view, search: "  IMPORT " }).total).toBe(2);
     expect(arrangeWork(rows, { ...view, search: "nothing" }).groups).toEqual([]);
@@ -212,11 +217,11 @@ describe("arranging a list", () => {
     ]);
   });
   it("counts the repositories through the other filters", () => {
-    expect(repoOptions(rows, { kind: "pr", repo: "all", search: "" })).toEqual([
+    expect(repoOptions(splitByKind(rows).pr, { repo: "all", search: "" })).toEqual([
       { repo: "me/app", count: 1 },
       { repo: "me/hq", count: 1 },
     ]);
-    expect(repoOptions(rows, { kind: "both", repo: "all", search: "import" })).toEqual([
+    expect(repoOptions(rows, { repo: "all", search: "import" })).toEqual([
       { repo: "me/app", count: 2 },
     ]);
   });
@@ -232,7 +237,7 @@ describe("the tabs", () => {
     },
     "2026-09-10T00:00:00Z",
   );
-  const all = { kind: "both", repo: "all", search: "" } as const;
+  const all = { repo: "all", search: "" } as const;
 
   it("hands back the list the tab stands for", () => {
     expect(tabItems(work, "mine").map((row) => row.id)).toEqual([1, 2, 3]);
@@ -241,8 +246,6 @@ describe("the tabs", () => {
   });
   it("counts both tabs through the filters below them", () => {
     expect(tabCounts(work, all)).toEqual({ mine: 3, triage: 2 });
-    expect(tabCounts(work, { ...all, kind: "pr" })).toEqual({ mine: 2, triage: 1 });
-    expect(tabCounts(work, { ...all, kind: "issue" })).toEqual({ mine: 1, triage: 1 });
     expect(tabCounts(work, { ...all, repo: "me/hq" })).toEqual({ mine: 0, triage: 1 });
     expect(tabCounts(work, { ...all, search: "ship" })).toEqual({ mine: 1, triage: 0 });
     expect(tabCounts(undefined, all)).toEqual({ mine: 0, triage: 0 });
