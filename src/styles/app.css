@@ -222,15 +222,6 @@
   .list-row {
     @apply flex min-h-11 items-center justify-between gap-4 py-3;
   }
-  .section-tabs {
-    @apply flex gap-5 overflow-x-auto border-b;
-  }
-  .section-tab {
-    @apply flex min-h-11 shrink-0 items-center border-b-2 border-transparent px-1 text-sm text-muted-foreground transition-colors hover:text-foreground;
-  }
-  .section-tab[aria-current="page"] {
-    @apply border-primary font-medium text-foreground;
-  }
   .content-workspace {
     /* Two columns only once there is room for both. Below `lg` the sidebar
        has already taken 16rem, and an 18rem page list beside it would leave
