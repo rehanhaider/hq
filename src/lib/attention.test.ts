@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   attentionCounts,
   goingStale,
+  isInboxZero,
   ownDrafts,
   reasonLabel,
   triageTop,
@@ -114,5 +115,56 @@ describe("attentionCounts", () => {
       openIssues: 1,
       openPrs: 2,
     });
+  });
+
+  it("counts Needs you and triage inside the repo filter", () => {
+    const work = buildOpenWork(
+      {
+        assigned: [
+          item({ id: 1, repo: "me/app" }),
+          item({ id: 5, repo: "me/other" }),
+        ],
+        reviewRequested: [item({ id: 2, kind: "pr", repo: "me/app" })],
+        authored: [item({ id: 3, kind: "pr", repo: "me/app" })],
+        everything: [
+          item({ id: 4, unassigned: true, repo: "me/app" }),
+          item({ id: 6, unassigned: true, repo: "me/other" }),
+        ],
+      },
+      "2026-09-14T00:00:00Z",
+    );
+    expect(attentionCounts(work, ["me/other"])).toEqual({
+      needsYou: 1,
+      triage: 1,
+      openIssues: 1,
+      openPrs: 0,
+    });
+  });
+});
+
+describe("isInboxZero", () => {
+  const empty = buildOpenWork(
+    { assigned: [], reviewRequested: [], authored: [], everything: [] },
+    "2026-09-14T00:00:00Z",
+  );
+
+  it("is true only when connected lists are empty and the fetch succeeded", () => {
+    expect(isInboxZero(empty, 0)).toBe(true);
+    expect(isInboxZero(empty, 3)).toBe(false);
+    expect(isInboxZero(undefined, 0)).toBe(false);
+  });
+
+  it("is false when the query failed or GitHub returned an error", () => {
+    expect(isInboxZero(empty, 0, new Error("rate limit"))).toBe(false);
+    expect(
+      isInboxZero(
+        buildOpenWork(
+          { assigned: [], reviewRequested: [], authored: [], everything: [] },
+          "2026-09-14T00:00:00Z",
+          "GitHub request limit reached.",
+        ),
+        0,
+      ),
+    ).toBe(false);
   });
 });

@@ -1,10 +1,11 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, ArrowUpRight } from "lucide-react";
+import { ArrowRight, ArrowUpRight, CircleAlert } from "lucide-react";
 import { dashboardQuery, openWorkQuery } from "@/queries/dashboard";
 import {
   attentionCounts,
   goingStale,
+  isInboxZero,
   ownDrafts,
   reasonLabel,
   triageTop,
@@ -43,9 +44,10 @@ export function GithubOverview({ filters }: { filters: Filters }) {
   const stale = goingStale(mine, repos);
   const drafts = ownDrafts(mine, data?.login, repos);
   const triage = triageTop(data?.triage ?? [], repos);
-  const counts = attentionCounts(data);
+  const counts = attentionCounts(data, repos);
   const totalWaiting =
     waiting.length + stale.length + drafts.length + triage.length;
+  const inboxZero = isInboxZero(data, totalWaiting, work.error);
 
   if (work.isPending && dashboard.isPending)
     return (
@@ -119,7 +121,19 @@ export function GithubOverview({ filters }: { filters: Filters }) {
         ))}
       </div>
 
-      {totalWaiting === 0 && work.data ? (
+      {work.error || data?.error ? (
+        <p
+          role="alert"
+          className="flex items-start gap-2 rounded-lg border border-negative/30 bg-negative/5 px-4 py-3 text-xs text-negative"
+        >
+          <CircleAlert className="mt-px size-3.5 shrink-0" />
+          <span className="min-w-0 break-words">
+            {work.error?.message ?? data?.error}
+          </span>
+        </p>
+      ) : null}
+
+      {inboxZero ? (
         <div className="section flex min-h-48 flex-col items-center justify-center px-5 py-12 text-center">
           <h2 className="font-semibold">Nothing needs you</h2>
           <p className="mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">

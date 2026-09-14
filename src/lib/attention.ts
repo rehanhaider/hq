@@ -98,14 +98,31 @@ export type AttentionCounts = {
   openPrs: number;
 };
 
-/** The four figures the Overview leads with. */
-export function attentionCounts(work: OpenWork | undefined): AttentionCounts {
+/** The four figures the Overview leads with. Same repo scope as the lists. */
+export function attentionCounts(
+  work: OpenWork | undefined,
+  repos: string[] = [],
+): AttentionCounts {
   const mine = work?.mine ?? [];
-  const kinds = countKinds(mine);
+  const kinds = countKinds(mine.filter((item) => inRepos(item, repos)));
   return {
-    needsYou: waitingOnYou(mine, [], Number.MAX_SAFE_INTEGER).length,
-    triage: (work?.triage ?? []).length,
+    needsYou: waitingOnYou(mine, repos, Number.MAX_SAFE_INTEGER).length,
+    triage: (work?.triage ?? []).filter((item) => inRepos(item, repos)).length,
     openIssues: kinds.issues,
     openPrs: kinds.prs,
   };
+}
+
+/**
+ * Inbox-zero is a claim that the lists are empty, not a stand-in for a
+ * failed or partial fetch. Disconnected and errored payloads stay out.
+ */
+export function isInboxZero(
+  work: OpenWork | undefined,
+  totalWaiting: number,
+  queryError?: unknown,
+): boolean {
+  if (!work?.connected) return false;
+  if (queryError || work.error) return false;
+  return totalWaiting === 0;
 }
