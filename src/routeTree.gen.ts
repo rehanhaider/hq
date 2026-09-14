@@ -23,6 +23,7 @@ import { Route as DeenIndexRouteImport } from './routes/deen/index'
 import { Route as DeenHistoryRouteImport } from './routes/deen/history'
 import { Route as DeenSettingsRouteImport } from './routes/deen/settings'
 import { Route as NotesSplatRouteImport } from './routes/notes/$'
+import { Route as ApiAvatarsOrgRouteImport } from './routes/api/avatars.$org'
 import { Route as ApiUploadsIdRouteImport } from './routes/api/uploads.$id'
 
 const IndexRoute = IndexRouteImport.update({
@@ -95,6 +96,11 @@ const NotesSplatRoute = NotesSplatRouteImport.update({
   path: '/$',
   getParentRoute: () => NotesRoute,
 } as any)
+const ApiAvatarsOrgRoute = ApiAvatarsOrgRouteImport.update({
+  id: '/api/avatars/$org',
+  path: '/api/avatars/$org',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiUploadsIdRoute = ApiUploadsIdRouteImport.update({
   id: '/$id',
   path: '/$id',
@@ -116,6 +122,7 @@ export interface FileRoutesByFullPath {
   '/notes/$': typeof NotesSplatRoute
   '/content/': typeof ContentIndexRoute
   '/deen/': typeof DeenIndexRoute
+  '/api/avatars/$org': typeof ApiAvatarsOrgRoute
   '/api/uploads/$id': typeof ApiUploadsIdRoute
 }
 export interface FileRoutesByTo {
@@ -131,6 +138,7 @@ export interface FileRoutesByTo {
   '/notes/$': typeof NotesSplatRoute
   '/content': typeof ContentIndexRoute
   '/deen': typeof DeenIndexRoute
+  '/api/avatars/$org': typeof ApiAvatarsOrgRoute
   '/api/uploads/$id': typeof ApiUploadsIdRoute
 }
 export interface FileRoutesById {
@@ -149,6 +157,7 @@ export interface FileRoutesById {
   '/notes/$': typeof NotesSplatRoute
   '/content/': typeof ContentIndexRoute
   '/deen/': typeof DeenIndexRoute
+  '/api/avatars/$org': typeof ApiAvatarsOrgRoute
   '/api/uploads/$id': typeof ApiUploadsIdRoute
 }
 export interface FileRouteTypes {
@@ -168,6 +177,7 @@ export interface FileRouteTypes {
     | '/notes/$'
     | '/content/'
     | '/deen/'
+    | '/api/avatars/$org'
     | '/api/uploads/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -183,6 +193,7 @@ export interface FileRouteTypes {
     | '/notes/$'
     | '/content'
     | '/deen'
+    | '/api/avatars/$org'
     | '/api/uploads/$id'
   id:
     | '__root__'
@@ -200,6 +211,7 @@ export interface FileRouteTypes {
     | '/notes/$'
     | '/content/'
     | '/deen/'
+    | '/api/avatars/$org'
     | '/api/uploads/$id'
   fileRoutesById: FileRoutesById
 }
@@ -210,6 +222,7 @@ export interface RootRouteChildren {
   GithubRoute: typeof GithubRoute
   NotesRoute: typeof NotesRouteWithChildren
   ApiUploadsRoute: typeof ApiUploadsRouteWithChildren
+  ApiAvatarsOrgRoute: typeof ApiAvatarsOrgRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -312,6 +325,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof NotesSplatRouteImport
       parentRoute: typeof NotesRoute
     }
+    '/api/avatars/$org': {
+      id: '/api/avatars/$org'
+      path: '/api/avatars/$org'
+      fullPath: '/api/avatars/$org'
+      preLoaderRoute: typeof ApiAvatarsOrgRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/uploads/$id': {
       id: '/api/uploads/$id'
       path: '/$id'
@@ -382,6 +402,7 @@ const rootRouteChildren: RootRouteChildren = {
   GithubRoute: GithubRoute,
   NotesRoute: NotesRouteWithChildren,
   ApiUploadsRoute: ApiUploadsRouteWithChildren,
+  ApiAvatarsOrgRoute: ApiAvatarsOrgRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

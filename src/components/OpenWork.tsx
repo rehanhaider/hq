@@ -358,12 +358,7 @@ function Pane({
                   className="min-w-0 overflow-hidden rounded-xl border bg-muted/30"
                 >
                   <div className="flex items-center gap-2.5 px-3 py-2.5">
-                    <span
-                      aria-hidden
-                      className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-[0.6875rem] font-semibold text-primary"
-                    >
-                      {initials(group.repo)}
-                    </span>
+                    <OrgAvatar repo={group.repo} />
                     <RepoName repo={group.repo} />
                     <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground tabular-nums">
                       {group.items.length}
@@ -409,6 +404,33 @@ function RepoName({ repo }: { repo: string }) {
       {org ? <span className="text-muted-foreground">{org}/</span> : null}
       <span className="font-semibold">{name}</span>
     </h3>
+  );
+}
+
+/**
+ * The org's own picture, cached by the server and refreshed weekly. The
+ * initials sit underneath, so a login GitHub has no picture for — or a
+ * picture still on its way — degrades to the old tile rather than a hole.
+ */
+function OrgAvatar({ repo }: { repo: string }) {
+  const slash = repo.indexOf("/");
+  const org = slash < 0 ? repo : repo.slice(0, slash);
+  return (
+    <span
+      aria-hidden
+      className="relative flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-primary/10 text-[0.6875rem] font-semibold text-primary"
+    >
+      {initials(repo)}
+      <img
+        src={`/api/avatars/${encodeURIComponent(org.toLowerCase())}`}
+        alt=""
+        loading="lazy"
+        width={28}
+        height={28}
+        className="absolute inset-0 size-full object-cover"
+        onError={(event) => event.currentTarget.remove()}
+      />
+    </span>
   );
 }
 
