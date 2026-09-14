@@ -14,6 +14,9 @@ export const pagesQuery = (q = "", trashed = false) =>
   queryOptions({
     queryKey: contentKeys.list(q, trashed),
     queryFn: () => getPages({ data: { q: q || undefined, trashed } }),
+    // Matches the router preload window: a hovered sidebar link serves the
+    // click from cache instead of refetching. Writes invalidate explicitly.
+    staleTime: 30000,
   });
 
 export const pageQuery = (id: string) =>
@@ -21,11 +24,14 @@ export const pageQuery = (id: string) =>
     queryKey: contentKeys.detail(id),
     queryFn: () => getPage({ data: { id } }),
     enabled: Boolean(id),
+    staleTime: 30000,
   });
 
 export const contentPropertiesQuery = queryOptions({
   queryKey: contentKeys.properties,
   queryFn: () => getContentProperties(),
+  // Properties change rarely and every write invalidates this key.
+  staleTime: 60000,
 });
 
 /**

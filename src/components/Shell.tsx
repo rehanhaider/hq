@@ -211,6 +211,20 @@ export function Shell() {
                     ? {}
                     : undefined
               }
+              // The editor is React.lazy behind the Content route, so the
+              // router preload fetches the small route chunk but not the ~800K
+              // BlockNote bundle. Warm it on hover/focus so the first visit
+              // does not pay that download on click.
+              onMouseEnter={
+                to === "/content"
+                  ? () => void import("@/components/content/ContentEditor")
+                  : undefined
+              }
+              onFocus={
+                to === "/content"
+                  ? () => void import("@/components/content/ContentEditor")
+                  : undefined
+              }
               title={title}
               aria-label={title}
               aria-current={
