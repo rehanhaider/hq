@@ -7,6 +7,7 @@ import { updateDeenDay } from "@/server/fns";
 import { Button } from "@/components/ui/button";
 import {
   DEEN_GUIDES,
+  middayPrayerLabel,
   shiftDate,
   type DeenContent,
   type DeenContentItemKey,
@@ -141,6 +142,10 @@ function TodayPage() {
               <div className="list">
                 {prayers.map(({ key, label }) => {
                   const value = (day?.[key] ?? null) as PrayerStatus;
+                  const name =
+                    key === "dhuhr" && selected
+                      ? middayPrayerLabel(selected)
+                      : label;
                   return (
                     <div key={key} className="list-row">
                       <button
@@ -148,7 +153,7 @@ function TodayPage() {
                         onClick={() => togglePrayer(key, value)}
                         className="flex flex-1 items-center justify-between gap-4 text-left"
                       >
-                        <span className="text-sm font-medium">{label}</span>
+                        <span className="text-sm font-medium">{name}</span>
                         <span
                           className={`rounded-md px-2 py-0.5 text-xs ${statusTone(value)}`}
                         >
@@ -159,7 +164,7 @@ function TodayPage() {
                         type="button"
                         onClick={() => patch({ date: selected, [key]: null })}
                         disabled={value === null}
-                        aria-label={`Clear ${label}`}
+                        aria-label={`Clear ${name}`}
                         className="shrink-0 px-2 text-sm text-muted-foreground disabled:opacity-0"
                       >
                         ×
