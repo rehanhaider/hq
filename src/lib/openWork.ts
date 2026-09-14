@@ -29,6 +29,8 @@ export type WorkItem = {
  */
 export type OpenWork = {
   connected: boolean;
+  /** The signed-in GitHub login, when the lists were loaded for an account. */
+  login?: string;
   mine: WorkItem[];
   triage: WorkItem[];
   fetchedAt: string;
@@ -138,6 +140,7 @@ export function buildOpenWork(
   },
   fetchedAt: string,
   error?: string,
+  login?: string,
 ): OpenWork {
   const mine = dedupe([
     ...lists.assigned,
@@ -152,6 +155,7 @@ export function buildOpenWork(
     mine,
     triage,
     fetchedAt,
+    ...(login ? { login } : {}),
     ...(error ? { error } : {}),
   };
 }
@@ -245,6 +249,16 @@ export type WorkGroup = { repo: string; items: WorkItem[] };
 export function tabItems(work: OpenWork | undefined, tab: WorkTab): WorkItem[] {
   if (!work) return [];
   return tab === "triage" ? work.triage : work.mine;
+}
+
+/**
+ * Triage always names who opened the row. Mine only does when it is not the
+ * signed-in login — assigned and review-requested rows are often someone
+ * else's, and hiding `@author` there drops the one thing that said so.
+ */
+export function showsAuthor(item: WorkItem, tab: WorkTab, login?: string) {
+  if (tab === "triage") return true;
+  return !login || item.author.toLowerCase() !== login.toLowerCase();
 }
 
 /**

@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowUpRight,
@@ -21,6 +20,7 @@ import {
   splitByKind,
   tabCounts,
   tabItems,
+  showsAuthor,
 } from "@/lib/openWork";
 import type { WorkItem, WorkKind, WorkSort, WorkTab } from "@/lib/openWork";
 import { cn } from "@/lib/utils";
@@ -237,6 +237,8 @@ export function OpenWork() {
                 title={entry.title}
                 empty={entry.empty}
                 items={kinds[entry.kind]}
+                tab={tab}
+                login={data?.login}
                 view={views[entry.kind]}
                 expanded={pane === entry.kind}
                 railed={pane !== "both" && pane !== entry.kind}
@@ -267,6 +269,8 @@ function Pane({
   title,
   empty,
   items,
+  tab,
+  login,
   view,
   expanded,
   railed,
@@ -278,6 +282,8 @@ function Pane({
   title: string;
   empty: string;
   items: WorkItem[];
+  tab: WorkTab;
+  login?: string;
   view: { repo: string; search: string; sort: WorkSort; limit: number };
   expanded: boolean;
   railed: boolean;
@@ -348,20 +354,27 @@ function Pane({
       >
         {groups.length ? (
           <>
-            <div className="space-y-5">
+            <div className="space-y-3">
               {groups.map((group) => (
-                <section key={group.repo} className="min-w-0">
-                  <div className="flex items-baseline gap-2 border-b pb-1.5">
-                    <h3 className="truncate font-mono text-xs font-medium text-foreground">
-                      {group.repo}
-                    </h3>
-                    <span className="font-mono text-xs text-muted-foreground tabular-nums">
+                <section
+                  key={group.repo}
+                  aria-label={group.repo}
+                  className="min-w-0 overflow-hidden rounded-xl border bg-muted/30"
+                >
+                  <div className="flex items-center gap-2.5 px-3 py-2.5">
+                    <OrgAvatar repo={group.repo} />
+                    <RepoName repo={group.repo} />
+                    <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground tabular-nums">
                       {group.items.length}
                     </span>
                   </div>
-                  <ul className="list min-w-0">
+                  <ul className="min-w-0 px-1.5 pb-1.5">
                     {group.items.map((item) => (
-                      <Row key={item.id} item={item} />
+                      <Row
+                        key={item.id}
+                        item={item}
+                        showAuthor={showsAuthor(item, tab, login)}
+                      />
                     ))}
                   </ul>
                 </section>
@@ -385,55 +398,109 @@ function Pane({
   );
 }
 
-/** A row is the whole width: icon, number, title, then the meta, right. */
-function Row({ item }: { item: WorkItem }) {
-  const more = Math.max(0, item.labels.length - 3);
+/** The org stays quiet so the repository name reads first. */
+function RepoName({ repo }: { repo: string }) {
+  const slash = repo.indexOf("/");
+  const org = slash < 0 ? null : repo.slice(0, slash);
+  const name = slash < 0 ? repo : repo.slice(slash + 1);
+  return (
+    <h3 className="min-w-0 flex-1 truncate text-sm">
+      {org ? <span className="text-muted-foreground">{org}/</span> : null}
+      <span className="font-semibold">{name}</span>
+    </h3>
+  );
+}
+
+/**
+ * The org's own picture, cached by the server and refreshed weekly. The
+ * initials sit underneath, so a login GitHub has no picture for — or a
+ * picture still on its way — degrades to the old tile rather than a hole.
+ */
+function OrgAvatar({ repo }: { repo: string }) {
+  const slash = repo.indexOf("/");
+  const org = slash < 0 ? repo : repo.slice(0, slash);
+  const [failed, setFailed] = useState(false);
+  return (
+    <span
+      aria-hidden
+      className="relative flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-primary/10 text-[0.6875rem] font-semibold text-primary"
+    >
+      {initials(repo)}
+      {failed ? null : (
+        <img
+          src={`/api/avatars/${encodeURIComponent(org.toLowerCase())}`}
+          alt=""
+          loading="lazy"
+          width={28}
+          height={28}
+          className="absolute inset-0 size-full object-cover"
+          onError={() => setFailed(true)}
+        />
+      )}
+    </span>
+  );
+}
+
+function initials(repo: string) {
+  const bits = repo.split("/");
+  const first = bits[0]?.[0] ?? "";
+  const second = (bits.length > 1 ? bits[1] : bits[0]?.slice(1))?.[0] ?? "";
+  return `${first}${second}`.toUpperCase();
+}
+
+/**
+ * Two lines: the title with the age, then one quiet meta line. The number,
+ * the author, and the labels used to compete with the title in a single row
+ * of chips and columns; now only the title has weight.
+ */
+function Row({ item, showAuthor }: { item: WorkItem; showAuthor: boolean }) {
+  const labels = item.labels.slice(0, 2).map((label) => label.name);
+  const extra = item.labels.length - labels.length;
+  const meta = [
+    `#${item.number}`,
+    ...(showAuthor ? [`@${item.author}`] : []),
+    ...(labels.length || extra
+      ? [`${labels.join(", ")}${extra ? ` +${extra}` : ""}`]
+      : []),
+  ].join(" · ");
   return (
     <li className="min-w-0">
       <a
         href={item.url}
         target="_blank"
         rel="noreferrer"
-        className="group -mx-2 flex min-h-11 flex-wrap items-center gap-x-3 gap-y-0.5 rounded-lg px-2 py-2 hover:bg-muted/60"
+        className="group block min-w-0 rounded-lg px-2.5 py-2 hover:bg-muted/60"
       >
-        <span className="flex min-w-0 flex-[1_1_100%] items-center gap-2.5 sm:flex-1">
-          <span className="font-mono text-xs text-muted-foreground tabular-nums">
-            #{item.number}
-          </span>
-          <span className="min-w-0 flex-1 truncate group-hover:text-primary">
+        <span className="flex items-baseline gap-2">
+          <span className="min-w-0 flex-1 truncate text-sm font-medium group-hover:text-primary">
             {item.title}
           </span>
+          <span className="flex shrink-0 items-center gap-1">
+            <span
+              className="font-mono text-xs text-muted-foreground tabular-nums"
+              title={`Updated ${item.updatedAt}`}
+            >
+              {age(item.updatedAt)}
+            </span>
+            <ArrowUpRight
+              className="size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-60 group-focus-visible:opacity-60"
+              aria-hidden
+            />
+          </span>
         </span>
-        <span className="flex shrink-0 items-center gap-2 pl-8 text-xs text-muted-foreground sm:pl-0">
-          {item.draft ? <Chip>Draft</Chip> : null}
-          <span className="hidden items-center gap-1 lg:flex">
-            {item.labels.slice(0, 3).map((label) => (
-              <Chip key={label.name}>{label.name}</Chip>
-            ))}
-            {more ? <span className="tabular-nums">+{more}</span> : null}
-          </span>
-          <span className="hidden max-w-32 truncate sm:inline">
-            @{item.author}
-          </span>
-          <span
-            className="w-8 text-right font-mono tabular-nums"
-            title={`Updated ${item.updatedAt}`}
-          >
-            {age(item.updatedAt)}
-          </span>
-          <ArrowUpRight className="size-3 shrink-0 opacity-60" aria-hidden />
+        <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+          {item.draft ? (
+            <>
+              <span className="shrink-0 font-medium text-warning">Draft</span>
+              <span aria-hidden className="shrink-0 opacity-60">
+                ·
+              </span>
+            </>
+          ) : null}
+          <span className="min-w-0 truncate">{meta}</span>
         </span>
       </a>
     </li>
-  );
-}
-
-/** Labels without their colours: the rainbow was noise, the words are not. */
-function Chip({ children }: { children: ReactNode }) {
-  return (
-    <span className="inline-flex h-5 max-w-28 items-center truncate rounded border px-1.5 text-[0.6875rem] font-medium text-muted-foreground">
-      {children}
-    </span>
   );
 }
 

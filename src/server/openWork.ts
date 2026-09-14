@@ -172,5 +172,6 @@ export async function loadOpenWork(): Promise<OpenWork> {
     { assigned, reviewRequested, authored, everything },
     fetchedAt,
     errors.length ? errors.join(" ") : undefined,
+    login,
   );
 }

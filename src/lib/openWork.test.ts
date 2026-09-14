@@ -13,6 +13,7 @@ import {
   splitByKind,
   tabCounts,
   tabItems,
+  showsAuthor,
   searchResponseSchema,
 } from "./openWork";
 import type { SearchItem, WorkItem } from "./openWork";
@@ -126,6 +127,15 @@ describe("buildOpenWork", () => {
     expect(work.triage.some((row) => row.id === 3)).toBe(true);
     expect(work.connected).toBe(true);
     expect(work.error).toBeUndefined();
+  });
+  it("carries the signed-in login when one is given", () => {
+    const named = buildOpenWork(
+      { assigned: [], reviewRequested: [], authored: [], everything: [] },
+      "2026-09-10T00:00:00Z",
+      undefined,
+      "me",
+    );
+    expect(named.login).toBe("me");
   });
   it("keeps an error string when one is given", () => {
     const failed = buildOpenWork(
@@ -249,5 +259,19 @@ describe("the tabs", () => {
     expect(tabCounts(work, { ...all, repo: "me/hq" })).toEqual({ mine: 0, triage: 1 });
     expect(tabCounts(work, { ...all, search: "ship" })).toEqual({ mine: 1, triage: 0 });
     expect(tabCounts(undefined, all)).toEqual({ mine: 0, triage: 0 });
+  });
+});
+
+describe("showsAuthor", () => {
+  it("names the opener on triage even when the row is yours", () => {
+    expect(showsAuthor(item({ author: "me" }), "triage", "me")).toBe(true);
+  });
+  it("hides the opener on Mine only when it is the signed-in login", () => {
+    expect(showsAuthor(item({ author: "me" }), "mine", "me")).toBe(false);
+    expect(showsAuthor(item({ author: "Me" }), "mine", "me")).toBe(false);
+    expect(showsAuthor(item({ author: "them" }), "mine", "me")).toBe(true);
+  });
+  it("keeps the opener on Mine when the signed-in login is unknown", () => {
+    expect(showsAuthor(item({ author: "them" }), "mine")).toBe(true);
   });
 });
