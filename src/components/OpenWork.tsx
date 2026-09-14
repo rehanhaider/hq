@@ -415,21 +415,24 @@ function RepoName({ repo }: { repo: string }) {
 function OrgAvatar({ repo }: { repo: string }) {
   const slash = repo.indexOf("/");
   const org = slash < 0 ? repo : repo.slice(0, slash);
+  const [failed, setFailed] = useState(false);
   return (
     <span
       aria-hidden
       className="relative flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-primary/10 text-[0.6875rem] font-semibold text-primary"
     >
       {initials(repo)}
-      <img
-        src={`/api/avatars/${encodeURIComponent(org.toLowerCase())}`}
-        alt=""
-        loading="lazy"
-        width={28}
-        height={28}
-        className="absolute inset-0 size-full object-cover"
-        onError={(event) => event.currentTarget.remove()}
-      />
+      {failed ? null : (
+        <img
+          src={`/api/avatars/${encodeURIComponent(org.toLowerCase())}`}
+          alt=""
+          loading="lazy"
+          width={28}
+          height={28}
+          className="absolute inset-0 size-full object-cover"
+          onError={() => setFailed(true)}
+        />
+      )}
     </span>
   );
 }
