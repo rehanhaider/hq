@@ -9,7 +9,12 @@ import { useNewPage } from "@/queries/content";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Dot } from "@/components/content/properties";
 import { relativeTime } from "@/lib/content";
-import { windowStrip, type DayMark, type PrayerStatus } from "@/lib/deen";
+import {
+  middayPrayerLabel,
+  windowStrip,
+  type DayMark,
+  type PrayerStatus,
+} from "@/lib/deen";
 import { defaultFilters } from "@/lib/model";
 import { cn } from "@/lib/utils";
 
@@ -50,7 +55,7 @@ function HomePage() {
   const day = deen.day;
   const prayers = [
     ["Fajr", day.fajr],
-    ["Dhuhr", day.dhuhr],
+    [middayPrayerLabel(deen.today), day.dhuhr],
     ["Asr", day.asr],
     ["Maghrib", day.maghrib],
     ["Isha", day.isha],

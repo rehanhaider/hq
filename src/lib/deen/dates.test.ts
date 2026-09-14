@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { datesInRange, shiftDate, windowDates } from "./dates";
+import { datesInRange, middayPrayerLabel, shiftDate, windowDates } from "./dates";
 
 describe("datesInRange", () => {
   it("returns single date for same start/end", () => {
@@ -21,6 +21,16 @@ describe("shiftDate", () => {
   it("moves across a month boundary", () => {
     expect(shiftDate("2025-02-02", -3)).toBe("2025-01-30");
     expect(shiftDate("2025-01-30", 3)).toBe("2025-02-02");
+  });
+});
+
+describe("middayPrayerLabel", () => {
+  it("names Friday midday Jumuah", () => {
+    expect(middayPrayerLabel("2026-09-11")).toBe("Jumuah");
+  });
+  it("keeps Dhuhr on other weekdays", () => {
+    expect(middayPrayerLabel("2026-09-14")).toBe("Dhuhr");
+    expect(middayPrayerLabel("2026-09-10")).toBe("Dhuhr");
   });
 });
 
