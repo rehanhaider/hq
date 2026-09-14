@@ -2,27 +2,21 @@ import { useEffect } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
-  ArrowRight,
   ArrowUpRight,
-  BookOpen,
   Check,
-  ChevronLeft,
-  ChevronRight,
   CircleAlert,
   FolderGit2,
-  GitCommitHorizontal,
-  GitMerge,
   RefreshCw,
 } from "lucide-react";
 import { Route } from "@/routes/github";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { LanguageMetrics } from "./LanguageMetrics";
 import { ActivityFilters } from "./ActivityFilters";
 import { ActivityChart } from "./ActivityChart";
 import { Connections } from "./Connections";
 import { OpenWork } from "./OpenWork";
+import { GithubOverview } from "./GithubOverview";
 import { dashboardQuery, statusQuery } from "@/queries/dashboard";
 import { categories } from "@/lib/model";
 import { utcDay, utcStamp } from "@/lib/activity";
@@ -99,6 +93,8 @@ export function Dashboard() {
         <Connections importing={importing} />
       ) : filters.view === "work" ? (
         <OpenWork />
+      ) : filters.view === "overview" ? (
+        <GithubOverview filters={filters} />
       ) : (
         <>
           <ActivityFilters
@@ -154,14 +150,8 @@ export function Dashboard() {
                       Open repositories
                     </Link>
                   </div>
-                ) : filters.view === "overview" ? (
-                  <Overview
-                    data={data}
-                    filters={filters}
-                    setFilters={setFilters}
-                  />
                 ) : (
-                  <HistoryList
+                  <Statistics
                     data={data}
                     filters={filters}
                     setFilters={setFilters}
@@ -198,7 +188,7 @@ function Metric({
   );
 }
 
-function Overview({
+function Statistics({
   data,
   filters,
   setFilters,
@@ -243,14 +233,6 @@ function Overview({
           daily={data.daily}
           from={filters.from}
           to={filters.to}
-          onSelect={(from, to) =>
-            setFilters({
-              from,
-              to,
-              view: "history",
-              kind: filters.metric === "prs" ? "pr" : "commit",
-            })
-          }
         />
         <section className="min-w-0">
           <h2 className="section-title">Code composition</h2>
@@ -311,13 +293,6 @@ function Overview({
               Median time from opening to merge
             </p>
           </div>
-          <Button
-            className="mt-auto -ml-2.5 self-start pt-4"
-            variant="link"
-            onClick={() => setFilters({ view: "history", kind: "pr" })}
-          >
-            View merged requests <ArrowRight />
-          </Button>
         </section>
       </div>
     </>
@@ -414,130 +389,6 @@ function Projects({
             No imported repository matches this filter.
           </p>
         )}
-      </div>
-    </section>
-  );
-}
-
-function HistoryList({
-  data,
-  filters,
-  setFilters,
-}: {
-  data: Data;
-  filters: Filters;
-  setFilters: (patch: Partial<Filters>) => void;
-}) {
-  const records = data.history.filter(
-    (row) => filters.kind === "all" || row.kind === filters.kind,
-  );
-  const pages = Math.max(1, Math.ceil(records.length / 30));
-  const page = Math.min(filters.page, pages);
-  const visible = records.slice((page - 1) * 30, page * 30);
-  return (
-    <section className="section min-w-0 pt-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="section-title">Recorded activity</h2>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {number(records.length)} records · newest first
-          </p>
-        </div>
-        <div>
-          <Label htmlFor="kind" className="sr-only">
-            Record type
-          </Label>
-          <select
-            id="kind"
-            className="field"
-            value={filters.kind}
-            onChange={(e) =>
-              setFilters({ kind: e.target.value as Filters["kind"] })
-            }
-          >
-            <option value="all">All activity</option>
-            <option value="commit">Commits</option>
-            <option value="pr">Merged pull requests</option>
-          </select>
-        </div>
-      </div>
-      <ul className="list mt-4">
-        {visible.map((row) => (
-          <li
-            key={`${row.repo}-${row.id}`}
-            className="flex items-start gap-3 py-4"
-          >
-            <span
-              className={`mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg bg-muted ${row.kind === "pr" ? "text-primary" : "text-muted-foreground"}`}
-            >
-              {row.kind === "pr" ? (
-                <GitMerge className="size-3.5" />
-              ) : (
-                <GitCommitHorizontal className="size-3.5" />
-              )}
-            </span>
-            <div className="min-w-0 flex-1">
-              <a
-                className="group flex items-start gap-1 text-sm font-medium hover:text-primary"
-                href={row.url}
-                target="_blank"
-                rel="noreferrer"
-              >
-                <span className="break-words">{row.title}</span>
-                <ArrowUpRight className="mt-0.5 size-3 shrink-0 text-muted-foreground" />
-              </a>
-              <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                <span className="break-all">{row.repo}</span>
-                <span>{row.detail}</span>
-                <time dateTime={row.date}>
-                  {row.date.slice(0, 16).replace("T", " ")} UTC
-                </time>
-              </p>
-              <p className="mt-2 flex gap-3 text-xs tabular-nums sm:hidden">
-                <span className="text-positive">+{number(row.additions)}</span>
-                <span className="text-negative">−{number(row.deletions)}</span>
-              </p>
-            </div>
-            <div className="hidden shrink-0 gap-3 pt-1 text-xs tabular-nums sm:flex">
-              <span className="text-positive">+{number(row.additions)}</span>
-              <span className="text-negative">−{number(row.deletions)}</span>
-            </div>
-          </li>
-        ))}
-      </ul>
-      {!visible.length && (
-        <div className="py-12 text-center">
-          <BookOpen className="mx-auto size-6 text-muted-foreground" />
-          <p className="mt-3 font-medium">No activity in this view</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Change the dates, repository, or record type.
-          </p>
-        </div>
-      )}
-      <div className="section flex items-center justify-between py-3">
-        <span className="text-xs text-muted-foreground">
-          Page {page} of {pages}
-        </span>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page <= 1}
-            onClick={() => setFilters({ page: page - 1 })}
-          >
-            <ChevronLeft />
-            Previous
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page >= pages}
-            onClick={() => setFilters({ page: page + 1 })}
-          >
-            Next
-            <ChevronRight />
-          </Button>
-        </div>
       </div>
     </section>
   );

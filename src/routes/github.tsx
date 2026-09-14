@@ -17,7 +17,7 @@ export const Route = createFileRoute("/github")({
       const current = search.view as string | undefined;
       return [
         { label: "Overview", view: "overview" },
-        { label: "Activity history", view: "history" },
+        { label: "Statistics", view: "statistics" },
         { label: "Work", view: "work" },
         { label: "Repositories", view: "projects" },
       ].map(({ label, view }) => ({
@@ -31,11 +31,19 @@ export const Route = createFileRoute("/github")({
     },
   },
   loaderDeps: ({ search }) => search,
-  loader: ({ context, deps }) =>
-    deps.view === "connections" || deps.view === "projects"
-      ? context.queryClient.ensureQueryData(connectionsQuery)
-      : deps.view === "work"
-        ? context.queryClient.ensureQueryData(openWorkQuery)
-        : context.queryClient.ensureQueryData(dashboardQuery(deps)),
+  loader: ({ context, deps }) => {
+    if (deps.view === "connections" || deps.view === "projects")
+      return context.queryClient.ensureQueryData(connectionsQuery);
+    if (deps.view === "work")
+      return context.queryClient.ensureQueryData(openWorkQuery);
+    // The action Overview pairs live work with period figures, so it warms
+    // both; Statistics and history only need the figures.
+    if (deps.view === "overview")
+      return Promise.all([
+        context.queryClient.ensureQueryData(dashboardQuery(deps)),
+        context.queryClient.ensureQueryData(openWorkQuery),
+      ]);
+    return context.queryClient.ensureQueryData(dashboardQuery(deps));
+  },
   component: Dashboard,
 });

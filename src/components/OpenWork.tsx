@@ -416,7 +416,7 @@ function RepoName({ repo }: { repo: string }) {
  * initials sit underneath, so a login GitHub has no picture for — or a
  * picture still on its way — degrades to the old tile rather than a hole.
  */
-function OrgAvatar({ repo }: { repo: string }) {
+export function OrgAvatar({ repo }: { repo: string }) {
   const slash = repo.indexOf("/");
   const org = slash < 0 ? repo : repo.slice(0, slash);
   const [failed, setFailed] = useState(false);
@@ -453,7 +453,7 @@ function initials(repo: string) {
  * the author, and the labels used to compete with the title in a single row
  * of chips and columns; now only the title has weight.
  */
-function Row({ item, showAuthor }: { item: WorkItem; showAuthor: boolean }) {
+export function Row({ item, showAuthor }: { item: WorkItem; showAuthor: boolean }) {
   const labels = item.labels.slice(0, 2).map((label) => label.name);
   const extra = item.labels.length - labels.length;
   const meta = [
@@ -504,7 +504,7 @@ function Row({ item, showAuthor }: { item: WorkItem; showAuthor: boolean }) {
   );
 }
 
-function Blank({ title, body }: { title: string; body: string }) {
+export function Blank({ title, body }: { title: string; body: string }) {
   return (
     <div className="section flex min-h-48 flex-col items-center justify-center px-5 py-12 text-center">
       <span className="mb-4 flex size-12 items-center justify-center rounded-xl border bg-muted">

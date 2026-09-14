@@ -7,6 +7,8 @@ import { z } from "zod";
  * handling live on the server side.
  */
 export type WorkLabel = { name: string; color: string };
+/** Which search found the row: why it is waiting on the signed-in login. */
+export type WorkReason = "assigned" | "review" | "authored";
 export type WorkItem = {
   id: number;
   kind: "issue" | "pr";
@@ -21,6 +23,7 @@ export type WorkItem = {
   draft: boolean;
   /** Nobody has picked it up: the one thing that makes a row triage. */
   unassigned: boolean;
+  reasons: WorkReason[];
 };
 /**
  * Two lists, because there are two reasons to look: the work that is mine,
@@ -88,6 +91,7 @@ export function normalise(raw: SearchItem): WorkItem {
     })),
     draft: raw.draft ?? false,
     unassigned: assignees.length === 0,
+    reasons: [],
   };
 }
 
@@ -102,6 +106,22 @@ export function normaliseAll(raws: SearchItem[]) {
 export function dedupe(items: WorkItem[]) {
   const byId = new Map<number, WorkItem>();
   for (const item of items) if (!byId.has(item.id)) byId.set(item.id, item);
+  return [...byId.values()];
+}
+
+/**
+ * The dedupe that remembers: one row per id, keeping every reason it was
+ * found for in search order.
+ */
+function withReasons(lists: { items: WorkItem[]; reason: WorkReason }[]) {
+  const byId = new Map<number, WorkItem>();
+  for (const { items, reason } of lists)
+    for (const item of items) {
+      const seen = byId.get(item.id);
+      if (seen) {
+        if (!seen.reasons.includes(reason)) seen.reasons.push(reason);
+      } else byId.set(item.id, { ...item, reasons: [reason] });
+    }
   return [...byId.values()];
 }
 
@@ -126,10 +146,12 @@ export function countKinds(items: WorkItem[]) {
 
 /**
  * The two lists. Mine is the union of the three personal searches — assigned
- * to me, waiting on my review, opened by me — deduped and with no record of
- * which of the three it came from, because the answer is the same either way.
+ * to me, waiting on my review, opened by me — deduped into one row per id.
  * Triage is everything the sweep across my repositories found that nobody has
  * been given; a thing of mine with no assignee is in both, which is true.
+ *
+ * Each row of mine keeps every search that found it, so a view can say why
+ * the row is waiting: review first, then assignment, then authorship.
  */
 export function buildOpenWork(
   lists: {
@@ -142,10 +164,10 @@ export function buildOpenWork(
   error?: string,
   login?: string,
 ): OpenWork {
-  const mine = dedupe([
-    ...lists.assigned,
-    ...lists.reviewRequested,
-    ...lists.authored,
+  const mine = withReasons([
+    { items: lists.assigned, reason: "assigned" },
+    { items: lists.reviewRequested, reason: "review" },
+    { items: lists.authored, reason: "authored" },
   ]).sort(byOldestCreated);
   const triage = dedupe(lists.everything)
     .filter((item) => item.unassigned)

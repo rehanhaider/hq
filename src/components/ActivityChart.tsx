@@ -31,7 +31,8 @@ export function ActivityChart({
   metric: Filters["metric"];
   chart: Filters["chart"];
   onChange: (patch: Partial<Filters>) => void;
-  onSelect: (from: string, to: string) => void;
+  /** Drill into a day. Absent, days highlight but do nothing. */
+  onSelect?: (from: string, to: string) => void;
 }) {
   const [active, setActive] = useState<number | null>(null);
   const rows = dailyActivity(daily, from, to, projects);
@@ -146,14 +147,14 @@ export function ActivityChart({
                 width={840 / rows.length}
                 height="180"
                 fill="transparent"
-                tabIndex={0}
-                role="button"
-                aria-label={`${row.day}: ${values[i] === null ? "Not imported" : `${values[i]} ${labels[metric]}`} (${row.coverage} coverage). View records.`}
+                tabIndex={onSelect ? 0 : undefined}
+                role={onSelect ? "button" : undefined}
+                aria-label={`${row.day}: ${values[i] === null ? "Not imported" : `${values[i]} ${labels[metric]}`} (${row.coverage} coverage)${onSelect ? ". View records." : ""}`}
                 onMouseEnter={() => setActive(i)}
                 onFocus={() => setActive(i)}
-                onClick={() => onSelect(row.from, row.to)}
+                onClick={onSelect ? () => onSelect(row.from, row.to) : undefined}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
+                  if ((e.key === "Enter" || e.key === " ") && onSelect) {
                     e.preventDefault();
                     onSelect(row.from, row.to);
                   }
