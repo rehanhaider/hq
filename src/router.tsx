@@ -10,11 +10,10 @@ export function getRouter() {
     routeTree,
     context: { queryClient },
     scrollRestoration: true,
-    defaultPreload: "intent",
-    // Preload warms the Query cache via each route's loader. It only helps
-    // if the data is still fresh when the click lands, so this must stay in
-    // step with the query staleTimes (30s).
-    defaultPreloadStaleTime: 30000,
+    defaultPreload: "render",
+    // Query owns freshness. Router's 30s preload cache would skip a loader
+    // after a write even when Query has already been invalidated.
+    defaultPreloadStaleTime: 0,
   });
   setupRouterSsrQueryIntegration({ router, queryClient });
   return router;

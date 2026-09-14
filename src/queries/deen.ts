@@ -12,7 +12,7 @@ export const deenKeys = {
 export const homeQuery = queryOptions({
   queryKey: deenKeys.home,
   queryFn: () => getHome(),
-  // Fresh enough that a hover-preload makes the click instant, short enough
+  // Fresh enough that a render-preload makes the click instant, short enough
   // that the briefing never reads stale. Mutations invalidate explicitly.
   staleTime: 30000,
 });

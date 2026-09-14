@@ -15,8 +15,8 @@ export const pagesQuery = (q = "", trashed = false) =>
   queryOptions({
     queryKey: contentKeys.list(q, trashed),
     queryFn: () => getPages({ data: { q: q || undefined, trashed } }),
-    // Matches the router preload window: a hovered sidebar link serves the
-    // click from cache instead of refetching. Writes invalidate explicitly.
+    // A sidebar link is preloaded as soon as it renders; this window lets
+    // the click reuse that cache. Writes invalidate explicitly.
     staleTime: 30000,
   });
 

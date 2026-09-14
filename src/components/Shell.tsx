@@ -96,6 +96,11 @@ export function Shell() {
     ui.hydrate();
   }, [ui.hydrate]);
   useEffect(() => {
+    // The editor is React.lazy behind the Content route, so a router preload
+    // fetches the small route chunk but not the ~800K BlockNote bundle.
+    void import("@/components/content/ContentEditor");
+  }, []);
+  useEffect(() => {
     if (!status.data) return;
     const next = JSON.stringify([
       status.data.state,
@@ -210,20 +215,6 @@ export function Shell() {
                   : to === "/content"
                     ? {}
                     : undefined
-              }
-              // The editor is React.lazy behind the Content route, so the
-              // router preload fetches the small route chunk but not the ~800K
-              // BlockNote bundle. Warm it on hover/focus so the first visit
-              // does not pay that download on click.
-              onMouseEnter={
-                to === "/content"
-                  ? () => void import("@/components/content/ContentEditor")
-                  : undefined
-              }
-              onFocus={
-                to === "/content"
-                  ? () => void import("@/components/content/ContentEditor")
-                  : undefined
               }
               title={title}
               aria-label={title}
