@@ -10,6 +10,7 @@ import {
   reasonLabel,
   triageTop,
   waitingOnYou,
+  type RepoFilter,
 } from "@/lib/attention";
 import { age } from "@/lib/openWork";
 import type { WorkItem } from "@/lib/openWork";
@@ -19,8 +20,8 @@ import { cn } from "@/lib/utils";
 
 const number = (n: number) => n.toLocaleString("en-US");
 
-function repoScope(repo: Filters["repo"]): string[] {
-  if (repo === "all") return [];
+function repoScope(repo: Filters["repo"]): RepoFilter {
+  if (repo === "all") return "all";
   return Array.isArray(repo) ? repo : [repo];
 }
 

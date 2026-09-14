@@ -17,14 +17,17 @@ function updatedBefore(item: WorkItem, now: number, ms: number) {
   return Number.isFinite(then) && now - then >= ms;
 }
 
-function inRepos(item: WorkItem, repos: string[]) {
-  return repos.length === 0 || repos.includes(item.repo);
+/** `"all"` is every repo; `[]` is none — the same predicate `summarize` uses. */
+export type RepoFilter = string[] | "all";
+
+function inRepos(item: WorkItem, repos: RepoFilter) {
+  return repos === "all" || repos.includes(item.repo);
 }
 
 /** Someone else's work waiting on the signed-in login: review, then assignment. */
 export function waitingOnYou(
   mine: WorkItem[],
-  repos: string[] = [],
+  repos: RepoFilter = "all",
   limit = 5,
 ): WorkItem[] {
   return mine
@@ -40,7 +43,7 @@ export function waitingOnYou(
 /** Open and quiet: nothing has happened on the row for two weeks. */
 export function goingStale(
   mine: WorkItem[],
-  repos: string[] = [],
+  repos: RepoFilter = "all",
   limit = 5,
   now = Date.now(),
 ): WorkItem[] {
@@ -54,7 +57,7 @@ export function goingStale(
 export function ownDrafts(
   mine: WorkItem[],
   login: string | undefined,
-  repos: string[] = [],
+  repos: RepoFilter = "all",
   limit = 5,
 ): WorkItem[] {
   return mine
@@ -72,7 +75,7 @@ export function ownDrafts(
 /** The oldest rows nobody has picked up. */
 export function triageTop(
   triage: WorkItem[],
-  repos: string[] = [],
+  repos: RepoFilter = "all",
   limit = 5,
 ): WorkItem[] {
   return triage
@@ -101,7 +104,7 @@ export type AttentionCounts = {
 /** The four figures the Overview leads with. Same repo scope as the lists. */
 export function attentionCounts(
   work: OpenWork | undefined,
-  repos: string[] = [],
+  repos: RepoFilter = "all",
 ): AttentionCounts {
   const mine = work?.mine ?? [];
   const kinds = countKinds(mine.filter((item) => inRepos(item, repos)));

@@ -48,6 +48,9 @@ describe("waitingOnYou", () => {
     );
     expect(rows.map((row) => row.id)).toEqual([4]);
   });
+  it("treats an empty selection as none", () => {
+    expect(waitingOnYou(mine, []).map((row) => row.id)).toEqual([]);
+  });
 });
 
 describe("goingStale", () => {
@@ -57,7 +60,7 @@ describe("goingStale", () => {
       item({ id: 2, updatedAt: "2026-09-13T12:00:00Z" }),
       item({ id: 3, updatedAt: "2026-08-01T00:00:00Z" }),
     ];
-    expect(goingStale(mine, [], 5, NOW).map((row) => row.id)).toEqual([3, 1]);
+    expect(goingStale(mine, "all", 5, NOW).map((row) => row.id)).toEqual([3, 1]);
   });
 });
 
@@ -137,6 +140,12 @@ describe("attentionCounts", () => {
       needsYou: 1,
       triage: 1,
       openIssues: 1,
+      openPrs: 0,
+    });
+    expect(attentionCounts(work, [])).toEqual({
+      needsYou: 0,
+      triage: 0,
+      openIssues: 0,
       openPrs: 0,
     });
   });
