@@ -47,6 +47,7 @@ function item(overrides: Partial<WorkItem> = {}): WorkItem {
     labels: [],
     draft: false,
     unassigned: true,
+    reasons: [],
     ...overrides,
   };
 }
@@ -127,6 +128,12 @@ describe("buildOpenWork", () => {
     expect(work.triage.some((row) => row.id === 3)).toBe(true);
     expect(work.connected).toBe(true);
     expect(work.error).toBeUndefined();
+  });
+  it("remembers every search that found a row, in search order", () => {
+    const byId = new Map(work.mine.map((row) => [row.id, row]));
+    expect(byId.get(1)?.reasons).toEqual(["assigned", "authored"]);
+    expect(byId.get(2)?.reasons).toEqual(["review"]);
+    expect(byId.get(3)?.reasons).toEqual(["authored"]);
   });
   it("carries the signed-in login when one is given", () => {
     const named = buildOpenWork(

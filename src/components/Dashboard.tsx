@@ -23,6 +23,7 @@ import { ActivityFilters } from "./ActivityFilters";
 import { ActivityChart } from "./ActivityChart";
 import { Connections } from "./Connections";
 import { OpenWork } from "./OpenWork";
+import { GithubOverview } from "./GithubOverview";
 import { dashboardQuery, statusQuery } from "@/queries/dashboard";
 import { categories } from "@/lib/model";
 import { utcDay, utcStamp } from "@/lib/activity";
@@ -99,6 +100,8 @@ export function Dashboard() {
         <Connections importing={importing} />
       ) : filters.view === "work" ? (
         <OpenWork />
+      ) : filters.view === "overview" ? (
+        <GithubOverview filters={filters} />
       ) : (
         <>
           <ActivityFilters
@@ -154,8 +157,8 @@ export function Dashboard() {
                       Open repositories
                     </Link>
                   </div>
-                ) : filters.view === "overview" ? (
-                  <Overview
+                ) : filters.view === "statistics" ? (
+                  <Statistics
                     data={data}
                     filters={filters}
                     setFilters={setFilters}
@@ -198,7 +201,7 @@ function Metric({
   );
 }
 
-function Overview({
+function Statistics({
   data,
   filters,
   setFilters,
