@@ -22,6 +22,15 @@ export function shiftDate(date: string, days: number): string {
 }
 
 /**
+ * Friday midday occupies the Dhuhr slot; only the displayed name changes.
+ * Calendar dates are UTC days, matching the rest of Nasr's date helpers.
+ */
+export function middayPrayerLabel(date: string): "Jumuah" | "Dhuhr" {
+  const weekday = new Date(`${date}T12:00:00Z`).getUTCDay();
+  return weekday === 5 ? "Jumuah" : "Dhuhr";
+}
+
+/**
  * The rolling window every Nasr figure is measured over: the last `length`
  * calendar days, today last. There is no start date to set and no cycle to
  * finish — the window moves with the day, so it always exists.
