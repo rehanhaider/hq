@@ -10,7 +10,9 @@ export function getRouter() {
     routeTree,
     context: { queryClient },
     scrollRestoration: true,
-    defaultPreload: "intent",
+    defaultPreload: "render",
+    // Query owns freshness. Router's 30s preload cache would skip a loader
+    // after a write even when Query has already been invalidated.
     defaultPreloadStaleTime: 0,
   });
   setupRouterSsrQueryIntegration({ router, queryClient });

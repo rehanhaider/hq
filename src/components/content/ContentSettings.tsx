@@ -18,7 +18,7 @@ import {
   type PropertyColor,
   type PropertyKind,
 } from "@/lib/content";
-import { contentKeys, contentPropertiesQuery, pagesQuery } from "@/queries/content";
+import { contentKeys, contentPropertiesQuery, invalidateContent, pagesQuery } from "@/queries/content";
 import {
   createContentProperty,
   deleteContentProperty,
@@ -62,7 +62,7 @@ export function ContentSettings() {
   const [error, setError] = useState("");
 
   const refresh = async () => {
-    await queryClient.invalidateQueries({ queryKey: contentKeys.all });
+    await invalidateContent(queryClient, contentKeys.all);
   };
 
   const lists: Record<PropertyKind, Property[]> = {

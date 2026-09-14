@@ -96,6 +96,11 @@ export function Shell() {
     ui.hydrate();
   }, [ui.hydrate]);
   useEffect(() => {
+    // The editor is React.lazy behind the Content route, so a router preload
+    // fetches the small route chunk but not the ~800K BlockNote bundle.
+    void import("@/components/content/ContentEditor");
+  }, []);
+  useEffect(() => {
     if (!status.data) return;
     const next = JSON.stringify([
       status.data.state,
