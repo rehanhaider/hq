@@ -33,7 +33,7 @@ import {
   type ContentPage,
   type ContentProperties,
 } from "@/lib/content";
-import { contentKeys, contentPropertiesQuery, pagesQuery } from "@/queries/content";
+import { contentKeys, contentPropertiesQuery, invalidateContent, pagesQuery } from "@/queries/content";
 import { createPage, movePageCard } from "@/server/fns";
 import { ContentToolbar, type ToolbarPatch } from "./ContentToolbar";
 import { chipClass, Dot, byId } from "./properties";
@@ -220,7 +220,7 @@ export function ContentBoard() {
     } catch {
       setError("That card could not be moved. The board has been refreshed.");
     }
-    await queryClient.invalidateQueries({ queryKey: contentKeys.lists });
+    await invalidateContent(queryClient);
     setLocal(null);
   };
 
@@ -238,7 +238,7 @@ export function ContentBoard() {
         },
       });
       queryClient.setQueryData(contentKeys.detail(created.id), created);
-      await queryClient.invalidateQueries({ queryKey: contentKeys.lists });
+      await invalidateContent(queryClient);
       await navigate({ to: "/content", search: { ...search, page: created.id } });
     } catch {
       setError("The page could not be created.");

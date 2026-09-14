@@ -12,7 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import type { ContentPage } from "@/lib/content";
-import { contentKeys, pagesQuery } from "@/queries/content";
+import { contentKeys, invalidateContent, pagesQuery } from "@/queries/content";
 import { deletePageForever, emptyContentTrash, restorePage } from "@/server/fns";
 import { SearchBox } from "./SearchBox";
 
@@ -36,7 +36,7 @@ export function ContentTrash() {
   const [busy, setBusy] = useState(false);
   const pages = list.data ?? [];
 
-  const refresh = () => queryClient.invalidateQueries({ queryKey: contentKeys.all });
+  const refresh = () => invalidateContent(queryClient, contentKeys.all);
 
   const restore = async (page: ContentPage) => {
     try {

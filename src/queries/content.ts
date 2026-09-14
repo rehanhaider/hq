@@ -1,5 +1,6 @@
-import { queryOptions, useQueryClient } from "@tanstack/react-query";
+import { queryOptions, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
+import { deenKeys } from "./deen";
 import { createPage, getContentProperties, getPage, getPages } from "@/server/fns";
 
 export const contentKeys = {
@@ -35,6 +36,21 @@ export const contentPropertiesQuery = queryOptions({
 });
 
 /**
+ * Content writes change Home's embedded contentSummary. Mark that query
+ * stale with the content keys so a 30s home staleTime cannot keep "No
+ * pages yet" after a create, or an old title after a rename.
+ */
+export function invalidateContent(
+  queryClient: QueryClient,
+  queryKey: readonly unknown[] = contentKeys.lists,
+) {
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey }),
+    queryClient.invalidateQueries({ queryKey: deenKeys.home }),
+  ]);
+}
+
+/**
  * Starts a page and opens it. The top bar and the homepage both create pages
  * from outside Content, so the call sits beside the queries it has to
  * invalidate rather than being copied into each of them.
@@ -47,7 +63,7 @@ export function useNewPage() {
       data: { title: "Untitled", parentId: null },
     });
     queryClient.setQueryData(contentKeys.detail(created.id), created);
-    await queryClient.invalidateQueries({ queryKey: contentKeys.lists });
+    await invalidateContent(queryClient);
     await navigate({ to: "/content", search: { page: created.id } });
   };
 }

@@ -31,6 +31,7 @@ import { createUploadGate } from "@/lib/uploads";
 import {
   contentKeys,
   contentPropertiesQuery,
+  invalidateContent,
   pageQuery,
   pagesQuery,
 } from "@/queries/content";
@@ -231,7 +232,7 @@ export function ContentWorkspace() {
           setSaveConflict(false);
           setSaveUnavailable(false);
           queryClient.setQueryData(contentKeys.detail(snapshot.id), result.page);
-          void queryClient.invalidateQueries({ queryKey: contentKeys.lists });
+          void invalidateContent(queryClient);
         } catch (error) {
           setSaveConflict(false);
           setSaveUnavailable(false);
@@ -342,7 +343,7 @@ export function ContentWorkspace() {
         ...result.page,
         document: editing?.document ?? current.document,
       });
-      await queryClient.invalidateQueries({ queryKey: contentKeys.lists });
+      await invalidateContent(queryClient);
     } catch {
       rollback();
     }
@@ -351,7 +352,7 @@ export function ContentWorkspace() {
   const addTag = async (name: string) => {
     try {
       const created = await createContentProperty({ data: { kind: "tag", name } });
-      await queryClient.invalidateQueries({ queryKey: contentKeys.properties });
+      await invalidateContent(queryClient, contentKeys.properties);
       return created.id;
     } catch {
       setActionError("The tag could not be created.");
@@ -371,7 +372,7 @@ export function ContentWorkspace() {
     try {
       const created = await createPage({ data: { title: "Untitled", parentId } });
       queryClient.setQueryData(contentKeys.detail(created.id), created);
-      await queryClient.invalidateQueries({ queryKey: contentKeys.lists });
+      await invalidateContent(queryClient);
       loadedId.current = null;
       setActionError("");
       await navigate({
@@ -409,7 +410,7 @@ export function ContentWorkspace() {
       setSaveError("");
       setSaveState("saved");
       queryClient.setQueryData(contentKeys.detail(recovered.id), recovered);
-      await queryClient.invalidateQueries({ queryKey: contentKeys.lists });
+      await invalidateContent(queryClient);
       if (openCopy)
         await navigate({
           to: "/content",
@@ -561,12 +562,10 @@ export function ContentWorkspace() {
                           setActionError("This page is no longer available.");
                         }
                       }
-                      await queryClient.invalidateQueries({
-                        queryKey: contentKeys.lists,
-                      });
+                      await invalidateContent(queryClient);
                       return;
                     }
-                    await queryClient.invalidateQueries({ queryKey: contentKeys.all });
+                    await invalidateContent(queryClient, contentKeys.all);
                     if (sameSource && sourceChanged) {
                       staleRevision.current = null;
                       setSaveConflict(false);
