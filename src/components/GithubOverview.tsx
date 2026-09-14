@@ -91,7 +91,7 @@ export function GithubOverview({ filters }: { filters: Filters }) {
       label: "Merged",
       value: summary ? number(summary.total.authoredPrs) : "—",
       to: "/github",
-      search: { ...filters, view: "history" as const, kind: "pr" as const, page: 1 },
+      search: { ...filters, view: "statistics" as const, page: 1 },
     },
     {
       label: "Commits",

@@ -18,7 +18,6 @@ export const Route = createFileRoute("/github")({
       return [
         { label: "Overview", view: "overview" },
         { label: "Statistics", view: "statistics" },
-        { label: "Activity history", view: "history" },
         { label: "Work", view: "work" },
         { label: "Repositories", view: "projects" },
       ].map(({ label, view }) => ({
