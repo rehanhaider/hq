@@ -20,6 +20,7 @@ import {
   splitByKind,
   tabCounts,
   tabItems,
+  showsAuthor,
 } from "@/lib/openWork";
 import type { WorkItem, WorkKind, WorkSort, WorkTab } from "@/lib/openWork";
 import { cn } from "@/lib/utils";
@@ -237,6 +238,7 @@ export function OpenWork() {
                 empty={entry.empty}
                 items={kinds[entry.kind]}
                 tab={tab}
+                login={data?.login}
                 view={views[entry.kind]}
                 expanded={pane === entry.kind}
                 railed={pane !== "both" && pane !== entry.kind}
@@ -268,6 +270,7 @@ function Pane({
   empty,
   items,
   tab,
+  login,
   view,
   expanded,
   railed,
@@ -280,6 +283,7 @@ function Pane({
   empty: string;
   items: WorkItem[];
   tab: WorkTab;
+  login?: string;
   view: { repo: string; search: string; sort: WorkSort; limit: number };
   expanded: boolean;
   railed: boolean;
@@ -369,7 +373,7 @@ function Pane({
                       <Row
                         key={item.id}
                         item={item}
-                        showAuthor={tab === "triage"}
+                        showAuthor={showsAuthor(item, tab, login)}
                       />
                     ))}
                   </ul>
