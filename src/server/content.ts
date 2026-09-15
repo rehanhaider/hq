@@ -642,6 +642,48 @@ export class ContentStore {
       .forEach((id, index) => place.run(slots[index]!, id));
   }
 
+  /**
+   * One drag in the page index: the new order of the dragged page's sibling
+   * group, applied together. The parent never changes — a drop across levels
+   * is the client's to refuse, and ids from another level are ignored here so
+   * a stale client cannot scramble two groups at once.
+   */
+  movePage(input: { id: string; orderedIds?: string[] }) {
+    return this.transaction(() => {
+      const page = this.get(input.id);
+      if (!page) return { ok: false as const, code: "missing" as const };
+      this.reorderSiblings(page.parentId, input.orderedIds ?? []);
+      this.db
+        .prepare("UPDATE pages SET updated_at = ? WHERE id = ?")
+        .run(new Date().toISOString(), input.id);
+      return { ok: true as const, page: this.get(input.id)! };
+    });
+  }
+
+  /**
+   * Lays one sibling group out in the given order by dealing out the display
+   * orders it already holds, rather than numbering from zero. Anything the
+   * drag did not name — another parent's children, or a sibling a filter is
+   * hiding — keeps its order, so numbering from zero could collide with it
+   * and scramble the index the next time the tree is read.
+   */
+  private reorderSiblings(parentId: string | null, orderedIds: string[]) {
+    const distinct = [...new Set(orderedIds)];
+    if (distinct.length < 2) return;
+    const rows = this.db
+      .prepare(
+        `SELECT id, display_order FROM pages
+         WHERE deleted_at IS NULL AND parent_id IS ? AND id IN (${distinct.map(() => "?").join(", ")})`,
+      )
+      .all(parentId, ...distinct) as unknown as { id: string; display_order: number }[];
+    const held = new Map(rows.map((row) => [row.id, Number(row.display_order)]));
+    const slots = [...held.values()].sort((a, b) => a - b);
+    const place = this.db.prepare("UPDATE pages SET display_order = ? WHERE id = ?");
+    distinct
+      .filter((id) => held.has(id))
+      .forEach((id, index) => place.run(slots[index]!, id));
+  }
+
   createProperty(kind: PropertyKind, name: string, color?: PropertyColor) {
     return this.transaction(() => {
       const table = PROPERTY_TABLES[kind];

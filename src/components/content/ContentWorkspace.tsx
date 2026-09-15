@@ -6,9 +6,30 @@ import {
   useMemo,
   useRef,
   useState,
+  type ReactNode,
 } from "react";
 import { ClientOnly, useBlocker, useNavigate, useSearch } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type CollisionDetection,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { ArrowLeft, ChevronRight, FilePlus2, FileText, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -41,6 +62,7 @@ import {
 import {
   createContentProperty,
   createPage,
+  movePage,
   savePage,
   setPageProperties,
   trashPage,
@@ -69,30 +91,63 @@ function readableError(error: unknown, fallback: string) {
   return message;
 }
 
+type PageTree = {
+  /** Each sibling group in display order, keyed by parent; root is `null`. */
+  children: Map<string | null, ContentPage[]>;
+  /** Pages the root cannot reach (missing parent or a cycle). */
+  orphans: ContentPage[];
+};
+
+function pageTree(pages: ContentPage[]): PageTree {
+  const byParent = new Map<string | null, ContentPage[]>();
+  for (const page of pages) {
+    const siblings = byParent.get(page.parentId) ?? [];
+    siblings.push(page);
+    byParent.set(page.parentId, siblings);
+  }
+  for (const siblings of byParent.values())
+    siblings.sort((a, b) => a.order - b.order || a.title.localeCompare(b.title));
+  // Only groups reachable from the root are kept, so a cycle can never recurse.
+  const children = new Map<string | null, ContentPage[]>();
+  const seen = new Set<string>();
+  const visit = (parentId: string | null) => {
+    const group = (byParent.get(parentId) ?? []).filter((page) => !seen.has(page.id));
+    for (const page of group) seen.add(page.id);
+    children.set(parentId, group);
+    for (const page of group) visit(page.id);
+  };
+  visit(null);
+  return { children, orphans: pages.filter((page) => !seen.has(page.id)) };
+}
+
 function pageRows(pages: ContentPage[], searching: boolean) {
   if (searching) return pages.map((page) => ({ page, depth: 0 }));
-  const children = new Map<string | null, ContentPage[]>();
-  for (const page of pages) {
-    const siblings = children.get(page.parentId) ?? [];
-    siblings.push(page);
-    children.set(page.parentId, siblings);
-  }
-  for (const siblings of children.values())
-    siblings.sort((a, b) => a.order - b.order || a.title.localeCompare(b.title));
+  const { children, orphans } = pageTree(pages);
   const rows: { page: ContentPage; depth: number }[] = [];
-  const seen = new Set<string>();
   const visit = (parentId: string | null, depth: number) => {
     for (const page of children.get(parentId) ?? []) {
-      if (seen.has(page.id)) continue;
-      seen.add(page.id);
       rows.push({ page, depth });
       visit(page.id, depth + 1);
     }
   };
   visit(null, 0);
-  for (const page of pages) if (!seen.has(page.id)) rows.push({ page, depth: 0 });
+  for (const page of orphans) rows.push({ page, depth: 0 });
   return rows;
 }
+
+// Only the dragged page's siblings can be dropped on. Nesting never changes
+// here, so a nested row must not steal the drop: with siblings in their own
+// SortableContext, the preview and the saved order are then the same list.
+const sameLevelCollision: CollisionDetection = (args) => {
+  const parentId = (args.active.data.current as { parentId?: string | null } | undefined)?.parentId;
+  return closestCenter({
+    ...args,
+    droppableContainers: args.droppableContainers.filter(
+      (container) =>
+        (container.data.current as { parentId?: string | null } | undefined)?.parentId === parentId,
+    ),
+  });
+};
 
 export function ContentWorkspace() {
   const search = useSearch({ from: "/content" });
@@ -294,14 +349,95 @@ export function ContentWorkspace() {
   // The server already searched titles and body text, so only the property
   // filters are applied here. Filtering flattens the tree: a match whose parent
   // was filtered out still has to be reachable.
+  const searching = Boolean(search.q) || hasFilters({ ...search, q: undefined });
+  const [localPages, setLocalPages] = useState<ContentPage[] | null>(null);
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  // Reorder commits run one at a time, in drag order: two quick drags would
+  // otherwise race and the earlier drag's order could land last in SQLite.
+  const orderChain = useRef<Promise<void>>(Promise.resolve());
   const rows = useMemo(() => {
-    const pages = filterPages(list.data ?? [], {
+    const pages = filterPages(localPages ?? list.data ?? [], {
       status: search.status,
       type: search.type,
       tag: search.tag,
     });
-    return pageRows(pages, Boolean(search.q) || hasFilters({ ...search, q: undefined }));
-  }, [list.data, search]);
+    return pageRows(pages, searching);
+  }, [list.data, localPages, search, searching]);
+  // Dragging a filtered or searched list would persist an order the user never
+  // saw whole, so the index is only sortable when the full tree is on screen
+  // and some sibling group actually has more than one page.
+  const tree = useMemo(() => pageTree(localPages ?? list.data ?? []), [list.data, localPages]);
+  const canReorder =
+    !searching &&
+    !list.isPending &&
+    [...tree.children.values()].some((group) => group.length > 1);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const commitOrder = async (id: string, orderedIds: string[]) => {
+    // Total: never rejects, so the serialized chain behind it cannot stall.
+    // Each banner says exactly what happened, so a failed refresh never hides
+    // behind a claimed one.
+    let saved = false;
+    let fresh = false;
+    try {
+      saved = (await movePage({ data: { id, orderedIds } })).ok;
+    } catch {
+      saved = false;
+    }
+    try {
+      await invalidateContent(queryClient);
+      fresh = true;
+    } catch {
+      fresh = false;
+    }
+    if (saved && fresh) setActionError("");
+    else if (!saved && fresh)
+      setActionError("That page could not be moved. The list has been refreshed.");
+    else if (saved && !fresh)
+      setActionError(
+        "The new order was saved, but the list could not be refreshed. Reload the page if it looks stale.",
+      );
+    else
+      setActionError(
+        "That page could not be moved, and the list could not be refreshed. Reload the page.",
+      );
+    setLocalPages(null);
+  };
+
+  const onIndexDragStart = (event: DragStartEvent) => {
+    setDraggedId(String(event.active.id));
+  };
+
+  const onIndexDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    const activeId = String(active.id);
+    setDraggedId(null);
+    if (!over || activeId === String(over.id)) return;
+    const overId = String(over.id);
+    const source = localPages ?? list.data ?? [];
+    const activePage = source.find((page) => page.id === activeId);
+    if (!activePage) return;
+    // `over` is always a sibling (see sameLevelCollision), so the drop takes
+    // the hovered sibling's slot, downward moves landing past it, exactly as
+    // the drag preview shows. Nesting never changes here.
+    const siblings = tree.children.get(activePage.parentId) ?? [];
+    const from = siblings.findIndex((page) => page.id === activeId);
+    const to = siblings.findIndex((page) => page.id === overId);
+    if (from < 0 || to < 0 || from === to) return;
+    const moved = arrayMove(siblings, from, to);
+    const orderedIds = moved.map((page) => page.id);
+    // Deal out the orders the siblings already hold, so a sibling this drag
+    // did not name keeps an order nothing else collides with.
+    const slots = siblings.map((page) => page.order).sort((a, b) => a - b);
+    const orderOf = new Map(orderedIds.map((id, index) => [id, slots[index]!]));
+    setLocalPages(source.map((page) => (orderOf.has(page.id) ? { ...page, order: orderOf.get(page.id)! } : page)));
+    setActionError("");
+    orderChain.current = orderChain.current.then(() => commitOrder(activeId, orderedIds));
+  };
 
   const updateSearch = (patch: ToolbarPatch) =>
     void navigate({
@@ -381,6 +517,9 @@ export function ContentWorkspace() {
       const created = await createPage({ data: { title: "", parentId } });
       queryClient.setQueryData(contentKeys.detail(created.id), created);
       await invalidateContent(queryClient);
+      // A move in flight shadows the list with its optimistic order; drop the
+      // overlay so the created page is not hidden until that move lands.
+      setLocalPages(null);
       loadedId.current = null;
       setActionError("");
       await navigate({
@@ -419,6 +558,7 @@ export function ContentWorkspace() {
       setSaveState("saved");
       queryClient.setQueryData(contentKeys.detail(recovered.id), recovered);
       await invalidateContent(queryClient);
+      setLocalPages(null);
       if (openCopy)
         await navigate({
           to: "/content",
@@ -466,20 +606,64 @@ export function ContentWorkspace() {
             {list.isPending ? (
               <p className="p-3 text-muted-foreground">Loading pages…</p>
             ) : rows.length ? (
-              rows.map(({ page, depth }) => (
-                <button
-                  key={page.id}
-                  type="button"
-                  className="flex min-h-10 w-full items-center gap-2 rounded-lg pr-2 text-left text-sm hover:bg-muted aria-[current=page]:bg-accent aria-[current=page]:font-medium"
-                  style={{ paddingLeft: `${Math.min(depth, 8) * 16 + 8}px` }}
-                  aria-current={selectedId === page.id ? "page" : undefined}
-                  disabled={recovering}
-                  onClick={() => void selectPage(page.id)}
+              canReorder ? (
+                <ClientOnly
+                  fallback={
+                    <PageIndexList
+                      rows={rows}
+                      selectedId={selectedId}
+                      disabled={recovering}
+                      onSelect={(id) => void selectPage(id)}
+                    />
+                  }
                 >
-                  {depth > 0 ? <ChevronRight className="size-3 shrink-0 text-muted-foreground" /> : <FileText className="size-4 shrink-0 text-muted-foreground" />}
-                  <span className="truncate">{displayPageTitle(page.title)}</span>
-                </button>
-              ))
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={sameLevelCollision}
+                    onDragStart={onIndexDragStart}
+                    onDragEnd={onIndexDragEnd}
+                    onDragCancel={() => setDraggedId(null)}
+                  >
+                    <SortableGroup
+                      parentId={null}
+                      depth={0}
+                      tree={tree}
+                      selectedId={selectedId}
+                      disabled={recovering}
+                      onSelect={(id) => void selectPage(id)}
+                    />
+                    {tree.orphans.map((page) => (
+                      <PageIndexRow
+                        key={page.id}
+                        page={page}
+                        depth={0}
+                        selected={selectedId === page.id}
+                        disabled={recovering}
+                        onSelect={(id) => void selectPage(id)}
+                      />
+                    ))}
+                    <DragOverlay>
+                      {draggedId ? (
+                        <div className="flex min-h-10 w-full items-center gap-2 rounded-lg bg-accent px-2 text-sm font-medium shadow-lg">
+                          <FileText className="size-4 shrink-0 text-muted-foreground" />
+                          <span className="truncate">
+                            {displayPageTitle(
+                              (localPages ?? list.data ?? []).find((page) => page.id === draggedId)?.title ?? "",
+                            )}
+                          </span>
+                        </div>
+                      ) : null}
+                    </DragOverlay>
+                  </DndContext>
+                </ClientOnly>
+              ) : (
+                <PageIndexList
+                  rows={rows}
+                  selectedId={selectedId}
+                  disabled={recovering}
+                  onSelect={(id) => void selectPage(id)}
+                />
+              )
             ) : (
               <p className="p-4 text-center text-muted-foreground">{search.q ? "No pages match your search." : "No pages yet."}</p>
             )}
@@ -574,6 +758,9 @@ export function ContentWorkspace() {
                       return;
                     }
                     await invalidateContent(queryClient, contentKeys.all);
+                    // A move in flight shadows the list with its optimistic order;
+                    // drop the overlay so the trashed page leaves the index now.
+                    setLocalPages(null);
                     if (sameSource && sourceChanged) {
                       staleRevision.current = null;
                       setSaveConflict(false);
@@ -664,5 +851,162 @@ export function ContentWorkspace() {
         </DialogContent>
       </Dialog>
     </section>
+  );
+}
+
+function PageIndexRow({
+  page,
+  depth,
+  selected,
+  disabled,
+  onSelect,
+}: {
+  page: ContentPage;
+  depth: number;
+  selected: boolean;
+  disabled: boolean;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="flex min-h-10 w-full items-center gap-2 rounded-lg pr-2 text-left text-sm hover:bg-muted aria-[current=page]:bg-accent aria-[current=page]:font-medium"
+      style={{ paddingLeft: `${Math.min(depth, 8) * 16 + 8}px` }}
+      aria-current={selected ? "page" : undefined}
+      disabled={disabled}
+      onClick={() => onSelect(page.id)}
+    >
+      {depth > 0 ? <ChevronRight className="size-3 shrink-0 text-muted-foreground" /> : <FileText className="size-4 shrink-0 text-muted-foreground" />}
+      <span className="truncate">{displayPageTitle(page.title)}</span>
+    </button>
+  );
+}
+
+function PageIndexList({
+  rows,
+  selectedId,
+  disabled,
+  onSelect,
+}: {
+  rows: { page: ContentPage; depth: number }[];
+  selectedId: string | undefined;
+  disabled: boolean;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <>
+      {rows.map(({ page, depth }) => (
+        <PageIndexRow
+          key={page.id}
+          page={page}
+          depth={depth}
+          selected={selectedId === page.id}
+          disabled={disabled}
+          onSelect={onSelect}
+        />
+      ))}
+    </>
+  );
+}
+
+/**
+ * One sibling group as its own sortable list. Each row's sortable node wraps
+ * its subtree, so the group's items are contiguous, a subtree moves as one
+ * piece, and the preview shows exactly the sibling order that gets saved.
+ */
+function SortableGroup({
+  parentId,
+  depth,
+  tree,
+  selectedId,
+  disabled,
+  onSelect,
+}: {
+  parentId: string | null;
+  depth: number;
+  tree: PageTree;
+  selectedId: string | undefined;
+  disabled: boolean;
+  onSelect: (id: string) => void;
+}) {
+  const pages = tree.children.get(parentId) ?? [];
+  if (!pages.length) return null;
+  return (
+    <SortableContext items={pages.map((page) => page.id)} strategy={verticalListSortingStrategy}>
+      {pages.map((page) => (
+        <SortablePageRow
+          key={page.id}
+          page={page}
+          depth={depth}
+          selected={selectedId === page.id}
+          disabled={disabled}
+          sortable={pages.length > 1}
+          onSelect={onSelect}
+        >
+          <SortableGroup
+            parentId={page.id}
+            depth={depth + 1}
+            tree={tree}
+            selectedId={selectedId}
+            disabled={disabled}
+            onSelect={onSelect}
+          />
+        </SortablePageRow>
+      ))}
+    </SortableContext>
+  );
+}
+
+function SortablePageRow({
+  page,
+  depth,
+  selected,
+  disabled,
+  sortable,
+  onSelect,
+  children,
+}: {
+  page: ContentPage;
+  depth: number;
+  selected: boolean;
+  disabled: boolean;
+  /** False when the page has no sibling to swap with: the row stays a button. */
+  sortable: boolean;
+  onSelect: (id: string) => void;
+  /** The page's own subtree, carried along when the row moves. */
+  children?: ReactNode;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: page.id,
+    data: { parentId: page.parentId },
+    disabled: disabled || !sortable,
+  });
+  // Only the row itself is the handle; the subtree below it is outside the
+  // handle, so grabbing a child never drags the parent.
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Translate.toString(transform), transition }}
+      className={isDragging ? "opacity-40" : ""}
+    >
+      <div ref={setActivatorNodeRef} {...attributes} {...listeners}>
+        <PageIndexRow
+          page={page}
+          depth={depth}
+          selected={selected}
+          disabled={disabled}
+          onSelect={onSelect}
+        />
+      </div>
+      {children}
+    </div>
   );
 }

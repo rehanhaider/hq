@@ -30,6 +30,7 @@ import {
   deletePropertySchema,
   listPagesSchema,
   movePageCardSchema,
+  movePageSchema,
   pageIdSchema,
   reorderPropertiesSchema,
   savePageSchema,
@@ -155,6 +156,9 @@ export const setPageProperties = createServerFn({ method: "POST" })
 export const movePageCard = createServerFn({ method: "POST" })
   .validator(movePageCardSchema)
   .handler(({ data }) => getContentStore().moveCard(data));
+export const movePage = createServerFn({ method: "POST" })
+  .validator(movePageSchema)
+  .handler(({ data }) => getContentStore().movePage(data));
 export const createContentProperty = createServerFn({ method: "POST" })
   .validator(createPropertySchema)
   .handler(({ data }) =>
