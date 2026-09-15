@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuTrigger } from "@/components/ui/menu";
 import {
   PROPERTY_COLORS,
+  splitTagNames,
   type Property,
   type PropertyColor,
   type PropertyKind,
@@ -147,6 +148,33 @@ function PropertyList({
   const add = async () => {
     const name = adding.trim();
     if (!name) return;
+    if (section.kind === "tag") {
+      const names = splitTagNames(name);
+      if (!names.length) return;
+      if (names.length > 1) {
+        // One request per tag so a long combined input never trips the
+        // single-name length limit; the store reuses names that already exist.
+        const seen = [...new Set(names.map((entry) => entry.toLowerCase()))].map(
+          (lower) => names.find((entry) => entry.toLowerCase() === lower)!,
+        );
+        if (
+          await run(
+            async () => {
+              for (const entry of seen) {
+                const result = (await createContentProperty({
+                  data: { kind: section.kind, name: entry },
+                })) as { ok?: boolean };
+                if (result.ok === false) return { ok: false };
+              }
+              return { ok: true };
+            },
+            `${section.title} could not be added.`,
+          )
+        )
+          setAdding("");
+        return;
+      }
+    }
     if (
       await run(
         () => createContentProperty({ data: { kind: section.kind, name } }),

@@ -4,6 +4,7 @@ import { dirname, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import {
   PROPERTY_COLORS,
+  splitTagNames,
   type ContentBlock,
   type ContentPage,
   type ContentProperties,
@@ -685,31 +686,61 @@ export class ContentStore {
   }
 
   createProperty(kind: PropertyKind, name: string, color?: PropertyColor) {
-    return this.transaction(() => {
-      const table = PROPERTY_TABLES[kind];
-      const existing = this.db
-        .prepare(`SELECT id FROM ${table} WHERE lower(name) = lower(?)`)
-        .get(name) as { id: string } | undefined;
-      if (existing) return { ok: true as const, id: existing.id, created: false as const };
-      const count = Number(
-        (this.db.prepare(`SELECT count(*) AS total FROM ${table}`).get() as { total: number })
-          .total,
-      );
-      // After a deletion the positions have a gap, so the count is already
-      // taken. A new entry belongs at the end of the list, past the highest.
-      const position = Number(
-        (
-          this.db
-            .prepare(`SELECT coalesce(max(position), -1) + 1 AS next FROM ${table}`)
-            .get() as { next: number }
-        ).next,
-      );
-      const id = randomUUID();
-      this.db
-        .prepare(`INSERT INTO ${table} (id, name, color, position) VALUES (?, ?, ?, ?)`)
-        .run(id, name, color ?? PROPERTY_COLORS[count % PROPERTY_COLORS.length]!, position);
-      return { ok: true as const, id, created: true as const };
-    });
+    if (kind === "tag") {
+      const names = splitTagNames(name);
+      if (names.length === 0) return { ok: true as const, id: "", ids: [], created: false as const };
+      if (names.length > 1) {
+        return this.transaction(() => {
+          // One input can name the same tag twice, so keep the first casing.
+          const seen = new Map<string, string>();
+          for (const entry of names) {
+            const key = entry.toLowerCase();
+            if (!seen.has(key)) seen.set(key, entry);
+          }
+          const ids: string[] = [];
+          let createdAny = false;
+          for (const entry of seen.values()) {
+            const result = this.insertProperty(kind, entry, color);
+            ids.push(result.id);
+            if (result.created) createdAny = true;
+          }
+          return {
+            ok: true as const,
+            id: ids[0]!,
+            ids,
+            created: createdAny,
+          };
+        });
+      }
+      return this.transaction(() => this.insertProperty(kind, names[0]!, color));
+    }
+    return this.transaction(() => this.insertProperty(kind, name, color));
+  }
+
+  private insertProperty(kind: PropertyKind, name: string, color?: PropertyColor) {
+    const table = PROPERTY_TABLES[kind];
+    const existing = this.db
+      .prepare(`SELECT id FROM ${table} WHERE lower(name) = lower(?)`)
+      .get(name) as { id: string } | undefined;
+    if (existing) return { ok: true as const, id: existing.id, created: false as const };
+    const count = Number(
+      (this.db.prepare(`SELECT count(*) AS total FROM ${table}`).get() as { total: number })
+        .total,
+    );
+    // After a deletion the positions have a gap, so the count is already
+    // taken. A new entry belongs at the end of the list, past the highest.
+    const position = Number(
+      (
+        this.db
+          .prepare(`SELECT coalesce(max(position), -1) + 1 AS next FROM ${table}`)
+          .get() as { next: number }
+      ).next,
+    );
+    const id = randomUUID();
+    this.db
+      .prepare(`INSERT INTO ${table} (id, name, color, position) VALUES (?, ?, ?, ?)`)
+      .run(id, name, color ?? PROPERTY_COLORS[count % PROPERTY_COLORS.length]!, position);
+    return { ok: true as const, id, created: true as const };
   }
 
   updateProperty(kind: PropertyKind, id: string, changes: { name?: string; color?: PropertyColor }) {
