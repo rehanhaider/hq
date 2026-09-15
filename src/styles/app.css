@@ -290,6 +290,16 @@
   }
 }
 
+/* Twitter's widget is a 550px iframe. Keep it on the text column instead of
+   stretching with the editor. */
+.content-editor-shell .tweet-embed {
+  max-width: 550px;
+  margin-inline: auto;
+}
+.content-editor-shell .tweet-embed iframe {
+  margin-inline: auto !important;
+}
+
 /* Image and video resize handles. BlockNote ships its 8x30px hover-only
    handle unlayered, which beats anything inside `@layer components`
    regardless of specificity — so these overrides stay unlayered, like the

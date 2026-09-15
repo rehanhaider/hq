@@ -1,0 +1,80 @@
+/**
+ * Tweet status URLs the Content editor can turn into an embed. Hosts and the
+ * `/status/{id}` path are the whole test; a profile, a search, or extra text
+ * around the URL is left for ordinary paste.
+ */
+const TWEET_HOSTS = new Set([
+  "x.com",
+  "twitter.com",
+  "mobile.x.com",
+  "mobile.twitter.com",
+]);
+
+const STATUS_PATH = /\/(?:status|statuses)\/(\d{1,20})(?:\/|$)/;
+
+export function tweetStatusUrl(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 2_048) return null;
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+  if (parsed.username || parsed.password) return null;
+  const host = parsed.hostname.replace(/^www\./i, "").toLowerCase();
+  if (!TWEET_HOSTS.has(host)) return null;
+  const id = parsed.pathname.match(STATUS_PATH)?.[1];
+  if (!id) return null;
+  return `https://x.com/i/web/status/${id}`;
+}
+
+export function tweetStatusId(value: string): string | null {
+  const canonical = tweetStatusUrl(value);
+  if (!canonical) return null;
+  return canonical.slice(canonical.lastIndexOf("/") + 1) || null;
+}
+
+/**
+ * Clipboard text that is a tweet URL, possibly as a one-line `text/uri-list`.
+ * Two or more real lines means the user copied more than a URL, so paste
+ * stays ordinary.
+ */
+export function tweetUrlFromPaste(text: string): string | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  const direct = tweetStatusUrl(trimmed);
+  if (direct) return direct;
+  const lines = trimmed
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.startsWith("#"));
+  if (lines.length !== 1) return null;
+  return tweetStatusUrl(lines[0] ?? "");
+}
+
+export function isEmptyParagraphContent(content: unknown): boolean {
+  if (!Array.isArray(content) || content.length === 0) return true;
+  return content.every((item) => {
+    if (!item || typeof item !== "object") return false;
+    const node = item as { type?: unknown; text?: unknown };
+    return node.type === "text" && node.text === "";
+  });
+}
+
+export type TweetPastePlan =
+  | { kind: "ignore" }
+  | { kind: "replace"; url: string }
+  | { kind: "insert"; url: string };
+
+export function planTweetPaste(
+  clipboardText: string,
+  current: { type: string; empty: boolean } | null,
+): TweetPastePlan {
+  const url = tweetUrlFromPaste(clipboardText);
+  if (!url) return { kind: "ignore" };
+  if (current?.type === "codeBlock") return { kind: "ignore" };
+  if (current?.type === "paragraph" && current.empty) return { kind: "replace", url };
+  return { kind: "insert", url };
+}

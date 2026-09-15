@@ -19,7 +19,9 @@ import { useCreateBlockNote } from "@blocknote/react";
 import { BlockNoteView, ShadCNDefaultComponents } from "@blocknote/shadcn";
 import { Link as LinkIcon } from "lucide-react";
 import type { ContentBlock, PageDetail } from "@/lib/content";
+import { isEmptyParagraphContent, planTweetPaste } from "@/lib/tweet";
 import { MAX_UPLOAD_BYTES, formatBytes, uploadRejection } from "@/lib/uploads";
+import { tweetBlock } from "./TweetBlock";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -41,7 +43,10 @@ const {
 const { bold, italic, underline } = defaultStyleSpecs;
 
 const noteSchema = BlockNoteSchema.create({
-  blockSpecs: noteBlockSpecs,
+  blockSpecs: {
+    ...noteBlockSpecs,
+    tweet: tweetBlock(),
+  },
   inlineContentSpecs: defaultInlineContentSpecs,
   styleSpecs: { bold, italic, underline },
 });
@@ -191,6 +196,38 @@ export function ContentEditor({
     },
     uploadFile,
     defaultStyles: true,
+    // A clipboard that is only a tweet URL becomes a tweet block. Mixed
+    // content and code blocks fall through so ordinary paste is unchanged.
+    pasteHandler: ({ event, editor: current, defaultPasteHandler }) => {
+      let cursor: { type: string; empty: boolean } | null = null;
+      try {
+        const { block } = current.getTextCursorPosition();
+        cursor = {
+          type: block.type,
+          empty:
+            block.type === "paragraph" &&
+            isEmptyParagraphContent(block.content),
+        };
+      } catch {
+        cursor = null;
+      }
+      const plan = planTweetPaste(
+        event.clipboardData?.getData("text/plain") ||
+          event.clipboardData?.getData("text/uri-list") ||
+          "",
+        cursor,
+      );
+      if (plan.kind === "ignore") return defaultPasteHandler();
+      try {
+        const { block } = current.getTextCursorPosition();
+        const tweet = { type: "tweet" as const, props: { url: plan.url } };
+        if (plan.kind === "replace") current.replaceBlocks([block], [tweet]);
+        else current.insertBlocks([tweet], block, "after");
+        return true;
+      } catch {
+        return defaultPasteHandler();
+      }
+    },
   });
   editorRef.current = editor;
 
