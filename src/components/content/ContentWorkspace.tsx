@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ReactNode,
 } from "react";
 import { ClientOnly, useBlocker, useNavigate, useSearch } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -17,6 +18,7 @@ import {
   closestCenter,
   useSensor,
   useSensors,
+  type CollisionDetection,
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
@@ -89,30 +91,63 @@ function readableError(error: unknown, fallback: string) {
   return message;
 }
 
+type PageTree = {
+  /** Each sibling group in display order, keyed by parent; root is `null`. */
+  children: Map<string | null, ContentPage[]>;
+  /** Pages the root cannot reach (missing parent or a cycle). */
+  orphans: ContentPage[];
+};
+
+function pageTree(pages: ContentPage[]): PageTree {
+  const byParent = new Map<string | null, ContentPage[]>();
+  for (const page of pages) {
+    const siblings = byParent.get(page.parentId) ?? [];
+    siblings.push(page);
+    byParent.set(page.parentId, siblings);
+  }
+  for (const siblings of byParent.values())
+    siblings.sort((a, b) => a.order - b.order || a.title.localeCompare(b.title));
+  // Only groups reachable from the root are kept, so a cycle can never recurse.
+  const children = new Map<string | null, ContentPage[]>();
+  const seen = new Set<string>();
+  const visit = (parentId: string | null) => {
+    const group = (byParent.get(parentId) ?? []).filter((page) => !seen.has(page.id));
+    for (const page of group) seen.add(page.id);
+    children.set(parentId, group);
+    for (const page of group) visit(page.id);
+  };
+  visit(null);
+  return { children, orphans: pages.filter((page) => !seen.has(page.id)) };
+}
+
 function pageRows(pages: ContentPage[], searching: boolean) {
   if (searching) return pages.map((page) => ({ page, depth: 0 }));
-  const children = new Map<string | null, ContentPage[]>();
-  for (const page of pages) {
-    const siblings = children.get(page.parentId) ?? [];
-    siblings.push(page);
-    children.set(page.parentId, siblings);
-  }
-  for (const siblings of children.values())
-    siblings.sort((a, b) => a.order - b.order || a.title.localeCompare(b.title));
+  const { children, orphans } = pageTree(pages);
   const rows: { page: ContentPage; depth: number }[] = [];
-  const seen = new Set<string>();
   const visit = (parentId: string | null, depth: number) => {
     for (const page of children.get(parentId) ?? []) {
-      if (seen.has(page.id)) continue;
-      seen.add(page.id);
       rows.push({ page, depth });
       visit(page.id, depth + 1);
     }
   };
   visit(null, 0);
-  for (const page of pages) if (!seen.has(page.id)) rows.push({ page, depth: 0 });
+  for (const page of orphans) rows.push({ page, depth: 0 });
   return rows;
 }
+
+// Only the dragged page's siblings can be dropped on. Nesting never changes
+// here, so a nested row must not steal the drop: with siblings in their own
+// SortableContext, the preview and the saved order are then the same list.
+const sameLevelCollision: CollisionDetection = (args) => {
+  const parentId = (args.active.data.current as { parentId?: string | null } | undefined)?.parentId;
+  return closestCenter({
+    ...args,
+    droppableContainers: args.droppableContainers.filter(
+      (container) =>
+        (container.data.current as { parentId?: string | null } | undefined)?.parentId === parentId,
+    ),
+  });
+};
 
 export function ContentWorkspace() {
   const search = useSearch({ from: "/content" });
@@ -331,16 +366,11 @@ export function ContentWorkspace() {
   // Dragging a filtered or searched list would persist an order the user never
   // saw whole, so the index is only sortable when the full tree is on screen
   // and some sibling group actually has more than one page.
-  const siblingCounts = useMemo(() => {
-    const counts = new Map<string | null, number>();
-    for (const page of localPages ?? list.data ?? [])
-      counts.set(page.parentId, (counts.get(page.parentId) ?? 0) + 1);
-    return counts;
-  }, [list.data, localPages]);
+  const tree = useMemo(() => pageTree(localPages ?? list.data ?? []), [list.data, localPages]);
   const canReorder =
     !searching &&
     !list.isPending &&
-    [...siblingCounts.values()].some((count) => count > 1);
+    [...tree.children.values()].some((group) => group.length > 1);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -390,34 +420,14 @@ export function ContentWorkspace() {
     const overId = String(over.id);
     const source = localPages ?? list.data ?? [];
     const activePage = source.find((page) => page.id === activeId);
-    const overPage = source.find((page) => page.id === overId);
-    if (!activePage || !overPage) return;
-    // Nesting never changes here.
-    const siblings = source
-      .filter((page) => page.parentId === activePage.parentId)
-      .sort((a, b) => a.order - b.order || a.title.localeCompare(b.title));
+    if (!activePage) return;
+    // `over` is always a sibling (see sameLevelCollision), so the drop takes
+    // the hovered sibling's slot, downward moves landing past it, exactly as
+    // the drag preview shows. Nesting never changes here.
+    const siblings = tree.children.get(activePage.parentId) ?? [];
     const from = siblings.findIndex((page) => page.id === activeId);
-    if (from < 0) return;
-    let to: number;
-    if (overPage.parentId === activePage.parentId) {
-      // Same level: the drop takes the hovered sibling's slot, downward moves
-      // landing past it, exactly as the drag preview shows.
-      to = siblings.findIndex((page) => page.id === overId);
-    } else {
-      // A drop over a nested row targets its nearest ancestor among the
-      // dragged page's siblings: dropping onto A's child means A. A drop with
-      // no such ancestor, or onto the dragged page itself, is a no-op rather
-      // than a reorder to a position the preview never showed.
-      let target: ContentPage | undefined = overPage;
-      const visited = new Set<string>();
-      while (target && target.parentId !== activePage.parentId && !visited.has(target.id)) {
-        visited.add(target.id);
-        target = source.find((page) => page.id === target!.parentId);
-      }
-      if (!target || target.id === activeId) return;
-      to = siblings.findIndex((page) => page.id === target!.id);
-    }
-    if (to < 0 || from === to) return;
+    const to = siblings.findIndex((page) => page.id === overId);
+    if (from < 0 || to < 0 || from === to) return;
     const moved = arrayMove(siblings, from, to);
     const orderedIds = moved.map((page) => page.id);
     // Deal out the orders the siblings already hold, so a sibling this drag
@@ -609,27 +619,29 @@ export function ContentWorkspace() {
                 >
                   <DndContext
                     sensors={sensors}
-                    collisionDetection={closestCenter}
+                    collisionDetection={sameLevelCollision}
                     onDragStart={onIndexDragStart}
                     onDragEnd={onIndexDragEnd}
                     onDragCancel={() => setDraggedId(null)}
                   >
-                    <SortableContext
-                      items={rows.map(({ page }) => page.id)}
-                      strategy={verticalListSortingStrategy}
-                    >
-                      {rows.map(({ page, depth }) => (
-                        <SortablePageRow
-                          key={page.id}
-                          page={page}
-                          depth={depth}
-                          selected={selectedId === page.id}
-                          disabled={recovering}
-                          sortable={(siblingCounts.get(page.parentId) ?? 0) > 1}
-                          onSelect={(id) => void selectPage(id)}
-                        />
-                      ))}
-                    </SortableContext>
+                    <SortableGroup
+                      parentId={null}
+                      depth={0}
+                      tree={tree}
+                      selectedId={selectedId}
+                      disabled={recovering}
+                      onSelect={(id) => void selectPage(id)}
+                    />
+                    {tree.orphans.map((page) => (
+                      <PageIndexRow
+                        key={page.id}
+                        page={page}
+                        depth={0}
+                        selected={selectedId === page.id}
+                        disabled={recovering}
+                        onSelect={(id) => void selectPage(id)}
+                      />
+                    ))}
                     <DragOverlay>
                       {draggedId ? (
                         <div className="flex min-h-10 w-full items-center gap-2 rounded-lg bg-accent px-2 text-sm font-medium shadow-lg">
@@ -897,6 +909,54 @@ function PageIndexList({
   );
 }
 
+/**
+ * One sibling group as its own sortable list. Each row's sortable node wraps
+ * its subtree, so the group's items are contiguous, a subtree moves as one
+ * piece, and the preview shows exactly the sibling order that gets saved.
+ */
+function SortableGroup({
+  parentId,
+  depth,
+  tree,
+  selectedId,
+  disabled,
+  onSelect,
+}: {
+  parentId: string | null;
+  depth: number;
+  tree: PageTree;
+  selectedId: string | undefined;
+  disabled: boolean;
+  onSelect: (id: string) => void;
+}) {
+  const pages = tree.children.get(parentId) ?? [];
+  if (!pages.length) return null;
+  return (
+    <SortableContext items={pages.map((page) => page.id)} strategy={verticalListSortingStrategy}>
+      {pages.map((page) => (
+        <SortablePageRow
+          key={page.id}
+          page={page}
+          depth={depth}
+          selected={selectedId === page.id}
+          disabled={disabled}
+          sortable={pages.length > 1}
+          onSelect={onSelect}
+        >
+          <SortableGroup
+            parentId={page.id}
+            depth={depth + 1}
+            tree={tree}
+            selectedId={selectedId}
+            disabled={disabled}
+            onSelect={onSelect}
+          />
+        </SortablePageRow>
+      ))}
+    </SortableContext>
+  );
+}
+
 function SortablePageRow({
   page,
   depth,
@@ -904,6 +964,7 @@ function SortablePageRow({
   disabled,
   sortable,
   onSelect,
+  children,
 }: {
   page: ContentPage;
   depth: number;
@@ -912,24 +973,40 @@ function SortablePageRow({
   /** False when the page has no sibling to swap with: the row stays a button. */
   sortable: boolean;
   onSelect: (id: string) => void;
+  /** The page's own subtree, carried along when the row moves. */
+  children?: ReactNode;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: page.id, disabled: disabled || !sortable });
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: page.id,
+    data: { parentId: page.parentId },
+    disabled: disabled || !sortable,
+  });
+  // Only the row itself is the handle; the subtree below it is outside the
+  // handle, so grabbing a child never drags the parent.
   return (
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform), transition }}
       className={isDragging ? "opacity-40" : ""}
-      {...attributes}
-      {...listeners}
     >
-      <PageIndexRow
-        page={page}
-        depth={depth}
-        selected={selected}
-        disabled={disabled}
-        onSelect={onSelect}
-      />
+      <div ref={setActivatorNodeRef} {...attributes} {...listeners}>
+        <PageIndexRow
+          page={page}
+          depth={depth}
+          selected={selected}
+          disabled={disabled}
+          onSelect={onSelect}
+        />
+      </div>
+      {children}
     </div>
   );
 }
