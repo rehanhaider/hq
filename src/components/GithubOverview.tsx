@@ -72,35 +72,31 @@ export function GithubOverview({ filters }: { filters: Filters }) {
       </div>
     );
 
+  const search = { ...filters, page: 1 };
   const stats: {
     label: string;
     value: string;
-    to: string;
-    search: Filters;
+    to: "/github/work" | "/github/statistics";
   }[] = [
     {
       label: "Needs you",
       value: work.isPending ? "—" : number(counts.needsYou),
-      to: "/github",
-      search: { ...filters, view: "work" as const, page: 1 },
+      to: "/github/work",
     },
     {
       label: "Needs triage",
       value: work.isPending ? "—" : number(counts.triage),
-      to: "/github",
-      search: { ...filters, view: "work" as const, page: 1 },
+      to: "/github/work",
     },
     {
       label: "Merged",
       value: summary ? number(summary.total.authoredPrs) : "—",
-      to: "/github",
-      search: { ...filters, view: "statistics" as const, page: 1 },
+      to: "/github/statistics",
     },
     {
       label: "Commits",
       value: summary ? number(summary.total.commits) : "—",
-      to: "/github",
-      search: { ...filters, view: "statistics" as const, page: 1 },
+      to: "/github/statistics",
     },
   ];
 
@@ -111,7 +107,7 @@ export function GithubOverview({ filters }: { filters: Filters }) {
           <Link
             key={stat.label}
             to={stat.to}
-            search={stat.search}
+            search={search}
             className="card group p-4 hover:border-primary/40"
           >
             <p className="section-label">{stat.label}</p>
@@ -148,8 +144,8 @@ export function GithubOverview({ filters }: { filters: Filters }) {
             Statistics.
           </p>
           <Link
-            to="/github"
-            search={{ ...filters, view: "statistics", page: 1 }}
+            to="/github/statistics"
+            search={search}
             className="mt-4 text-[0.8125rem] font-medium text-primary"
           >
             Open Statistics <ArrowRight className="inline size-3.5" />
@@ -160,7 +156,7 @@ export function GithubOverview({ filters }: { filters: Filters }) {
           <Section
             title="Waiting on you"
             count={counts.needsYou}
-            action={{ label: "Open work", search: { ...filters, view: "work" as const, page: 1 } }}
+            action={{ label: "Open work", search }}
           >
             {waiting.map((item) => (
               <AttentionRow key={item.id} item={item} note={reasonLabel(item)} />
@@ -171,7 +167,7 @@ export function GithubOverview({ filters }: { filters: Filters }) {
             title="Going stale"
             count={stale.length}
             hint="Quiet 14+ days"
-            action={{ label: "Open work", search: { ...filters, view: "work" as const, page: 1 } }}
+            action={{ label: "Open work", search }}
           >
             {stale.map((item) => (
               <AttentionRow key={item.id} item={item} note={reasonLabel(item)} />
@@ -189,7 +185,7 @@ export function GithubOverview({ filters }: { filters: Filters }) {
           <Section
             title="Needs triage"
             count={counts.triage}
-            action={{ label: "Open work", search: { ...filters, view: "work" as const, page: 1 } }}
+            action={{ label: "Open work", search }}
           >
             {triage.map((item) => (
               <AttentionRow
@@ -230,7 +226,7 @@ function Section({
         ) : null}
         {action ? (
           <Link
-            to="/github"
+            to="/github/work"
             search={action.search}
             className="ml-auto shrink-0 text-[0.8125rem] font-medium text-primary"
           >

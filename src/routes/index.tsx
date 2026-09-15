@@ -294,8 +294,8 @@ function HomePage() {
                 on their own.
               </p>
               <Link
-                to="/github"
-                search={{ ...defaultFilters(), view: "projects" }}
+                to="/github/repositories"
+                search={defaultFilters()}
                 className={cn(
                   buttonVariants({ variant: "outline" }),
                   "mt-4 h-10 px-4",
@@ -503,8 +503,8 @@ function OpenWorkCard() {
           </p>
           <div className="mt-5 flex-1" />
           <Link
-            to="/github"
-            search={{ ...defaultFilters(), view: "work" }}
+            to="/github/work"
+            search={defaultFilters()}
             className="text-[0.8125rem] font-medium text-primary"
           >
             Open GitHub work <ArrowRight className="inline size-3.5" />
@@ -567,8 +567,8 @@ function OpenWorkCard() {
 
           <div className="mt-5 flex-1" />
           <Link
-            to="/github"
-            search={{ ...defaultFilters(), view: "work" }}
+            to="/github/work"
+            search={defaultFilters()}
             className="text-[0.8125rem] font-medium text-primary"
           >
             Open GitHub work <ArrowRight className="inline size-3.5" />

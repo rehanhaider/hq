@@ -22,6 +22,10 @@ import { Route as ContentTrashRouteImport } from './routes/content/trash'
 import { Route as DeenIndexRouteImport } from './routes/deen/index'
 import { Route as DeenHistoryRouteImport } from './routes/deen/history'
 import { Route as DeenSettingsRouteImport } from './routes/deen/settings'
+import { Route as GithubIndexRouteImport } from './routes/github/index'
+import { Route as GithubRepositoriesRouteImport } from './routes/github/repositories'
+import { Route as GithubStatisticsRouteImport } from './routes/github/statistics'
+import { Route as GithubWorkRouteImport } from './routes/github/work'
 import { Route as NotesSplatRouteImport } from './routes/notes/$'
 import { Route as ApiAvatarsOrgRouteImport } from './routes/api/avatars.$org'
 import { Route as ApiUploadsIdRouteImport } from './routes/api/uploads.$id'
@@ -91,6 +95,26 @@ const DeenSettingsRoute = DeenSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => DeenRoute,
 } as any)
+const GithubIndexRoute = GithubIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => GithubRoute,
+} as any)
+const GithubRepositoriesRoute = GithubRepositoriesRouteImport.update({
+  id: '/repositories',
+  path: '/repositories',
+  getParentRoute: () => GithubRoute,
+} as any)
+const GithubStatisticsRoute = GithubStatisticsRouteImport.update({
+  id: '/statistics',
+  path: '/statistics',
+  getParentRoute: () => GithubRoute,
+} as any)
+const GithubWorkRoute = GithubWorkRouteImport.update({
+  id: '/work',
+  path: '/work',
+  getParentRoute: () => GithubRoute,
+} as any)
 const NotesSplatRoute = NotesSplatRouteImport.update({
   id: '/$',
   path: '/$',
@@ -111,7 +135,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/content': typeof ContentRouteWithChildren
   '/deen': typeof DeenRouteWithChildren
-  '/github': typeof GithubRoute
+  '/github': typeof GithubRouteWithChildren
   '/notes': typeof NotesRouteWithChildren
   '/api/uploads': typeof ApiUploadsRouteWithChildren
   '/content/board': typeof ContentBoardRoute
@@ -119,15 +143,18 @@ export interface FileRoutesByFullPath {
   '/content/trash': typeof ContentTrashRoute
   '/deen/history': typeof DeenHistoryRoute
   '/deen/settings': typeof DeenSettingsRoute
+  '/github/repositories': typeof GithubRepositoriesRoute
+  '/github/statistics': typeof GithubStatisticsRoute
+  '/github/work': typeof GithubWorkRoute
   '/notes/$': typeof NotesSplatRoute
   '/content/': typeof ContentIndexRoute
   '/deen/': typeof DeenIndexRoute
+  '/github/': typeof GithubIndexRoute
   '/api/avatars/$org': typeof ApiAvatarsOrgRoute
   '/api/uploads/$id': typeof ApiUploadsIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/github': typeof GithubRoute
   '/notes': typeof NotesRouteWithChildren
   '/api/uploads': typeof ApiUploadsRouteWithChildren
   '/content/board': typeof ContentBoardRoute
@@ -135,9 +162,13 @@ export interface FileRoutesByTo {
   '/content/trash': typeof ContentTrashRoute
   '/deen/history': typeof DeenHistoryRoute
   '/deen/settings': typeof DeenSettingsRoute
+  '/github/repositories': typeof GithubRepositoriesRoute
+  '/github/statistics': typeof GithubStatisticsRoute
+  '/github/work': typeof GithubWorkRoute
   '/notes/$': typeof NotesSplatRoute
   '/content': typeof ContentIndexRoute
   '/deen': typeof DeenIndexRoute
+  '/github': typeof GithubIndexRoute
   '/api/avatars/$org': typeof ApiAvatarsOrgRoute
   '/api/uploads/$id': typeof ApiUploadsIdRoute
 }
@@ -146,7 +177,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/content': typeof ContentRouteWithChildren
   '/deen': typeof DeenRouteWithChildren
-  '/github': typeof GithubRoute
+  '/github': typeof GithubRouteWithChildren
   '/notes': typeof NotesRouteWithChildren
   '/api/uploads': typeof ApiUploadsRouteWithChildren
   '/content/board': typeof ContentBoardRoute
@@ -154,9 +185,13 @@ export interface FileRoutesById {
   '/content/trash': typeof ContentTrashRoute
   '/deen/history': typeof DeenHistoryRoute
   '/deen/settings': typeof DeenSettingsRoute
+  '/github/repositories': typeof GithubRepositoriesRoute
+  '/github/statistics': typeof GithubStatisticsRoute
+  '/github/work': typeof GithubWorkRoute
   '/notes/$': typeof NotesSplatRoute
   '/content/': typeof ContentIndexRoute
   '/deen/': typeof DeenIndexRoute
+  '/github/': typeof GithubIndexRoute
   '/api/avatars/$org': typeof ApiAvatarsOrgRoute
   '/api/uploads/$id': typeof ApiUploadsIdRoute
 }
@@ -174,15 +209,18 @@ export interface FileRouteTypes {
     | '/content/trash'
     | '/deen/history'
     | '/deen/settings'
+    | '/github/repositories'
+    | '/github/statistics'
+    | '/github/work'
     | '/notes/$'
     | '/content/'
     | '/deen/'
+    | '/github/'
     | '/api/avatars/$org'
     | '/api/uploads/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/github'
     | '/notes'
     | '/api/uploads'
     | '/content/board'
@@ -190,9 +228,13 @@ export interface FileRouteTypes {
     | '/content/trash'
     | '/deen/history'
     | '/deen/settings'
+    | '/github/repositories'
+    | '/github/statistics'
+    | '/github/work'
     | '/notes/$'
     | '/content'
     | '/deen'
+    | '/github'
     | '/api/avatars/$org'
     | '/api/uploads/$id'
   id:
@@ -208,9 +250,13 @@ export interface FileRouteTypes {
     | '/content/trash'
     | '/deen/history'
     | '/deen/settings'
+    | '/github/repositories'
+    | '/github/statistics'
+    | '/github/work'
     | '/notes/$'
     | '/content/'
     | '/deen/'
+    | '/github/'
     | '/api/avatars/$org'
     | '/api/uploads/$id'
   fileRoutesById: FileRoutesById
@@ -219,7 +265,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ContentRoute: typeof ContentRouteWithChildren
   DeenRoute: typeof DeenRouteWithChildren
-  GithubRoute: typeof GithubRoute
+  GithubRoute: typeof GithubRouteWithChildren
   NotesRoute: typeof NotesRouteWithChildren
   ApiUploadsRoute: typeof ApiUploadsRouteWithChildren
   ApiAvatarsOrgRoute: typeof ApiAvatarsOrgRoute
@@ -318,6 +364,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DeenSettingsRouteImport
       parentRoute: typeof DeenRoute
     }
+    '/github/': {
+      id: '/github/'
+      path: '/'
+      fullPath: '/github/'
+      preLoaderRoute: typeof GithubIndexRouteImport
+      parentRoute: typeof GithubRoute
+    }
+    '/github/repositories': {
+      id: '/github/repositories'
+      path: '/repositories'
+      fullPath: '/github/repositories'
+      preLoaderRoute: typeof GithubRepositoriesRouteImport
+      parentRoute: typeof GithubRoute
+    }
+    '/github/statistics': {
+      id: '/github/statistics'
+      path: '/statistics'
+      fullPath: '/github/statistics'
+      preLoaderRoute: typeof GithubStatisticsRouteImport
+      parentRoute: typeof GithubRoute
+    }
+    '/github/work': {
+      id: '/github/work'
+      path: '/work'
+      fullPath: '/github/work'
+      preLoaderRoute: typeof GithubWorkRouteImport
+      parentRoute: typeof GithubRoute
+    }
     '/notes/$': {
       id: '/notes/$'
       path: '/$'
@@ -373,6 +447,23 @@ const DeenRouteChildren: DeenRouteChildren = {
 
 const DeenRouteWithChildren = DeenRoute._addFileChildren(DeenRouteChildren)
 
+interface GithubRouteChildren {
+  GithubRepositoriesRoute: typeof GithubRepositoriesRoute
+  GithubStatisticsRoute: typeof GithubStatisticsRoute
+  GithubWorkRoute: typeof GithubWorkRoute
+  GithubIndexRoute: typeof GithubIndexRoute
+}
+
+const GithubRouteChildren: GithubRouteChildren = {
+  GithubRepositoriesRoute: GithubRepositoriesRoute,
+  GithubStatisticsRoute: GithubStatisticsRoute,
+  GithubWorkRoute: GithubWorkRoute,
+  GithubIndexRoute: GithubIndexRoute,
+}
+
+const GithubRouteWithChildren =
+  GithubRoute._addFileChildren(GithubRouteChildren)
+
 interface NotesRouteChildren {
   NotesSplatRoute: typeof NotesSplatRoute
 }
@@ -399,7 +490,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ContentRoute: ContentRouteWithChildren,
   DeenRoute: DeenRouteWithChildren,
-  GithubRoute: GithubRoute,
+  GithubRoute: GithubRouteWithChildren,
   NotesRoute: NotesRouteWithChildren,
   ApiUploadsRoute: ApiUploadsRouteWithChildren,
   ApiAvatarsOrgRoute: ApiAvatarsOrgRoute,
