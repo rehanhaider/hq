@@ -850,3 +850,60 @@ describe("board moves", () => {
     expect(store.get(page.id)?.typeIds).toEqual([types[0]!.id]);
   });
 });
+
+describe("page index moves", () => {
+  const siblingTitles = (parentId: string | null) =>
+    store
+      .list()
+      .filter((page) => page.parentId === parentId)
+      .sort((a, b) => a.order - b.order || a.title.localeCompare(b.title))
+      .map((page) => page.title);
+
+  it("persists a sibling reorder in the page index", () => {
+    store = new ContentStore(":memory:");
+    const first = store.create("First");
+    const second = store.create("Second");
+    const third = store.create("Third");
+    expect(
+      store.movePage({ id: third.id, orderedIds: [third.id, first.id, second.id] }).ok,
+    ).toBe(true);
+    expect(siblingTitles(null)).toEqual(["Third", "First", "Second"]);
+    // And the new sequence survives on the stored rows.
+    expect(store.get(third.id)!.order).toBeLessThan(store.get(first.id)!.order);
+    expect(store.get(first.id)!.order).toBeLessThan(store.get(second.id)!.order);
+  });
+
+  it("reorders one level without touching another parent's children", () => {
+    store = new ContentStore(":memory:");
+    const root = store.create("Root");
+    const one = store.create("One", root.id);
+    const two = store.create("Two", root.id);
+    const top = store.create("Top");
+    const before = store.get(top.id)!.order;
+    expect(store.movePage({ id: two.id, orderedIds: [two.id, one.id] }).ok).toBe(true);
+    expect(siblingTitles(root.id)).toEqual(["Two", "One"]);
+    expect(store.get(top.id)!.order).toBe(before);
+  });
+
+  it("ignores ids from another level instead of scrambling two groups", () => {
+    store = new ContentStore(":memory:");
+    const root = store.create("Root");
+    const one = store.create("One", root.id);
+    const two = store.create("Two", root.id);
+    const top = store.create("Top");
+    const topBefore = store.get(top.id)!.order;
+    expect(store.movePage({ id: one.id, orderedIds: [two.id, one.id, top.id] }).ok).toBe(
+      true,
+    );
+    expect(siblingTitles(root.id)).toEqual(["Two", "One"]);
+    expect(store.get(top.id)!.order).toBe(topBefore);
+  });
+
+  it("reports a missing page instead of reordering", () => {
+    store = new ContentStore(":memory:");
+    const only = store.create("Only");
+    expect(
+      store.movePage({ id: randomUUID(), orderedIds: [only.id] }),
+    ).toMatchObject({ ok: false, code: "missing" });
+  });
+});

@@ -9,6 +9,25 @@ import {
 } from "react";
 import { ClientOnly, useBlocker, useNavigate, useSearch } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { ArrowLeft, ChevronRight, FilePlus2, FileText, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -41,6 +60,7 @@ import {
 import {
   createContentProperty,
   createPage,
+  movePage,
   savePage,
   setPageProperties,
   trashPage,
@@ -294,14 +314,74 @@ export function ContentWorkspace() {
   // The server already searched titles and body text, so only the property
   // filters are applied here. Filtering flattens the tree: a match whose parent
   // was filtered out still has to be reachable.
+  const searching = Boolean(search.q) || hasFilters({ ...search, q: undefined });
+  const [localPages, setLocalPages] = useState<ContentPage[] | null>(null);
+  const [draggedId, setDraggedId] = useState<string | null>(null);
   const rows = useMemo(() => {
-    const pages = filterPages(list.data ?? [], {
+    const pages = filterPages(localPages ?? list.data ?? [], {
       status: search.status,
       type: search.type,
       tag: search.tag,
     });
-    return pageRows(pages, Boolean(search.q) || hasFilters({ ...search, q: undefined }));
-  }, [list.data, search]);
+    return pageRows(pages, searching);
+  }, [list.data, localPages, search, searching]);
+  // Dragging a filtered or searched list would persist an order the user never
+  // saw whole, so the index is only sortable when the full tree is on screen.
+  const canReorder = !searching && !list.isPending && rows.length > 1;
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const commitOrder = async (id: string, orderedIds: string[]) => {
+    try {
+      const result = await movePage({ data: { id, orderedIds } });
+      if (!result.ok) setActionError("That page could not be moved. The list has been refreshed.");
+      else setActionError("");
+    } catch {
+      setActionError("That page could not be moved. The list has been refreshed.");
+    }
+    await invalidateContent(queryClient);
+    setLocalPages(null);
+  };
+
+  const onIndexDragStart = (event: DragStartEvent) => {
+    setDraggedId(String(event.active.id));
+  };
+
+  const onIndexDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    const activeId = String(active.id);
+    setDraggedId(null);
+    if (!over || activeId === String(over.id)) return;
+    const overId = String(over.id);
+    const source = localPages ?? list.data ?? [];
+    const activePage = source.find((page) => page.id === activeId);
+    const overPage = source.find((page) => page.id === overId);
+    if (!activePage || !overPage) return;
+    // Nesting never changes here. A drop across levels reverts with an
+    // explanation rather than silently reparenting the page.
+    if (activePage.parentId !== overPage.parentId) {
+      setActionError("Pages can only be reordered within the same level.");
+      return;
+    }
+    const siblings = source
+      .filter((page) => page.parentId === activePage.parentId)
+      .sort((a, b) => a.order - b.order || a.title.localeCompare(b.title));
+    const from = siblings.findIndex((page) => page.id === activeId);
+    const to = siblings.findIndex((page) => page.id === overId);
+    if (from < 0 || to < 0 || from === to) return;
+    const moved = arrayMove(siblings, from, to);
+    const orderedIds = moved.map((page) => page.id);
+    // Deal out the orders the siblings already hold, so a sibling this drag
+    // did not name keeps an order nothing else collides with.
+    const slots = siblings.map((page) => page.order).sort((a, b) => a - b);
+    const orderOf = new Map(orderedIds.map((id, index) => [id, slots[index]!]));
+    setLocalPages(source.map((page) => (orderOf.has(page.id) ? { ...page, order: orderOf.get(page.id)! } : page)));
+    setActionError("");
+    void commitOrder(activeId, orderedIds);
+  };
 
   const updateSearch = (patch: ToolbarPatch) =>
     void navigate({
@@ -466,20 +546,61 @@ export function ContentWorkspace() {
             {list.isPending ? (
               <p className="p-3 text-muted-foreground">Loading pages…</p>
             ) : rows.length ? (
-              rows.map(({ page, depth }) => (
-                <button
-                  key={page.id}
-                  type="button"
-                  className="flex min-h-10 w-full items-center gap-2 rounded-lg pr-2 text-left text-sm hover:bg-muted aria-[current=page]:bg-accent aria-[current=page]:font-medium"
-                  style={{ paddingLeft: `${Math.min(depth, 8) * 16 + 8}px` }}
-                  aria-current={selectedId === page.id ? "page" : undefined}
-                  disabled={recovering}
-                  onClick={() => void selectPage(page.id)}
+              canReorder ? (
+                <ClientOnly
+                  fallback={
+                    <PageIndexList
+                      rows={rows}
+                      selectedId={selectedId}
+                      disabled={recovering}
+                      onSelect={(id) => void selectPage(id)}
+                    />
+                  }
                 >
-                  {depth > 0 ? <ChevronRight className="size-3 shrink-0 text-muted-foreground" /> : <FileText className="size-4 shrink-0 text-muted-foreground" />}
-                  <span className="truncate">{displayPageTitle(page.title)}</span>
-                </button>
-              ))
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragStart={onIndexDragStart}
+                    onDragEnd={onIndexDragEnd}
+                    onDragCancel={() => setDraggedId(null)}
+                  >
+                    <SortableContext
+                      items={rows.map(({ page }) => page.id)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      {rows.map(({ page, depth }) => (
+                        <SortablePageRow
+                          key={page.id}
+                          page={page}
+                          depth={depth}
+                          selected={selectedId === page.id}
+                          disabled={recovering}
+                          onSelect={(id) => void selectPage(id)}
+                        />
+                      ))}
+                    </SortableContext>
+                    <DragOverlay>
+                      {draggedId ? (
+                        <div className="flex min-h-10 w-full items-center gap-2 rounded-lg bg-accent px-2 text-sm font-medium shadow-lg">
+                          <FileText className="size-4 shrink-0 text-muted-foreground" />
+                          <span className="truncate">
+                            {displayPageTitle(
+                              (localPages ?? list.data ?? []).find((page) => page.id === draggedId)?.title ?? "",
+                            )}
+                          </span>
+                        </div>
+                      ) : null}
+                    </DragOverlay>
+                  </DndContext>
+                </ClientOnly>
+              ) : (
+                <PageIndexList
+                  rows={rows}
+                  selectedId={selectedId}
+                  disabled={recovering}
+                  onSelect={(id) => void selectPage(id)}
+                />
+              )
             ) : (
               <p className="p-4 text-center text-muted-foreground">{search.q ? "No pages match your search." : "No pages yet."}</p>
             )}
@@ -664,5 +785,94 @@ export function ContentWorkspace() {
         </DialogContent>
       </Dialog>
     </section>
+  );
+}
+
+function PageIndexRow({
+  page,
+  depth,
+  selected,
+  disabled,
+  onSelect,
+}: {
+  page: ContentPage;
+  depth: number;
+  selected: boolean;
+  disabled: boolean;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="flex min-h-10 w-full items-center gap-2 rounded-lg pr-2 text-left text-sm hover:bg-muted aria-[current=page]:bg-accent aria-[current=page]:font-medium"
+      style={{ paddingLeft: `${Math.min(depth, 8) * 16 + 8}px` }}
+      aria-current={selected ? "page" : undefined}
+      disabled={disabled}
+      onClick={() => onSelect(page.id)}
+    >
+      {depth > 0 ? <ChevronRight className="size-3 shrink-0 text-muted-foreground" /> : <FileText className="size-4 shrink-0 text-muted-foreground" />}
+      <span className="truncate">{displayPageTitle(page.title)}</span>
+    </button>
+  );
+}
+
+function PageIndexList({
+  rows,
+  selectedId,
+  disabled,
+  onSelect,
+}: {
+  rows: { page: ContentPage; depth: number }[];
+  selectedId: string | undefined;
+  disabled: boolean;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <>
+      {rows.map(({ page, depth }) => (
+        <PageIndexRow
+          key={page.id}
+          page={page}
+          depth={depth}
+          selected={selectedId === page.id}
+          disabled={disabled}
+          onSelect={onSelect}
+        />
+      ))}
+    </>
+  );
+}
+
+function SortablePageRow({
+  page,
+  depth,
+  selected,
+  disabled,
+  onSelect,
+}: {
+  page: ContentPage;
+  depth: number;
+  selected: boolean;
+  disabled: boolean;
+  onSelect: (id: string) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: page.id });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Translate.toString(transform), transition }}
+      className={isDragging ? "opacity-40" : ""}
+      {...attributes}
+      {...listeners}
+    >
+      <PageIndexRow
+        page={page}
+        depth={depth}
+        selected={selected}
+        disabled={disabled}
+        onSelect={onSelect}
+      />
+    </div>
   );
 }

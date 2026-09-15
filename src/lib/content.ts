@@ -177,6 +177,16 @@ export const movePageCardSchema = z.object({
   orderedIds: z.array(idSchema).max(1_000).optional().default([]),
 });
 
+/**
+ * One drag in the page index. `orderedIds` is the dragged page's sibling
+ * group's final order, so the display sequence is rewritten from what the
+ * user actually sees. The parent never changes here: nesting is out of scope.
+ */
+export const movePageSchema = z.object({
+  id: idSchema,
+  orderedIds: z.array(idSchema).max(1_000).optional().default([]),
+});
+
 export const createPropertySchema = z.object({
   kind: propertyKindSchema,
   name: propertyNameSchema,
