@@ -164,7 +164,7 @@ function pageFromRow(row: Omit<PageListRow, "preview"> & { preview: string }): C
 const LIST_COLUMNS = `pages.id, pages.title, substr(pages.search_text, 1, 180) AS preview,
         pages.parent_id, pages.display_order, pages.created_at, pages.updated_at,
         pages.deleted_at, pages.revision, pages.status_id, pages.position,
-        (SELECT group_concat(type_id) FROM page_types WHERE page_id = pages.id) AS type_ids,
+        (SELECT group_concat(type_id ORDER BY rowid) FROM page_types WHERE page_id = pages.id) AS type_ids,
         (SELECT group_concat(tag_id) FROM page_tags WHERE page_id = pages.id) AS tag_ids`;
 
 export class ContentStore {
@@ -427,7 +427,7 @@ export class ContentStore {
     const row = this.db
       .prepare(
         `SELECT pages.*,
-          (SELECT group_concat(type_id) FROM page_types WHERE page_id = pages.id) AS type_ids,
+          (SELECT group_concat(type_id ORDER BY rowid) FROM page_types WHERE page_id = pages.id) AS type_ids,
           (SELECT group_concat(tag_id) FROM page_tags WHERE page_id = pages.id) AS tag_ids
          FROM pages WHERE id = ?`,
       )

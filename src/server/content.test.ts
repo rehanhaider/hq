@@ -676,6 +676,21 @@ describe("content properties", () => {
     expect(store.deleteProperty("type", types[0]!.id).ok).toBe(true);
     expect(store.get(page.id)?.typeIds).toEqual([types[1]!.id]);
   });
+
+  it("preserves the order types were saved in", () => {
+    store = new ContentStore(":memory:");
+    const types = [...store.properties().types].sort((a, b) =>
+      a.id.localeCompare(b.id),
+    );
+    const page = store.create("Crossover");
+    // Saved in reverse lexical order, so UUID order alone would flip it back.
+    store.setProperties({ id: page.id, typeIds: [types[1]!.id, types[0]!.id] });
+    expect(store.get(page.id)?.typeIds).toEqual([types[1]!.id, types[0]!.id]);
+    expect(store.list().find((entry) => entry.id === page.id)?.typeIds).toEqual([
+      types[1]!.id,
+      types[0]!.id,
+    ]);
+  });
 });
 
 describe("board moves", () => {
