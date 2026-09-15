@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { tweetStatusUrl } from "./tweet";
 
 export type JsonValue =
   | string
@@ -236,9 +237,12 @@ const supportedBlockTypes = new Set([
   "image",
   "video",
   "file",
+  "tweet",
 ]);
 /** Blocks that hold a file rather than text: no inline content, a url instead. */
 const fileBlockTypes = new Set(["image", "video", "file"]);
+/** A tweet embed holds only a status URL, the same way a file block holds a file. */
+const tweetBlockTypes = new Set(["tweet"]);
 const alignments = new Set(["left", "center", "right", "justify"]);
 const allowedProtocols = new Set(["http:", "https:", "mailto:", "tel:"]);
 
@@ -339,9 +343,15 @@ function validateFileProps(type: string, value: Record<string, unknown>) {
   return true;
 }
 
+function validateTweetProps(value: Record<string, unknown>) {
+  if (!hasOnlyKeys(value, ["url"])) return false;
+  return typeof value.url === "string" && tweetStatusUrl(value.url) !== null;
+}
+
 function validateProps(type: string, value: unknown) {
   if (!isObject(value)) return false;
   const base = ["backgroundColor", "textColor", "textAlignment"];
+  if (tweetBlockTypes.has(type)) return validateTweetProps(value);
   if (fileBlockTypes.has(type)) return validateFileProps(type, value);
   const keys =
     type === "heading"
@@ -454,8 +464,8 @@ export function validateContentDocument(value: unknown): value is ContentBlock[]
         !visit(item.children, depth + 1)
       )
         return false;
-      // A file block carries its file in props and has no inline content.
-      if (fileBlockTypes.has(item.type))
+      // A file or tweet block carries its target in props and has no inline content.
+      if (fileBlockTypes.has(item.type) || tweetBlockTypes.has(item.type))
         return item.content === undefined || (Array.isArray(item.content) && !item.content.length);
       if (item.type === "table") return validateTable(item.content, totals);
       if (item.type === "codeBlock") {

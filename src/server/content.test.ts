@@ -41,6 +41,27 @@ describe("content store", () => {
     expect(store.list({ q: "searchable" }).map((page) => page.id)).toEqual([created.id]);
   });
 
+  it("keeps a tweet block across saves", () => {
+    store = new ContentStore(":memory:");
+    const created = store.create("Clips");
+    const document = [
+      {
+        id: randomUUID(),
+        type: "tweet",
+        props: { url: "https://twitter.com/alice/status/1234567890123456789" },
+        children: [],
+      },
+    ];
+    const saved = store.save({
+      id: created.id,
+      title: created.title,
+      revision: created.revision,
+      document,
+    });
+    expect(saved.ok).toBe(true);
+    expect(store.get(created.id)?.document).toEqual(document);
+  });
+
   it("keeps an image's resized width across saves", () => {
     store = new ContentStore(":memory:");
     const created = store.create("Gallery");
@@ -361,6 +382,60 @@ describe("page document validation", () => {
     ];
     expect(validateContentDocument(media)).toBe(true);
     expect(validateContentDocument(JSON.parse(JSON.stringify(media)))).toBe(true);
+  });
+
+  it("accepts a tweet status block and leaves an inline tweet link as a link", () => {
+    const tweetUrl = "https://x.com/alice/status/1234567890123456789";
+    const tweet = [
+      {
+        id: randomUUID(),
+        type: "tweet",
+        props: { url: tweetUrl },
+        children: [],
+      },
+    ];
+    expect(validateContentDocument(tweet)).toBe(true);
+    expect(validateContentDocument(JSON.parse(JSON.stringify(tweet)))).toBe(true);
+    expect(
+      validateContentDocument([
+        {
+          id: randomUUID(),
+          type: "tweet",
+          props: { url: "https://example.com/status/1" },
+          children: [],
+        },
+      ]),
+    ).toBe(false);
+    expect(
+      validateContentDocument([
+        {
+          id: randomUUID(),
+          type: "tweet",
+          props: { url: tweetUrl, caption: "no" },
+          children: [],
+        },
+      ]),
+    ).toBe(false);
+    const linked = [
+      {
+        id: randomUUID(),
+        type: "paragraph",
+        props: {
+          backgroundColor: "default",
+          textColor: "default",
+          textAlignment: "left",
+        },
+        content: [
+          {
+            type: "link",
+            href: tweetUrl,
+            content: [{ type: "text", text: tweetUrl, styles: {} }],
+          },
+        ],
+        children: [],
+      },
+    ];
+    expect(validateContentDocument(linked)).toBe(true);
   });
 
   it("rejects malformed media blocks, unsafe links, and unknown fields", () => {
