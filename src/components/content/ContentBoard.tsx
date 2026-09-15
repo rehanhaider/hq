@@ -24,6 +24,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
+  DEFAULT_PAGE_TITLE,
   filterPages,
   groupPages,
   hasFilters,
@@ -231,7 +232,7 @@ export function ContentBoard() {
       // behind and report that nothing was created.
       const created = await createPage({
         data: {
-          title: "Untitled",
+          title: DEFAULT_PAGE_TITLE,
           statusId: group === "status" ? bucket.id : null,
           typeId: group === "type" ? bucket.id : null,
           tagIds: group === "tag" && bucket.id ? [bucket.id] : [],

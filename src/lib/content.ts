@@ -76,7 +76,36 @@ export type StoredUpload = {
 };
 
 const idSchema = z.string().uuid();
+
+/** Stored when the title field is empty. The editor treats it as a placeholder. */
+export const DEFAULT_PAGE_TITLE = "Untitled";
+
 export const pageTitleSchema = z.string().trim().min(1).max(200);
+
+/** What to persist: a blank editor title is stored as the default label. */
+export function persistedPageTitle(title: string) {
+  return title.trim() || DEFAULT_PAGE_TITLE;
+}
+
+/**
+ * What the title input shows. The stored default is placeholder copy, not typed
+ * text, so a new page starts empty and a cleared field stays empty.
+ */
+export function editorPageTitle(title: string) {
+  return title === DEFAULT_PAGE_TITLE ? "" : title;
+}
+
+/**
+ * After a save, keep a cleared editor title empty even if the default was what
+ * we persisted. A user who typed the default as a real title still sees it,
+ * because their draft is not empty.
+ */
+export function titleAfterSave(draftTitle: string, savedTitle: string) {
+  if (!draftTitle.trim() && persistedPageTitle(draftTitle) === savedTitle)
+    return draftTitle;
+  return savedTitle;
+}
+
 export const propertyNameSchema = z.string().trim().min(1).max(60);
 export const propertyKindSchema = z.enum(PROPERTY_KINDS);
 export const propertyColorSchema = z.enum(PROPERTY_COLORS);
@@ -112,7 +141,7 @@ export const listPagesSchema = z.object({
 });
 
 export const createPageSchema = z.object({
-  title: pageTitleSchema.optional().default("Untitled"),
+  title: pageTitleSchema.optional().default(DEFAULT_PAGE_TITLE),
   parentId: idSchema.nullable().optional().default(null),
   statusId: idSchema.nullable().optional().default(null),
   typeId: idSchema.nullable().optional().default(null),
