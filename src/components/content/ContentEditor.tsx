@@ -198,6 +198,7 @@ export function ContentEditor({
     defaultStyles: true,
     // A clipboard that is only a tweet URL becomes a tweet block. Mixed
     // content and code blocks fall through so ordinary paste is unchanged.
+    // A non-empty selection is deleted first, matching ordinary paste.
     pasteHandler: ({ event, editor: current, defaultPasteHandler }) => {
       let cursor: { type: string; empty: boolean } | null = null;
       try {
@@ -219,9 +220,19 @@ export function ContentEditor({
       );
       if (plan.kind === "ignore") return defaultPasteHandler();
       try {
+        current.transact((tr) => {
+          if (!tr.selection.empty) tr.deleteSelection();
+        });
         const { block } = current.getTextCursorPosition();
+        const after = planTweetPaste(plan.url, {
+          type: block.type,
+          empty:
+            block.type === "paragraph" &&
+            isEmptyParagraphContent(block.content),
+        });
         const tweet = { type: "tweet" as const, props: { url: plan.url } };
-        if (plan.kind === "replace") current.replaceBlocks([block], [tweet]);
+        if (after.kind === "ignore") return defaultPasteHandler();
+        if (after.kind === "replace") current.replaceBlocks([block], [tweet]);
         else current.insertBlocks([tweet], block, "after");
         return true;
       } catch {

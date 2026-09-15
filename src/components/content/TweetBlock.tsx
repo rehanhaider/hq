@@ -124,7 +124,7 @@ function TweetEmbed({ url }: { url: string }) {
       })
       .then((widget) => {
         if (cancelled) {
-          element.replaceChildren();
+          widget?.remove();
           return;
         }
         setStatus(widget ? "ready" : "failed");
@@ -135,7 +135,6 @@ function TweetEmbed({ url }: { url: string }) {
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
-      element.replaceChildren();
     };
   }, [id, theme]);
 
