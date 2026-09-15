@@ -281,48 +281,50 @@
     @apply min-h-[28rem] rounded-none bg-card py-5 text-card-foreground;
     font-family: var(--font-sans);
   }
-  /* Image and video resize handles. BlockNote only shows its 8x30px handle
-     while hovering with a fine pointer, so on touch — and for anyone who
-     never hovers — resize looks missing. Keep the drag behaviour, but make
-     the target bigger, theme-aware, and visible while hovering, focusing,
-     or when the block itself is selected. */
-  .content-editor-shell [data-file-block] .bn-resize-handle {
-    width: 12px;
-    height: 48px;
-    top: 50%;
-    transform: translateY(-50%);
-    z-index: 10;
-    background-color: var(--primary);
-    border: 1px solid var(--card);
-    box-shadow: var(--shadow-overlay);
-    touch-action: none;
-  }
-  .content-editor-shell [data-file-block] .bn-resize-handle::after {
-    content: "";
-    position: absolute;
-    inset: -12px -16px;
-  }
-  .content-editor-shell [data-file-block] .bn-visual-media-wrapper:hover .bn-resize-handle,
-  .content-editor-shell [data-file-block] .bn-visual-media-wrapper:focus-within .bn-resize-handle,
-  .content-editor-shell [data-file-block].ProseMirror-selectednode .bn-resize-handle,
-  .content-editor-shell [data-file-block] .ProseMirror-selectednode .bn-resize-handle {
-    display: block !important;
-  }
-  @media (pointer: coarse) {
-    .content-editor-shell [data-file-block] .bn-resize-handle {
-      width: 14px;
-      height: 56px;
-    }
-    .content-editor-shell [data-file-block] .bn-resize-handle::after {
-      inset: -16px -20px;
-    }
-  }
 }
 
 @media (max-width: 640px) {
   .content-editor-shell .bn-editor,
   .content-page-body {
     padding-inline: 2.25rem 1rem;
+  }
+}
+
+/* Image and video resize handles. BlockNote ships its 8x30px hover-only
+   handle unlayered, which beats anything inside `@layer components`
+   regardless of specificity — so these overrides stay unlayered, like the
+   `.bn-editor` override above. They keep the drag behaviour, but make the
+   target bigger, theme-aware, and visible while hovering, focusing, or
+   when the block itself is selected. */
+.content-editor-shell [data-file-block] .bn-resize-handle {
+  width: 12px;
+  height: 48px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+  background-color: var(--primary);
+  border: 1px solid var(--card);
+  box-shadow: var(--shadow-overlay);
+  touch-action: none;
+}
+.content-editor-shell [data-file-block] .bn-resize-handle::after {
+  content: "";
+  position: absolute;
+  inset: -12px -16px;
+}
+.content-editor-shell [data-file-block] .bn-visual-media-wrapper:hover .bn-resize-handle,
+.content-editor-shell [data-file-block] .bn-visual-media-wrapper:focus-within .bn-resize-handle,
+.content-editor-shell [data-file-block].ProseMirror-selectednode .bn-resize-handle,
+.content-editor-shell [data-file-block] .ProseMirror-selectednode .bn-resize-handle {
+  display: block !important;
+}
+@media (pointer: coarse) {
+  .content-editor-shell [data-file-block] .bn-resize-handle {
+    width: 14px;
+    height: 56px;
+  }
+  .content-editor-shell [data-file-block] .bn-resize-handle::after {
+    inset: -16px -20px;
   }
 }
 
