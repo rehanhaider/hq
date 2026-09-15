@@ -21,16 +21,38 @@ export class ActivityStore {
     );
     const status = this.read<ImportStatus>("status");
     if (status?.state === "running") {
-      this.setStatus({
-        ...status,
-        state: "error",
-        message:
-          "The app stopped during import. Completed repositories are saved. Run the import again to finish.",
-        finishedAt: new Date().toISOString(),
-      });
+      const refresh = status.mode === "refresh";
+      // A background refresh cut off by a restart lost nothing: each
+      // repository is saved as it finishes and the next run re-reads the
+      // same 48-hour window. Leaving finishedAt empty lets that run start
+      // on the next tick instead of after the usual quarter-hour wait, and
+      // there is no error to show. A manual import is the user's own run,
+      // so its interruption is still reported.
+      this.setStatus(
+        refresh
+          ? {
+              ...status,
+              state: "idle",
+              message: "Refresh interrupted by a restart. It resumes shortly.",
+              finishedAt: null,
+            }
+          : {
+              ...status,
+              state: "error",
+              message:
+                "The app stopped during import. Completed repositories are saved. Run the import again to finish.",
+              finishedAt: new Date().toISOString(),
+            },
+      );
       const sync = this.sync();
       for (const row of Object.values(sync)) {
-        if (row.state === "syncing")
+        if (row.state !== "syncing") continue;
+        if (refresh)
+          this.setSync(row.fullName, {
+            state: row.lastSuccessAt ? "ok" : "idle",
+            error: null,
+          });
+        else
           this.setSync(row.fullName, {
             state: "error",
             error: "The app stopped while fetching this repository.",

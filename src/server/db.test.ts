@@ -1,9 +1,30 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { ActivityStore } from "./db";
-import type { Snapshot } from "../lib/model";
+import type { ImportStatus, Snapshot } from "../lib/model";
 
 let store: ActivityStore;
-afterEach(() => store?.close());
+let dir: string | null = null;
+afterEach(() => {
+  store?.close();
+  if (dir) rmSync(dir, { recursive: true, force: true });
+  dir = null;
+});
+/** A store that can be closed and reopened, as a restart would. */
+function onDisk() {
+  dir = mkdtempSync(join(tmpdir(), "hq-db-"));
+  return join(dir, "activity.sqlite");
+}
+const running: ImportStatus = {
+  state: "running",
+  message: "Reading me/app…",
+  completed: 3,
+  total: 9,
+  startedAt: "2026-09-15T10:09:53.923Z",
+  finishedAt: null,
+};
 const snapshot: Snapshot = {
   repo: {
     id: 1,
@@ -66,5 +87,50 @@ describe("SQLite storage", () => {
     expect(store.snapshot("me/app")).toBeNull();
     expect(store.sync()["me/app"]).toBeUndefined();
     expect(store.snapshot("me/other")).toBeTruthy();
+  });
+  it("reports a manual import cut off by a restart as an error", () => {
+    const path = onDisk();
+    store = new ActivityStore(path);
+    store.setStatus({ ...running, mode: "manual" });
+    store.setSync("me/app", { state: "syncing", lastSuccessAt: null });
+    store.close();
+    store = new ActivityStore(path);
+    expect(store.dataset().status).toMatchObject({
+      state: "error",
+      message: expect.stringContaining("stopped during import"),
+      finishedAt: expect.any(String),
+    });
+    expect(store.sync()["me/app"]).toMatchObject({
+      state: "error",
+      error: "The app stopped while fetching this repository.",
+    });
+  });
+  it("lets a background refresh cut off by a restart resume quietly", () => {
+    const path = onDisk();
+    store = new ActivityStore(path);
+    store.setStatus({ ...running, mode: "refresh" });
+    store.setSync("me/app", {
+      state: "syncing",
+      lastSuccessAt: snapshot.importedAt,
+    });
+    store.setSync("me/new", { state: "syncing", lastSuccessAt: null });
+    store.close();
+    store = new ActivityStore(path);
+    // Idle hides the banner; a null finishedAt lets the next tick re-run.
+    expect(store.dataset().status).toMatchObject({
+      state: "idle",
+      mode: "refresh",
+      finishedAt: null,
+    });
+    expect(store.sync()["me/app"]).toMatchObject({ state: "ok", error: null });
+    expect(store.sync()["me/new"]).toMatchObject({ state: "idle", error: null });
+  });
+  it("treats a running row from before modes were recorded as a manual import", () => {
+    const path = onDisk();
+    store = new ActivityStore(path);
+    store.setStatus(running);
+    store.close();
+    store = new ActivityStore(path);
+    expect(store.dataset().status.state).toBe("error");
   });
 });

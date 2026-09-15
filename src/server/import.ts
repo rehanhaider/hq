@@ -286,6 +286,7 @@ export async function startImport(
     const since = `${input.since}T00:00:00.000Z`;
     const status: ImportStatus = {
       state: "running",
+      mode,
       message: mode === "refresh" ? "Refreshing activity…" : "Starting import…",
       completed: 0,
       total: names.length,
