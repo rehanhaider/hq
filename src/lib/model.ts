@@ -107,6 +107,8 @@ export type Snapshot = {
 };
 export type ImportStatus = {
   state: "idle" | "running" | "complete" | "error";
+  /** Absent on rows written before background refreshes recorded it. */
+  mode?: "manual" | "refresh";
   message: string;
   completed: number;
   total: number;
