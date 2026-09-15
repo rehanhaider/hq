@@ -17,9 +17,6 @@ export const searchSchema = z.object({
   from: daySchema.catch(() => monthsBefore(daysAgo(0), 3)),
   to: daySchema.catch(() => daysAgo(0)),
   repo: z.union([z.string(), z.array(z.string())]).catch("all"),
-  view: z
-    .enum(["overview", "statistics", "projects", "connections", "work"])
-    .catch("overview"),
   kind: z.enum(["all", "commit", "pr"]).catch("all"),
   metric: z.enum(["commits", "prs", "lines"]).catch("commits"),
   languages: z.enum(["pie", "table"]).catch("pie"),
@@ -32,7 +29,6 @@ export function defaultFilters(): Filters {
     from: monthsBefore(daysAgo(0), 3),
     to: daysAgo(0),
     repo: "all",
-    view: "overview",
     kind: "all",
     metric: "commits",
     languages: "pie",

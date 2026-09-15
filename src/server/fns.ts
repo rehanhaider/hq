@@ -81,7 +81,6 @@ export const getHome = createServerFn({ method: "GET" }).handler(() => {
     from,
     to,
     repo: "all",
-    view: "overview",
     kind: "all",
     metric: "commits",
     languages: "pie",

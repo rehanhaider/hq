@@ -1,45 +1,29 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { searchSchema } from "@/lib/model";
-import {
-  connectionsQuery,
-  dashboardQuery,
-  openWorkQuery,
-} from "@/queries/dashboard";
-import { Dashboard } from "@/components/Dashboard";
+import { GithubLayout } from "@/components/GithubLayout";
 
+/**
+ * The GitHub module. The date range and repository filter live here as
+ * search parameters so they carry across Overview and Statistics; each view
+ * is a child route and loads only what it shows.
+ */
 export const Route = createFileRoute("/github")({
   validateSearch: searchSchema,
   staticData: {
-    crumbs: (search) => [
-      { label: "GitHub", search: { ...search, view: "overview" } },
-    ],
-    views: ({ search }) => {
-      const current = search.view as string | undefined;
+    crumbs: "GitHub",
+    views: ({ search, pathname }) => {
+      const path = pathname.replace(/\/$/, "");
       return [
-        { label: "Overview", view: "overview" },
-        { label: "Statistics", view: "statistics" },
-        { label: "Work", view: "work" },
-        { label: "Repositories", view: "projects" },
-      ].map(({ label, view }) => ({
-        label,
-        to: "/github",
-        search: { ...search, view, page: 1 },
-        active:
-          current === view ||
-          (view === "projects" && current === "connections"),
+        { label: "Overview", to: "/github" },
+        { label: "Statistics", to: "/github/statistics" },
+        { label: "Work", to: "/github/work" },
+        { label: "Repositories", to: "/github/repositories" },
+      ].map((view) => ({
+        ...view,
+        search: { ...search, page: 1 },
+        active: path === view.to,
       }));
     },
   },
-  loaderDeps: ({ search }) => search,
-  loader: ({ context, deps }) => {
-    if (deps.view === "connections" || deps.view === "projects")
-      return context.queryClient.ensureQueryData(connectionsQuery);
-    // Open work is a live GitHub sweep that can take tens of seconds when
-    // the server has no copy yet. Start it, but never hold the page on it:
-    // Work and Overview render their own placeholders while it arrives.
-    void context.queryClient.prefetchQuery(openWorkQuery);
-    if (deps.view === "work") return;
-    return context.queryClient.ensureQueryData(dashboardQuery(deps));
-  },
-  component: Dashboard,
+  component: GithubLayout,
 });

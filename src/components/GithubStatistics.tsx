@@ -1,23 +1,12 @@
-import { useEffect } from "react";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import {
-  ArrowUpRight,
-  Check,
-  CircleAlert,
-  FolderGit2,
-  RefreshCw,
-} from "lucide-react";
-import { Route } from "@/routes/github";
+import { ArrowUpRight, FolderGit2 } from "lucide-react";
+import { Route } from "@/routes/github/statistics";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
 import { LanguageMetrics } from "./LanguageMetrics";
 import { ActivityFilters } from "./ActivityFilters";
 import { ActivityChart } from "./ActivityChart";
-import { Connections } from "./Connections";
-import { OpenWork } from "./OpenWork";
-import { GithubOverview } from "./GithubOverview";
-import { dashboardQuery, statusQuery } from "@/queries/dashboard";
+import { dashboardQuery } from "@/queries/dashboard";
 import { categories } from "@/lib/model";
 import { utcDay, utcStamp } from "@/lib/activity";
 import { cn } from "@/lib/utils";
@@ -26,143 +15,84 @@ import type { getDashboard } from "@/server/fns";
 
 type Data = Awaited<ReturnType<typeof getDashboard>>;
 const number = (n: number) => n.toLocaleString("en-US");
-export function Dashboard() {
+export function GithubStatistics() {
   const filters = Route.useSearch();
-  const navigate = Route.useNavigate();
-  const dashboard = useQuery({
-    ...dashboardQuery(filters),
-    enabled:
-      filters.view !== "connections" &&
-      filters.view !== "projects" &&
-      filters.view !== "work",
-  });
-  const status = useQuery(statusQuery);
+  const navigate = useNavigate({ from: Route.fullPath });
+  const dashboard = useQuery(dashboardQuery(filters));
   const data = dashboard.data;
-  useEffect(() => {
-    if (filters.view !== "connections") return;
-    void navigate({
-      search: (previous) => ({ ...previous, view: "projects" }),
-      replace: true,
-    });
-  }, [filters.view, navigate]);
   const setFilters = (patch: Partial<Filters>) => {
     void navigate({
       search: (previous) => ({ ...previous, page: 1, ...patch }),
       resetScroll: false,
     });
   };
-  const importing = status.data?.state === "running";
   const hasData = Boolean(data?.repositories.length);
   return (
-    <div className="space-y-5">
-      {status.data &&
-        status.data.state !== "idle" &&
-        status.data.state !== "complete" && (
-          <div
-            className={`flex flex-wrap items-center gap-3 rounded-lg border px-4 py-3 text-xs ${status.data.state === "error" ? "border-negative/30 bg-negative/5" : "bg-card"}`}
-            role={status.data.state === "error" ? "alert" : "status"}
+    <>
+      <ActivityFilters
+        filters={filters}
+        repositories={data?.repositories ?? []}
+        onChange={setFilters}
+      />
+      {filters.from > filters.to ? (
+        <p role="alert" className="text-negative">
+          The start date must be before the end date.
+        </p>
+      ) : dashboard.isPending ? (
+        <div
+          className="grid grid-cols-2 gap-4 lg:grid-cols-4"
+          aria-label="Loading activity"
+        >
+          {[0, 1, 2, 3].map((n) => (
+            <div key={n} className="h-32 animate-pulse rounded-xl bg-muted" />
+          ))}
+        </div>
+      ) : dashboard.error ? (
+        <div className="card p-5">
+          <p role="alert">{dashboard.error.message}</p>
+          <Button
+            className="mt-3"
+            variant="outline"
+            onClick={() => void dashboard.refetch()}
           >
-            {importing ? (
-              <RefreshCw className="size-3.5 shrink-0 animate-spin text-primary" />
-            ) : status.data.state === "error" ? (
-              <CircleAlert className="size-4 shrink-0 text-negative" />
+            Reload data
+          </Button>
+        </div>
+      ) : (
+        data && (
+          <>
+            {!hasData ? (
+              <div className="section flex min-h-64 flex-col items-center justify-center px-5 py-12 text-center">
+                <span className="mb-4 flex size-12 items-center justify-center rounded-xl border bg-muted">
+                  <FolderGit2 className="size-5 text-muted-foreground" />
+                </span>
+                <h2 className="font-semibold">Your activity starts here</h2>
+                <p className="mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">
+                  Connect repositories once. New commits land on their own
+                  after that.
+                </p>
+                <Link
+                  to="/github/repositories"
+                  search={filters}
+                  className={cn(buttonVariants({ size: "lg" }), "mt-5")}
+                >
+                  Open repositories
+                </Link>
+              </div>
             ) : (
-              <Check className="size-4 shrink-0 text-positive" />
-            )}
-            <span className="min-w-0 flex-1 break-words">
-              {status.data.message}
-            </span>
-            <span className="font-mono text-muted-foreground">
-              {status.data.completed}/{status.data.total}
-            </span>
-            {importing && (
-              <Progress
-                aria-label="Repositories imported"
-                value={
-                  status.data.total
-                    ? (status.data.completed / status.data.total) * 100
-                    : 0
+              <Statistics
+                data={data}
+                filters={filters}
+                setFilters={setFilters}
+                onAllProjects={() =>
+                  void navigate({ to: "/github/repositories", search: filters })
                 }
-                className="w-24"
               />
             )}
-          </div>
-        )}
-
-      {filters.view === "connections" || filters.view === "projects" ? (
-        <Connections importing={importing} />
-      ) : filters.view === "work" ? (
-        <OpenWork />
-      ) : filters.view === "overview" ? (
-        <GithubOverview filters={filters} />
-      ) : (
-        <>
-          <ActivityFilters
-            filters={filters}
-            repositories={data?.repositories ?? []}
-            onChange={setFilters}
-          />
-          {filters.from > filters.to ? (
-            <p role="alert" className="text-negative">
-              The start date must be before the end date.
-            </p>
-          ) : dashboard.isPending ? (
-            <div
-              className="grid grid-cols-2 gap-4 lg:grid-cols-4"
-              aria-label="Loading activity"
-            >
-              {[0, 1, 2, 3].map((n) => (
-                <div
-                  key={n}
-                  className="h-32 animate-pulse rounded-xl bg-muted"
-                />
-              ))}
-            </div>
-          ) : dashboard.error ? (
-            <div className="card p-5">
-              <p role="alert">{dashboard.error.message}</p>
-              <Button
-                className="mt-3"
-                variant="outline"
-                onClick={() => void dashboard.refetch()}
-              >
-                Reload data
-              </Button>
-            </div>
-          ) : (
-            data && (
-              <>
-                {!hasData ? (
-                  <div className="section flex min-h-64 flex-col items-center justify-center px-5 py-12 text-center">
-                    <span className="mb-4 flex size-12 items-center justify-center rounded-xl border bg-muted">
-                      <FolderGit2 className="size-5 text-muted-foreground" />
-                    </span>
-                    <h2 className="font-semibold">Your activity starts here</h2>
-                    <p className="mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">
-                      Connect repositories once. New commits land on their own
-                      after that.
-                    </p>
-                    <Link
-                      to="/github"
-                      search={{ ...filters, view: "projects" }}
-                      className={cn(buttonVariants({ size: "lg" }), "mt-5")}
-                    >
-                      Open repositories
-                    </Link>
-                  </div>
-                ) : (
-                  <Statistics
-                    data={data}
-                    filters={filters}
-                    setFilters={setFilters}
-                  />
-                )}
-              </>
-            )
-          )}
-        </>
+          </>
+        )
       )}
-    </div>
+    </>
   );
 }
 
@@ -192,10 +122,12 @@ function Statistics({
   data,
   filters,
   setFilters,
+  onAllProjects,
 }: {
   data: Data;
   filters: Filters;
   setFilters: (patch: Partial<Filters>) => void;
+  onAllProjects: () => void;
 }) {
   const changes = data.total.additions + data.total.deletions;
   return (
@@ -274,7 +206,7 @@ function Statistics({
           data={data}
           limit={5}
           onSelect={(repo) => setFilters({ repo })}
-          onAll={() => setFilters({ view: "projects" })}
+          onAll={onAllProjects}
         />
         <section className="flex min-w-0 flex-col">
           <h2 className="section-title">Delivery</h2>
