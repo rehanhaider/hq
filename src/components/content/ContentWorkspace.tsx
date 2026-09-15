@@ -331,13 +331,16 @@ export function ContentWorkspace() {
   // Dragging a filtered or searched list would persist an order the user never
   // saw whole, so the index is only sortable when the full tree is on screen
   // and some sibling group actually has more than one page.
-  const canReorder = useMemo(() => {
-    if (searching || list.isPending) return false;
+  const siblingCounts = useMemo(() => {
     const counts = new Map<string | null, number>();
     for (const page of localPages ?? list.data ?? [])
       counts.set(page.parentId, (counts.get(page.parentId) ?? 0) + 1);
-    return [...counts.values()].some((count) => count > 1);
-  }, [list.data, localPages, searching]);
+    return counts;
+  }, [list.data, localPages]);
+  const canReorder =
+    !searching &&
+    !list.isPending &&
+    [...siblingCounts.values()].some((count) => count > 1);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -389,35 +392,33 @@ export function ContentWorkspace() {
     const activePage = source.find((page) => page.id === activeId);
     const overPage = source.find((page) => page.id === overId);
     if (!activePage || !overPage) return;
-    const overIndex = rows.findIndex((row) => row.page.id === overId);
-    if (overIndex < 0) return;
     // Nesting never changes here.
     const siblings = source
       .filter((page) => page.parentId === activePage.parentId)
       .sort((a, b) => a.order - b.order || a.title.localeCompare(b.title));
     const from = siblings.findIndex((page) => page.id === activeId);
     if (from < 0) return;
-    let moved: ContentPage[];
+    let to: number;
     if (overPage.parentId === activePage.parentId) {
       // Same level: the drop takes the hovered sibling's slot, downward moves
       // landing past it, exactly as the drag preview shows.
-      const to = siblings.findIndex((page) => page.id === overId);
-      if (to < 0 || from === to) return;
-      moved = arrayMove(siblings, from, to);
+      to = siblings.findIndex((page) => page.id === overId);
     } else {
-      // The tree flattens depth-first, so a drop over a nested row still lands
-      // at a position among the dragged page's own siblings: the siblings
-      // above the drop point in the visible list.
-      const rest = siblings.filter((page) => page.id !== activeId);
-      const at = rows
-        .slice(0, overIndex)
-        .filter(
-          (row) => row.page.parentId === activePage.parentId && row.page.id !== activeId,
-        ).length;
-      moved = [...rest];
-      moved.splice(Math.min(at, moved.length), 0, activePage);
-      if (moved.every((page, index) => page.id === siblings[index]?.id)) return;
+      // A drop over a nested row targets its nearest ancestor among the
+      // dragged page's siblings: dropping onto A's child means A. A drop with
+      // no such ancestor, or onto the dragged page itself, is a no-op rather
+      // than a reorder to a position the preview never showed.
+      let target: ContentPage | undefined = overPage;
+      const visited = new Set<string>();
+      while (target && target.parentId !== activePage.parentId && !visited.has(target.id)) {
+        visited.add(target.id);
+        target = source.find((page) => page.id === target!.parentId);
+      }
+      if (!target || target.id === activeId) return;
+      to = siblings.findIndex((page) => page.id === target!.id);
     }
+    if (to < 0 || from === to) return;
+    const moved = arrayMove(siblings, from, to);
     const orderedIds = moved.map((page) => page.id);
     // Deal out the orders the siblings already hold, so a sibling this drag
     // did not name keeps an order nothing else collides with.
@@ -506,6 +507,9 @@ export function ContentWorkspace() {
       const created = await createPage({ data: { title: "", parentId } });
       queryClient.setQueryData(contentKeys.detail(created.id), created);
       await invalidateContent(queryClient);
+      // A move in flight shadows the list with its optimistic order; drop the
+      // overlay so the created page is not hidden until that move lands.
+      setLocalPages(null);
       loadedId.current = null;
       setActionError("");
       await navigate({
@@ -544,6 +548,7 @@ export function ContentWorkspace() {
       setSaveState("saved");
       queryClient.setQueryData(contentKeys.detail(recovered.id), recovered);
       await invalidateContent(queryClient);
+      setLocalPages(null);
       if (openCopy)
         await navigate({
           to: "/content",
@@ -620,6 +625,7 @@ export function ContentWorkspace() {
                           depth={depth}
                           selected={selectedId === page.id}
                           disabled={recovering}
+                          sortable={(siblingCounts.get(page.parentId) ?? 0) > 1}
                           onSelect={(id) => void selectPage(id)}
                         />
                       ))}
@@ -893,16 +899,19 @@ function SortablePageRow({
   depth,
   selected,
   disabled,
+  sortable,
   onSelect,
 }: {
   page: ContentPage;
   depth: number;
   selected: boolean;
   disabled: boolean;
+  /** False when the page has no sibling to swap with: the row stays a button. */
+  sortable: boolean;
   onSelect: (id: string) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: page.id, disabled });
+    useSortable({ id: page.id, disabled: disabled || !sortable });
   return (
     <div
       ref={setNodeRef}
