@@ -168,6 +168,21 @@ describe("content store", () => {
     expect(first.document[0]?.id).not.toBe(second.document[0]?.id);
   });
 
+  it("creates a page with an empty title and keeps it empty after save", () => {
+    store = new ContentStore(":memory:");
+    const created = store.create();
+    expect(created.title).toBe("");
+    const saved = store.save({
+      id: created.id,
+      title: "",
+      revision: created.revision,
+      document: created.document,
+    });
+    expect(saved.ok).toBe(true);
+    if (saved.ok) expect(saved.page.title).toBe("");
+    expect(store.get(created.id)?.title).toBe("");
+  });
+
   it("creates a populated recovery page in one insert", () => {
     store = new ContentStore(":memory:");
     const document = paragraph("Unsaved recovery text");

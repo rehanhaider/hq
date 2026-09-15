@@ -22,6 +22,7 @@ import {
   type Crumb,
   type ViewOption,
 } from "@/lib/breadcrumbs";
+import { displayPageTitle } from "@/lib/content";
 import { pagesQuery } from "@/queries/content";
 
 /** The crumbs and sibling views for the current location. */
@@ -39,7 +40,7 @@ function useTrail() {
   if (pageId)
     crumbs.push(
       ...pagePath(pages.data ?? [], pageId).map((page) => ({
-        label: page.title,
+        label: displayPageTitle(page.title),
         to: "/content",
         search: { ...search, page: page.id },
       })),
