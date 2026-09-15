@@ -241,7 +241,6 @@ const supportedBlockTypes = new Set([
 ]);
 /** Blocks that hold a file rather than text: no inline content, a url instead. */
 const fileBlockTypes = new Set(["image", "video", "file"]);
-/** A tweet embed holds only a status URL, the same way a file block holds a file. */
 const tweetBlockTypes = new Set(["tweet"]);
 const alignments = new Set(["left", "center", "right", "justify"]);
 const allowedProtocols = new Set(["http:", "https:", "mailto:", "tel:"]);
@@ -344,8 +343,14 @@ function validateFileProps(type: string, value: Record<string, unknown>) {
 }
 
 function validateTweetProps(value: Record<string, unknown>) {
-  if (!hasOnlyKeys(value, ["url"])) return false;
-  return typeof value.url === "string" && tweetStatusUrl(value.url) !== null;
+  if (!hasOnlyKeys(value, ["url", "textAlignment"])) return false;
+  if (typeof value.url !== "string" || tweetStatusUrl(value.url) === null) return false;
+  if (
+    "textAlignment" in value &&
+    (typeof value.textAlignment !== "string" || !alignments.has(value.textAlignment))
+  )
+    return false;
+  return true;
 }
 
 function validateProps(type: string, value: unknown) {

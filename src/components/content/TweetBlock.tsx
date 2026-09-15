@@ -116,7 +116,6 @@ function TweetEmbed({ url }: { url: string }) {
       .then((twttr) => {
         if (cancelled || !host.current) return undefined;
         return twttr.widgets.createTweet(id, host.current, {
-          align: "center",
           conversation: "none",
           dnt: true,
           theme,
@@ -170,6 +169,10 @@ export const tweetBlock = createReactBlockSpec(
     type: "tweet",
     propSchema: {
       url: { default: "" },
+      textAlignment: {
+        default: "left" as const,
+        values: ["left", "center", "right", "justify"] as const,
+      },
     },
     content: "none",
   },

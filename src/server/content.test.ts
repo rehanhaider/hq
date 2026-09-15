@@ -401,6 +401,36 @@ describe("page document validation", () => {
         {
           id: randomUUID(),
           type: "tweet",
+          props: { url: tweetUrl, textAlignment: "center" },
+          children: [],
+        },
+      ]),
+    ).toBe(true);
+    expect(
+      validateContentDocument([
+        {
+          id: randomUUID(),
+          type: "tweet",
+          props: { url: tweetUrl, textAlignment: "left" },
+          children: [],
+        },
+      ]),
+    ).toBe(true);
+    expect(
+      validateContentDocument([
+        {
+          id: randomUUID(),
+          type: "tweet",
+          props: { url: tweetUrl, textAlignment: "wide" },
+          children: [],
+        },
+      ]),
+    ).toBe(false);
+    expect(
+      validateContentDocument([
+        {
+          id: randomUUID(),
+          type: "tweet",
           props: { url: "https://example.com/status/1" },
           children: [],
         },
