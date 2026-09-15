@@ -36,22 +36,6 @@ export function defaultFilters(): Filters {
     page: 1,
   };
 }
-/**
- * The GitHub views used to be a `view` search parameter on one route. Old
- * links and bookmarks still carry it, so the layout route accepts it and
- * redirects to the path that replaced it.
- */
-export const legacyGithubView = z
-  .enum(["overview", "statistics", "projects", "connections", "work"])
-  .optional()
-  .catch(undefined);
-export const legacyGithubPaths = {
-  overview: "/github",
-  statistics: "/github/statistics",
-  work: "/github/work",
-  projects: "/github/repositories",
-  connections: "/github/repositories",
-} as const;
 export const importSchema = z
   .object({
     repositories: z

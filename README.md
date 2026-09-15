@@ -13,7 +13,7 @@ TanStack Query owns fetched data and mutations. TanStack Router owns shareable f
 - Home is the daily briefing, with practice progress, a link to continue logging, and a smaller weekly coding summary.
 - Nasr contains Today, Progress, and Settings. Progress separates Salah from adhkar and other practices. Notes and daily note entry are removed. Charity logging is not part of the app and old charity records are not imported or exported.
 - Content contains Pages, Board, Trash, and Settings. It is the production pipeline for streams, YouTube videos, blog posts, and architecture articles. Pages has a searchable nested page list beside a formatted editor on larger screens; on phones, the list and editor open one at a time. Every page — nested subpages included — is a content item with a status, an optional type, and any number of tags, and every page that is not in the trash appears on the Board. Content is separate from old Nasr daily-note data.
-- GitHub contains Overview (`/github`), Statistics (`/github/statistics`), Work (`/github/work`), and Repositories (`/github/repositories`). Repositories manages imports and stored coverage. The date range and repository filter are search parameters shared by Overview and Statistics. Older `/github?view=…` links, including `view=projects` and `view=connections`, redirect to the matching path.
+- GitHub contains Overview (`/github`), Statistics (`/github/statistics`), Work (`/github/work`), and Repositories (`/github/repositories`). Repositories manages imports and stored coverage. The date range and repository filter are search parameters shared by Overview and Statistics.
 
 ## TanStack library review
 

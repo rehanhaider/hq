@@ -1,5 +1,5 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
-import { legacyGithubPaths, legacyGithubView, searchSchema } from "@/lib/model";
+import { createFileRoute } from "@tanstack/react-router";
+import { searchSchema } from "@/lib/model";
 import { GithubLayout } from "@/components/GithubLayout";
 
 /**
@@ -8,17 +8,11 @@ import { GithubLayout } from "@/components/GithubLayout";
  * is a child route and loads only what it shows.
  */
 export const Route = createFileRoute("/github")({
-  validateSearch: searchSchema.extend({ view: legacyGithubView }),
-  beforeLoad: ({ search }) => {
-    if (!search.view) return;
-    const { view, ...rest } = search;
-    throw redirect({ to: legacyGithubPaths[view], search: rest, replace: true });
-  },
+  validateSearch: searchSchema,
   staticData: {
     crumbs: "GitHub",
     views: ({ search, pathname }) => {
       const path = pathname.replace(/\/$/, "");
-      const { view: _legacy, ...rest } = search;
       return [
         { label: "Overview", to: "/github" },
         { label: "Statistics", to: "/github/statistics" },
@@ -26,7 +20,7 @@ export const Route = createFileRoute("/github")({
         { label: "Repositories", to: "/github/repositories" },
       ].map((view) => ({
         ...view,
-        search: { ...rest, page: 1 },
+        search: { ...search, page: 1 },
         active: path === view.to,
       }));
     },
