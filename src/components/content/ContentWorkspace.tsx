@@ -20,8 +20,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  DEFAULT_PAGE_TITLE,
+  editorPageTitle,
   filterPages,
   hasFilters,
+  persistedPageTitle,
+  titleAfterSave,
   type ContentBlock,
   type ContentPage,
   type ContentProperties,
@@ -147,8 +151,9 @@ export function ContentWorkspace() {
       )
         return false;
       loadedId.current = next.id;
-      draftRef.current = next;
-      setDraft(next);
+      const draftPage = { ...next, title: editorPageTitle(next.title) };
+      draftRef.current = draftPage;
+      setDraft(draftPage);
       if (samePage) setEditorGeneration((generation) => generation + 1);
       changed.current = 0;
       saved.current = 0;
@@ -190,7 +195,7 @@ export function ContentWorkspace() {
           const result = await savePage({
             data: {
               id: snapshot.id,
-              title: snapshot.title.trim() || "Untitled",
+              title: persistedPageTitle(snapshot.title),
               revision: snapshot.revision,
               document: snapshot.document,
             },
@@ -210,9 +215,13 @@ export function ContentWorkspace() {
             return false;
           }
           if (draftRef.current?.id === snapshot.id) {
+            const title =
+              sequence === changed.current
+                ? titleAfterSave(draftRef.current.title, result.page.title)
+                : draftRef.current.title;
             draftRef.current = {
               ...draftRef.current,
-              title: sequence === changed.current ? result.page.title : draftRef.current.title,
+              title,
               revision: result.page.revision,
               updatedAt: result.page.updatedAt,
             };
@@ -220,7 +229,7 @@ export function ContentWorkspace() {
               current?.id === snapshot.id
                 ? {
                     ...current,
-                    title: sequence === changed.current ? result.page.title : current.title,
+                    title,
                     revision: result.page.revision,
                     updatedAt: result.page.updatedAt,
                   }
@@ -370,7 +379,7 @@ export function ContentWorkspace() {
     if (recoveringRef.current) return;
     if (!(await drain())) return;
     try {
-      const created = await createPage({ data: { title: "Untitled", parentId } });
+      const created = await createPage({ data: { title: DEFAULT_PAGE_TITLE, parentId } });
       queryClient.setQueryData(contentKeys.detail(created.id), created);
       await invalidateContent(queryClient);
       loadedId.current = null;
@@ -395,7 +404,7 @@ export function ContentWorkspace() {
     try {
       const recovered = await createPage({
         data: {
-          title: snapshot.title.trim() || "Untitled",
+          title: persistedPageTitle(snapshot.title),
           parentId: null,
           document: snapshot.document,
         },
@@ -593,12 +602,9 @@ export function ContentWorkspace() {
                   aria-label="Page title"
                   value={draft.title}
                   disabled={recovering}
-                  placeholder="Untitled"
+                  placeholder={DEFAULT_PAGE_TITLE}
                   className="w-full border-none bg-transparent p-0 text-3xl font-semibold tracking-tight outline-none placeholder:text-muted-foreground/40 sm:text-[2rem]"
                   onChange={(event) => scheduleSave({ ...draftRef.current!, title: event.target.value })}
-                  onBlur={() => {
-                    if (!draftRef.current?.title.trim()) scheduleSave({ ...draftRef.current!, title: "Untitled" });
-                  }}
                 />
                 <PropertyPanel
                   page={draft}

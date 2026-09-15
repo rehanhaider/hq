@@ -2,11 +2,15 @@ import { describe, expect, it } from "vitest";
 import {
   contentSearchSchema,
   contentSummary,
+  DEFAULT_PAGE_TITLE,
+  editorPageTitle,
   filterPages,
   groupPages,
   hasFilters,
+  persistedPageTitle,
   relativeTime,
   sortPages,
+  titleAfterSave,
   type ContentPage,
   type ContentProperties,
 } from "./content";
@@ -129,6 +133,30 @@ describe("groupPages", () => {
   it("hides empty columns on request", () => {
     const empty = groupPages([pages[0]!], "status", properties, { hideEmpty: true });
     expect(empty.map((bucket) => bucket.label)).toEqual(["Idea"]);
+  });
+});
+
+describe("page title placeholder", () => {
+  it("stores the default for an empty editor title", () => {
+    expect(persistedPageTitle("")).toBe(DEFAULT_PAGE_TITLE);
+    expect(persistedPageTitle("  ")).toBe(DEFAULT_PAGE_TITLE);
+    expect(persistedPageTitle("Stream plan")).toBe("Stream plan");
+    expect(persistedPageTitle("  Stream plan  ")).toBe("Stream plan");
+  });
+
+  it("treats the stored default as an empty editor field", () => {
+    expect(editorPageTitle(DEFAULT_PAGE_TITLE)).toBe("");
+    expect(editorPageTitle("Stream plan")).toBe("Stream plan");
+    expect(editorPageTitle("")).toBe("");
+  });
+
+  it("does not refill a cleared editor after saving the default", () => {
+    expect(titleAfterSave("", DEFAULT_PAGE_TITLE)).toBe("");
+    expect(titleAfterSave("   ", DEFAULT_PAGE_TITLE)).toBe("   ");
+    expect(titleAfterSave(DEFAULT_PAGE_TITLE, DEFAULT_PAGE_TITLE)).toBe(
+      DEFAULT_PAGE_TITLE,
+    );
+    expect(titleAfterSave("Stream plan", "Stream plan")).toBe("Stream plan");
   });
 });
 

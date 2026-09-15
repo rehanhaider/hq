@@ -1,6 +1,7 @@
 import { queryOptions, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { deenKeys } from "./deen";
+import { DEFAULT_PAGE_TITLE } from "@/lib/content";
 import { createPage, getContentProperties, getPage, getPages } from "@/server/fns";
 
 export const contentKeys = {
@@ -60,7 +61,7 @@ export function useNewPage() {
   const navigate = useNavigate();
   return async () => {
     const created = await createPage({
-      data: { title: "Untitled", parentId: null },
+      data: { title: DEFAULT_PAGE_TITLE, parentId: null },
     });
     queryClient.setQueryData(contentKeys.detail(created.id), created);
     await invalidateContent(queryClient);

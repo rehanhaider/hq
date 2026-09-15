@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, renameSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import {
+  DEFAULT_PAGE_TITLE,
   PROPERTY_COLORS,
   type ContentBlock,
   type ContentPage,
@@ -411,7 +412,7 @@ export class ContentStore {
   }
 
   create(
-    title = "Untitled",
+    title = DEFAULT_PAGE_TITLE,
     parentId: string | null = null,
     document = emptyDocument(),
     statusId: string | null = null,
