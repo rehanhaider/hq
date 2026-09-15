@@ -290,6 +290,43 @@
   }
 }
 
+/* Image and video resize handles. BlockNote ships its 8x30px hover-only
+   handle unlayered, which beats anything inside `@layer components`
+   regardless of specificity — so these overrides stay unlayered, like the
+   `.bn-editor` override above. They keep the drag behaviour, but make the
+   target bigger, theme-aware, and visible while hovering or when the block
+   itself is selected. Only while the editor is editable: BlockNote gates
+   its own hover on `editor.isEditable`, and `:hover` would not. */
+.content-editor-shell [data-file-block] .bn-resize-handle {
+  width: 12px;
+  height: 48px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+  background-color: var(--primary);
+  border: 1px solid var(--card);
+  box-shadow: var(--shadow-overlay);
+  touch-action: none;
+}
+.content-editor-shell [data-file-block] .bn-resize-handle::after {
+  content: "";
+  position: absolute;
+  inset: -12px -16px;
+}
+.content-editor-shell .bn-editor[contenteditable="true"] [data-file-block] .bn-visual-media-wrapper:hover .bn-resize-handle,
+.content-editor-shell .bn-editor[contenteditable="true"] [data-file-block].ProseMirror-selectednode .bn-resize-handle {
+  display: block !important;
+}
+@media (pointer: coarse) {
+  .content-editor-shell [data-file-block] .bn-resize-handle {
+    width: 14px;
+    height: 56px;
+  }
+  .content-editor-shell [data-file-block] .bn-resize-handle::after {
+    inset: -16px -20px;
+  }
+}
+
 @media (max-width: 640px), (pointer: coarse) {
   [data-slot="button"],
   [data-slot="input"],
