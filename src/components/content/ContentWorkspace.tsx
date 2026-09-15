@@ -22,7 +22,6 @@ import {
 } from "@dnd-kit/core";
 import {
   SortableContext,
-  arrayMove,
   sortableKeyboardCoordinates,
   useSortable,
   verticalListSortingStrategy,
@@ -329,8 +328,15 @@ export function ContentWorkspace() {
     return pageRows(pages, searching);
   }, [list.data, localPages, search, searching]);
   // Dragging a filtered or searched list would persist an order the user never
-  // saw whole, so the index is only sortable when the full tree is on screen.
-  const canReorder = !searching && !list.isPending && rows.length > 1;
+  // saw whole, so the index is only sortable when the full tree is on screen
+  // and some sibling group actually has more than one page.
+  const canReorder = useMemo(() => {
+    if (searching || list.isPending) return false;
+    const counts = new Map<string | null, number>();
+    for (const page of localPages ?? list.data ?? [])
+      counts.set(page.parentId, (counts.get(page.parentId) ?? 0) + 1);
+    return [...counts.values()].some((count) => count > 1);
+  }, [list.data, localPages, searching]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -339,10 +345,17 @@ export function ContentWorkspace() {
 
   const commitOrder = async (id: string, orderedIds: string[]) => {
     // Total: never rejects, so the serialized chain behind it cannot stall.
+    // The invalidation has its own guard so the banner never claims a refresh
+    // that did not happen.
     try {
       const result = await movePage({ data: { id, orderedIds } });
-      if (!result.ok) setActionError("That page could not be moved. The list has been refreshed.");
-      else setActionError("");
+      setActionError(
+        result.ok ? "" : "That page could not be moved. The list has been refreshed.",
+      );
+    } catch {
+      setActionError("That page could not be moved. The list has been refreshed.");
+    }
+    try {
       await invalidateContent(queryClient);
     } catch {
       setActionError("That page could not be moved. The list has been refreshed.");
@@ -362,21 +375,24 @@ export function ContentWorkspace() {
     const overId = String(over.id);
     const source = localPages ?? list.data ?? [];
     const activePage = source.find((page) => page.id === activeId);
-    const overPage = source.find((page) => page.id === overId);
-    if (!activePage || !overPage) return;
-    // Nesting never changes here. A drop across levels reverts with an
-    // explanation rather than silently reparenting the page.
-    if (activePage.parentId !== overPage.parentId) {
-      setActionError("Pages can only be reordered within the same level.");
-      return;
-    }
+    if (!activePage) return;
+    const overIndex = rows.findIndex((row) => row.page.id === overId);
+    if (overIndex < 0) return;
+    // Nesting never changes here. The tree flattens depth-first, so a drop
+    // over a nested row still lands at a position among the dragged page's
+    // own siblings: the siblings above the drop point in the visible list.
     const siblings = source
       .filter((page) => page.parentId === activePage.parentId)
       .sort((a, b) => a.order - b.order || a.title.localeCompare(b.title));
-    const from = siblings.findIndex((page) => page.id === activeId);
-    const to = siblings.findIndex((page) => page.id === overId);
-    if (from < 0 || to < 0 || from === to) return;
-    const moved = arrayMove(siblings, from, to);
+    const rest = siblings.filter((page) => page.id !== activeId);
+    const at = rows
+      .slice(0, overIndex)
+      .filter(
+        (row) => row.page.parentId === activePage.parentId && row.page.id !== activeId,
+      ).length;
+    const moved = [...rest];
+    moved.splice(Math.min(at, moved.length), 0, activePage);
+    if (moved.every((page, index) => page.id === siblings[index]?.id)) return;
     const orderedIds = moved.map((page) => page.id);
     // Deal out the orders the siblings already hold, so a sibling this drag
     // did not name keeps an order nothing else collides with.
