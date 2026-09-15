@@ -22,6 +22,7 @@ import {
 } from "@dnd-kit/core";
 import {
   SortableContext,
+  arrayMove,
   sortableKeyboardCoordinates,
   useSortable,
   verticalListSortingStrategy,
@@ -345,21 +346,32 @@ export function ContentWorkspace() {
 
   const commitOrder = async (id: string, orderedIds: string[]) => {
     // Total: never rejects, so the serialized chain behind it cannot stall.
-    // The invalidation has its own guard so the banner never claims a refresh
-    // that did not happen.
+    // Each banner says exactly what happened, so a failed refresh never hides
+    // behind a claimed one.
+    let saved = false;
+    let fresh = false;
     try {
-      const result = await movePage({ data: { id, orderedIds } });
-      setActionError(
-        result.ok ? "" : "That page could not be moved. The list has been refreshed.",
-      );
+      saved = (await movePage({ data: { id, orderedIds } })).ok;
     } catch {
-      setActionError("That page could not be moved. The list has been refreshed.");
+      saved = false;
     }
     try {
       await invalidateContent(queryClient);
+      fresh = true;
     } catch {
-      setActionError("That page could not be moved. The list has been refreshed.");
+      fresh = false;
     }
+    if (saved && fresh) setActionError("");
+    else if (!saved && fresh)
+      setActionError("That page could not be moved. The list has been refreshed.");
+    else if (saved && !fresh)
+      setActionError(
+        "The new order was saved, but the list could not be refreshed. Reload the page if it looks stale.",
+      );
+    else
+      setActionError(
+        "That page could not be moved, and the list could not be refreshed. Reload the page.",
+      );
     setLocalPages(null);
   };
 
@@ -375,24 +387,37 @@ export function ContentWorkspace() {
     const overId = String(over.id);
     const source = localPages ?? list.data ?? [];
     const activePage = source.find((page) => page.id === activeId);
-    if (!activePage) return;
+    const overPage = source.find((page) => page.id === overId);
+    if (!activePage || !overPage) return;
     const overIndex = rows.findIndex((row) => row.page.id === overId);
     if (overIndex < 0) return;
-    // Nesting never changes here. The tree flattens depth-first, so a drop
-    // over a nested row still lands at a position among the dragged page's
-    // own siblings: the siblings above the drop point in the visible list.
+    // Nesting never changes here.
     const siblings = source
       .filter((page) => page.parentId === activePage.parentId)
       .sort((a, b) => a.order - b.order || a.title.localeCompare(b.title));
-    const rest = siblings.filter((page) => page.id !== activeId);
-    const at = rows
-      .slice(0, overIndex)
-      .filter(
-        (row) => row.page.parentId === activePage.parentId && row.page.id !== activeId,
-      ).length;
-    const moved = [...rest];
-    moved.splice(Math.min(at, moved.length), 0, activePage);
-    if (moved.every((page, index) => page.id === siblings[index]?.id)) return;
+    const from = siblings.findIndex((page) => page.id === activeId);
+    if (from < 0) return;
+    let moved: ContentPage[];
+    if (overPage.parentId === activePage.parentId) {
+      // Same level: the drop takes the hovered sibling's slot, downward moves
+      // landing past it, exactly as the drag preview shows.
+      const to = siblings.findIndex((page) => page.id === overId);
+      if (to < 0 || from === to) return;
+      moved = arrayMove(siblings, from, to);
+    } else {
+      // The tree flattens depth-first, so a drop over a nested row still lands
+      // at a position among the dragged page's own siblings: the siblings
+      // above the drop point in the visible list.
+      const rest = siblings.filter((page) => page.id !== activeId);
+      const at = rows
+        .slice(0, overIndex)
+        .filter(
+          (row) => row.page.parentId === activePage.parentId && row.page.id !== activeId,
+        ).length;
+      moved = [...rest];
+      moved.splice(Math.min(at, moved.length), 0, activePage);
+      if (moved.every((page, index) => page.id === siblings[index]?.id)) return;
+    }
     const orderedIds = moved.map((page) => page.id);
     // Deal out the orders the siblings already hold, so a sibling this drag
     // did not name keeps an order nothing else collides with.
