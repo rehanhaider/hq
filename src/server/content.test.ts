@@ -41,6 +41,52 @@ describe("content store", () => {
     expect(store.list({ q: "searchable" }).map((page) => page.id)).toEqual([created.id]);
   });
 
+  it("keeps an image's resized width across saves", () => {
+    store = new ContentStore(":memory:");
+    const created = store.create("Gallery");
+    const imageDocument = (previewWidth: number) => [
+      {
+        id: randomUUID(),
+        type: "image",
+        props: {
+          backgroundColor: "default",
+          textAlignment: "left",
+          name: "shot.png",
+          url: "https://example.com/shot.png",
+          caption: "",
+          showPreview: true,
+          previewWidth,
+        },
+        content: [],
+        children: [],
+      },
+    ];
+    const first = store.save({
+      id: created.id,
+      title: created.title,
+      revision: created.revision,
+      document: imageDocument(320),
+    });
+    expect(first.ok).toBe(true);
+    expect(store.get(created.id)?.document[0]).toMatchObject({
+      type: "image",
+      props: expect.objectContaining({ previewWidth: 320 }),
+    });
+    // A drag-resize writes a new previewWidth; the next autosave must keep it.
+    const current = store.get(created.id)!;
+    const second = store.save({
+      id: current.id,
+      title: current.title,
+      revision: current.revision,
+      document: imageDocument(640),
+    });
+    expect(second.ok).toBe(true);
+    expect(store.get(created.id)?.document[0]).toMatchObject({
+      type: "image",
+      props: expect.objectContaining({ previewWidth: 640 }),
+    });
+  });
+
   it("rejects stale writes instead of overwriting newer content", () => {
     store = new ContentStore(":memory:");
     const created = store.create("Draft");
