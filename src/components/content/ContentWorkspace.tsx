@@ -746,6 +746,9 @@ export function ContentWorkspace() {
                       return;
                     }
                     await invalidateContent(queryClient, contentKeys.all);
+                    // A move in flight shadows the list with its optimistic order;
+                    // drop the overlay so the trashed page leaves the index now.
+                    setLocalPages(null);
                     if (sameSource && sourceChanged) {
                       staleRevision.current = null;
                       setSaveConflict(false);
