@@ -12,6 +12,7 @@ import type {
 } from "../lib/model";
 import { ActivityStore, getStore } from "./db";
 import { commitListSchema, commitSchema, GithubClient, github } from "./github";
+import { warmOpenWork } from "./openWork";
 
 export async function importRepository(
   client: GithubClient,
@@ -244,8 +245,11 @@ export function ensureRefreshLoop() {
 }
 
 export function tickRefresh() {
-  if (running) return;
   if (!process.env.GITHUB_TOKEN) return;
+  // Search has its own rate limit, so the feed warms alongside the import
+  // rather than waiting for it; a page then almost always finds a copy.
+  warmOpenWork();
+  if (running) return;
   const interval = refreshIntervalMs();
   if (interval <= 0) return;
   const dataset = getStore().dataset();

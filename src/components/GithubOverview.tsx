@@ -50,7 +50,7 @@ export function GithubOverview({ filters }: { filters: Filters }) {
     waiting.length + stale.length + drafts.length + triage.length;
   const inboxZero = isInboxZero(data, totalWaiting, work.error);
 
-  if (work.isPending && dashboard.isPending)
+  if (dashboard.isPending)
     return (
       <div className="space-y-4" aria-label="Loading overview">
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -80,13 +80,13 @@ export function GithubOverview({ filters }: { filters: Filters }) {
   }[] = [
     {
       label: "Needs you",
-      value: number(counts.needsYou),
+      value: work.isPending ? "—" : number(counts.needsYou),
       to: "/github",
       search: { ...filters, view: "work" as const, page: 1 },
     },
     {
       label: "Needs triage",
-      value: number(counts.triage),
+      value: work.isPending ? "—" : number(counts.triage),
       to: "/github",
       search: { ...filters, view: "work" as const, page: 1 },
     },
@@ -134,7 +134,13 @@ export function GithubOverview({ filters }: { filters: Filters }) {
         </p>
       ) : null}
 
-      {inboxZero ? (
+      {work.isPending ? (
+        <div
+          className="h-64 animate-pulse rounded-xl bg-muted"
+          role="status"
+          aria-label="Loading open work"
+        />
+      ) : inboxZero ? (
         <div className="section flex min-h-48 flex-col items-center justify-center px-5 py-12 text-center">
           <h2 className="font-semibold">Nothing needs you</h2>
           <p className="mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">
