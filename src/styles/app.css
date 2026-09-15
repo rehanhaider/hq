@@ -294,8 +294,9 @@
    handle unlayered, which beats anything inside `@layer components`
    regardless of specificity — so these overrides stay unlayered, like the
    `.bn-editor` override above. They keep the drag behaviour, but make the
-   target bigger, theme-aware, and visible while hovering, focusing, or
-   when the block itself is selected. */
+   target bigger, theme-aware, and visible while hovering or when the block
+   itself is selected. Only while the editor is editable: BlockNote gates
+   its own hover on `editor.isEditable`, and `:hover` would not. */
 .content-editor-shell [data-file-block] .bn-resize-handle {
   width: 12px;
   height: 48px;
@@ -312,10 +313,8 @@
   position: absolute;
   inset: -12px -16px;
 }
-.content-editor-shell [data-file-block] .bn-visual-media-wrapper:hover .bn-resize-handle,
-.content-editor-shell [data-file-block] .bn-visual-media-wrapper:focus-within .bn-resize-handle,
-.content-editor-shell [data-file-block].ProseMirror-selectednode .bn-resize-handle,
-.content-editor-shell [data-file-block] .ProseMirror-selectednode .bn-resize-handle {
+.content-editor-shell .bn-editor[contenteditable="true"] [data-file-block] .bn-visual-media-wrapper:hover .bn-resize-handle,
+.content-editor-shell .bn-editor[contenteditable="true"] [data-file-block].ProseMirror-selectednode .bn-resize-handle {
   display: block !important;
 }
 @media (pointer: coarse) {
