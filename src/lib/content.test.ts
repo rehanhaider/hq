@@ -3,14 +3,13 @@ import {
   contentSearchSchema,
   contentSummary,
   DEFAULT_PAGE_TITLE,
-  editorPageTitle,
+  displayPageTitle,
   filterPages,
   groupPages,
   hasFilters,
   persistedPageTitle,
   relativeTime,
   sortPages,
-  titleAfterSave,
   type ContentPage,
   type ContentProperties,
 } from "./content";
@@ -76,6 +75,13 @@ describe("filterPages", () => {
     expect(hasFilters({ tag: ["sqlite"] })).toBe(true);
     expect(hasFilters({ q: "  " })).toBe(false);
   });
+
+  it("treats a blank stored title as Untitled when searching", () => {
+    const untitled = page("", { id: "blank" });
+    expect(filterPages([untitled], { q: "untitled" }).map((item) => item.id)).toEqual([
+      "blank",
+    ]);
+  });
 });
 
 describe("sortPages", () => {
@@ -137,26 +143,19 @@ describe("groupPages", () => {
 });
 
 describe("page title placeholder", () => {
-  it("stores the default for an empty editor title", () => {
-    expect(persistedPageTitle("")).toBe(DEFAULT_PAGE_TITLE);
-    expect(persistedPageTitle("  ")).toBe(DEFAULT_PAGE_TITLE);
+  it("stores a blank editor title as empty rather than the default label", () => {
+    expect(persistedPageTitle("")).toBe("");
+    expect(persistedPageTitle("  ")).toBe("");
     expect(persistedPageTitle("Stream plan")).toBe("Stream plan");
     expect(persistedPageTitle("  Stream plan  ")).toBe("Stream plan");
+    expect(persistedPageTitle(DEFAULT_PAGE_TITLE)).toBe(DEFAULT_PAGE_TITLE);
   });
 
-  it("treats the stored default as an empty editor field", () => {
-    expect(editorPageTitle(DEFAULT_PAGE_TITLE)).toBe("");
-    expect(editorPageTitle("Stream plan")).toBe("Stream plan");
-    expect(editorPageTitle("")).toBe("");
-  });
-
-  it("does not refill a cleared editor after saving the default", () => {
-    expect(titleAfterSave("", DEFAULT_PAGE_TITLE)).toBe("");
-    expect(titleAfterSave("   ", DEFAULT_PAGE_TITLE)).toBe("   ");
-    expect(titleAfterSave(DEFAULT_PAGE_TITLE, DEFAULT_PAGE_TITLE)).toBe(
-      DEFAULT_PAGE_TITLE,
-    );
-    expect(titleAfterSave("Stream plan", "Stream plan")).toBe("Stream plan");
+  it("uses the default only as a list label and editor placeholder", () => {
+    expect(displayPageTitle("")).toBe(DEFAULT_PAGE_TITLE);
+    expect(displayPageTitle("  ")).toBe(DEFAULT_PAGE_TITLE);
+    expect(displayPageTitle("Stream plan")).toBe("Stream plan");
+    expect(displayPageTitle(DEFAULT_PAGE_TITLE)).toBe(DEFAULT_PAGE_TITLE);
   });
 });
 

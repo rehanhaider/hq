@@ -21,11 +21,10 @@ import {
 } from "@/components/ui/dialog";
 import {
   DEFAULT_PAGE_TITLE,
-  editorPageTitle,
+  displayPageTitle,
   filterPages,
   hasFilters,
   persistedPageTitle,
-  titleAfterSave,
   type ContentBlock,
   type ContentPage,
   type ContentProperties,
@@ -151,9 +150,8 @@ export function ContentWorkspace() {
       )
         return false;
       loadedId.current = next.id;
-      const draftPage = { ...next, title: editorPageTitle(next.title) };
-      draftRef.current = draftPage;
-      setDraft(draftPage);
+      draftRef.current = next;
+      setDraft(next);
       if (samePage) setEditorGeneration((generation) => generation + 1);
       changed.current = 0;
       saved.current = 0;
@@ -215,13 +213,9 @@ export function ContentWorkspace() {
             return false;
           }
           if (draftRef.current?.id === snapshot.id) {
-            const title =
-              sequence === changed.current
-                ? titleAfterSave(draftRef.current.title, result.page.title)
-                : draftRef.current.title;
             draftRef.current = {
               ...draftRef.current,
-              title,
+              title: sequence === changed.current ? result.page.title : draftRef.current.title,
               revision: result.page.revision,
               updatedAt: result.page.updatedAt,
             };
@@ -229,7 +223,7 @@ export function ContentWorkspace() {
               current?.id === snapshot.id
                 ? {
                     ...current,
-                    title,
+                    title: sequence === changed.current ? result.page.title : current.title,
                     revision: result.page.revision,
                     updatedAt: result.page.updatedAt,
                   }
@@ -379,7 +373,7 @@ export function ContentWorkspace() {
     if (recoveringRef.current) return;
     if (!(await drain())) return;
     try {
-      const created = await createPage({ data: { title: DEFAULT_PAGE_TITLE, parentId } });
+      const created = await createPage({ data: { title: "", parentId } });
       queryClient.setQueryData(contentKeys.detail(created.id), created);
       await invalidateContent(queryClient);
       loadedId.current = null;
@@ -478,7 +472,7 @@ export function ContentWorkspace() {
                   onClick={() => void selectPage(page.id)}
                 >
                   {depth > 0 ? <ChevronRight className="size-3 shrink-0 text-muted-foreground" /> : <FileText className="size-4 shrink-0 text-muted-foreground" />}
-                  <span className="truncate">{page.title}</span>
+                  <span className="truncate">{displayPageTitle(page.title)}</span>
                 </button>
               ))
             ) : (
@@ -523,8 +517,8 @@ export function ContentWorkspace() {
                     void drain();
                   }}>{recovering ? "Saving copy…" : saveUnavailable ? "Save as new page" : saveConflict ? "Overwrite saved version" : "Try saving again"}</Button>
                 )}
-                <Button variant="outline" size="sm" disabled={recovering} onClick={() => void addPage(draft.id)} aria-label={`New subpage under ${draft.title}`}><FilePlus2 /> Subpage</Button>
-                <Button variant="destructive" size="icon-sm" disabled={recovering} aria-label={`Move ${draft.title} to trash`} onClick={async () => {
+                <Button variant="outline" size="sm" disabled={recovering} onClick={() => void addPage(draft.id)} aria-label={`New subpage under ${displayPageTitle(draft.title)}`}><FilePlus2 /> Subpage</Button>
+                <Button variant="destructive" size="icon-sm" disabled={recovering} aria-label={`Move ${displayPageTitle(draft.title)} to trash`} onClick={async () => {
                   if (!(await drain())) return;
                   const current = draftRef.current!;
                   const sourceId = current.id;

@@ -24,7 +24,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
-  DEFAULT_PAGE_TITLE,
+  displayPageTitle,
   filterPages,
   groupPages,
   hasFilters,
@@ -114,7 +114,9 @@ export function ContentBoard() {
   // Cards show the page they sit under, so a subpage is not mistaken for a
   // second copy of its parent's work.
   const parentTitles = useMemo(() => {
-    const titles = new Map((pages.data ?? []).map((page) => [page.id, page.title]));
+    const titles = new Map(
+      (pages.data ?? []).map((page) => [page.id, displayPageTitle(page.title)]),
+    );
     return (page: ContentPage) =>
       page.parentId ? titles.get(page.parentId) : undefined;
   }, [pages.data]);
@@ -232,7 +234,7 @@ export function ContentBoard() {
       // behind and report that nothing was created.
       const created = await createPage({
         data: {
-          title: DEFAULT_PAGE_TITLE,
+          title: "",
           statusId: group === "status" ? bucket.id : null,
           typeId: group === "type" ? bucket.id : null,
           tagIds: group === "tag" && bucket.id ? [bucket.id] : [],
@@ -450,7 +452,7 @@ function Card({
             {parentTitle}
           </span>
         )}
-        <span className="block text-sm font-medium break-words">{page.title}</span>
+        <span className="block text-sm font-medium break-words">{displayPageTitle(page.title)}</span>
       </button>
       <div className="mt-1.5 flex flex-wrap items-center gap-1">
         {type && (
