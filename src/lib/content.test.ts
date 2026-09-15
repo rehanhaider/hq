@@ -28,7 +28,7 @@ const page = (
   revision: 0,
   preview: "",
   statusId: "idea",
-  typeId: null,
+  typeIds: [],
   tagIds: [],
   position: 0,
   ...overrides,
@@ -39,13 +39,16 @@ const properties: ContentProperties = {
     { id: "idea", name: "Idea", color: "slate", position: 0 },
     { id: "published", name: "Published", color: "green", position: 1 },
   ],
-  types: [{ id: "video", name: "YouTube video", color: "red", position: 0 }],
+  types: [
+    { id: "video", name: "YouTube video", color: "red", position: 0 },
+    { id: "post", name: "Blog post", color: "blue", position: 1 },
+  ],
   tags: [{ id: "sqlite", name: "sqlite", color: "blue", position: 0 }],
 };
 
 describe("filterPages", () => {
   const pages = [
-    page("Stream plan", { typeId: "video", tagIds: ["sqlite"] }),
+    page("Stream plan", { typeIds: ["video"], tagIds: ["sqlite"] }),
     page("Blog draft", { statusId: "published" }),
   ];
 
@@ -67,6 +70,14 @@ describe("filterPages", () => {
     expect(filterPages(pages, { tag: ["sqlite"] }).map((item) => item.title)).toEqual([
       "Stream plan",
     ]);
+  });
+
+  it("matches a page carrying any of the selected types", () => {
+    const crossover = page("Crossover", { typeIds: ["video", "post"] });
+    expect(filterPages([crossover], { type: ["video"] })).toHaveLength(1);
+    expect(filterPages([crossover], { type: ["post"] })).toHaveLength(1);
+    expect(filterPages([crossover], { type: ["video", "post"] })).toHaveLength(1);
+    expect(filterPages([crossover], { type: ["sqlite"] })).toHaveLength(0);
   });
 
   it("returns everything when nothing is selected", () => {
@@ -106,7 +117,7 @@ describe("sortPages", () => {
 
 describe("groupPages", () => {
   const pages = [
-    page("Stream plan", { typeId: "video", tagIds: ["sqlite"] }),
+    page("Stream plan", { typeIds: ["video"], tagIds: ["sqlite"] }),
     page("Blog draft", { statusId: "published" }),
   ];
 
@@ -125,6 +136,7 @@ describe("groupPages", () => {
   it("adds a trailing bucket for pages without a type or tag", () => {
     expect(groupPages(pages, "type", properties).map((bucket) => bucket.label)).toEqual([
       "YouTube video",
+      "Blog post",
       "No type",
     ]);
     expect(groupPages(pages, "tag", properties).map((bucket) => bucket.label)).toEqual([
@@ -134,6 +146,17 @@ describe("groupPages", () => {
     expect(
       groupPages([pages[0]!], "tag", properties).map((bucket) => bucket.label),
     ).toEqual(["sqlite"]);
+  });
+
+  it("shows a page with two types in both type columns", () => {
+    const crossover = page("Crossover", { typeIds: ["video", "post"] });
+    const buckets = groupPages([crossover], "type", properties);
+    expect(buckets[0]!.pages.map((item) => item.title)).toEqual(["Crossover"]);
+    expect(buckets[1]!.pages.map((item) => item.title)).toEqual(["Crossover"]);
+    expect(buckets.map((bucket) => bucket.label)).toEqual([
+      "YouTube video",
+      "Blog post",
+    ]);
   });
 
   it("hides empty columns on request", () => {
@@ -199,7 +222,7 @@ describe("contentSummary", () => {
   const pages = [
     page("Stream plan", {
       id: "a",
-      typeId: "video",
+      typeIds: ["video"],
       updatedAt: "2026-09-10T09:00:00.000Z",
     }),
     page("Blog draft", {
@@ -255,5 +278,18 @@ describe("contentSummary", () => {
     expect(summary.total).toBe(0);
     expect(summary.recent).toEqual([]);
     expect(summary.counts.every((entry) => entry.count === 0)).toBe(true);
+  });
+
+  it("joins more than one type in the recent list", () => {
+    const crossover = page("Crossover", {
+      id: "d",
+      typeIds: ["video", "post"],
+      updatedAt: "2026-09-13T09:00:00.000Z",
+    });
+    const summary = contentSummary([crossover], properties, 1);
+    expect(summary.recent[0]).toMatchObject({
+      title: "Crossover",
+      type: "YouTube video, Blog post",
+    });
   });
 });

@@ -44,7 +44,7 @@ const SECTIONS: Section[] = [
   {
     kind: "type",
     title: "Types",
-    description: "What a page is: a stream, a video, an article.",
+    description: "What a page is: a stream, a video, an article. A page can carry more than one.",
     addLabel: "New type",
   },
   {
@@ -76,7 +76,7 @@ export function ContentSettings() {
       kind === "status"
         ? page.statusId === id
         : kind === "type"
-          ? page.typeId === id
+          ? page.typeIds.includes(id)
           : page.tagIds.includes(id),
     ).length;
 

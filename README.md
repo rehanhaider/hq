@@ -12,7 +12,7 @@ TanStack Query owns fetched data and mutations. TanStack Router owns shareable f
 
 - Home is the daily briefing, with practice progress, a link to continue logging, and a smaller weekly coding summary.
 - Nasr contains Today, Progress, and Settings. Progress separates Salah from adhkar and other practices. Notes and daily note entry are removed. Charity logging is not part of the app and old charity records are not imported or exported.
-- Content contains Pages, Board, Trash, and Settings. It is the production pipeline for streams, YouTube videos, blog posts, and architecture articles. Pages has a searchable nested page list beside a formatted editor on larger screens; on phones, the list and editor open one at a time. Every page — nested subpages included — is a content item with a status, an optional type, and any number of tags, and every page that is not in the trash appears on the Board. Content is separate from old Nasr daily-note data.
+- Content contains Pages, Board, Trash, and Settings. It is the production pipeline for streams, YouTube videos, blog posts, and architecture articles. Pages has a searchable nested page list beside a formatted editor on larger screens; on phones, the list and editor open one at a time. Every page — nested subpages included — is a content item with a status, any number of types, and any number of tags, and every page that is not in the trash appears on the Board. Content is separate from old Nasr daily-note data.
 - GitHub contains Overview (`/github`), Statistics (`/github/statistics`), Work (`/github/work`), and Repositories (`/github/repositories`). Repositories manages imports and stored coverage. The date range and repository filter are search parameters shared by Overview and Statistics.
 
 ## TanStack library review
@@ -99,7 +99,7 @@ Use the formatting toolbar or type `/` to insert headings, lists, checklists, qu
 
 Paste or drop an image, a video, or a file onto a page, or insert an empty block and choose one. It uploads to the page it was dropped on and the block keeps BlockNote's own resize handle and caption. Audio blocks are not available. A refused file — too large, or a type HQ does not store — says so under the editor and leaves the page alone.
 
-Under the page title sits the property bar: status, type, and tags. Property changes save on their own, immediately, and never touch the document or its revision, so an open editor keeps its unsaved text.
+Under the page title sits the property bar: status, types, and tags. Property changes save on their own, immediately, and never touch the document or its revision, so an open editor keeps its unsaved text.
 
 - Ctrl/Cmd+B: bold
 - Ctrl/Cmd+I: italic
@@ -112,11 +112,11 @@ Pages save after a short pause. The page shows Unsaved, Saving, Saved, or Save f
 
 ## Content board and properties
 
-Board draws one column per status, in the order Settings gives them. Cards show the title, the type and tags as coloured chips, when the page was last updated, and the parent page when it is nested. Clicking a card opens it in Pages. Dragging a card to another column sets that property; dragging within a column saves a manual order. `+ New` at the foot of a column creates a page already in that column and opens it. Group by switches the columns between Status, Type, and Tag, with "No type" and "Untagged" buckets for pages that have neither; dragging across those columns sets the type or adds and removes the tag. Drag and drop uses `@dnd-kit`.
+Board draws one column per status, in the order Settings gives them. Cards show the title, the types and tags as coloured chips, when the page was last updated, and the parent page when it is nested. Clicking a card opens it in Pages. Dragging a card to another column sets that property; dragging within a column saves a manual order. `+ New` at the foot of a column creates a page already in that column and opens it. Group by switches the columns between Status, Type, and Tag, with "No type" and "Untagged" buckets for pages that have neither; dragging across those columns adds and removes the type or the tag. Drag and drop uses `@dnd-kit`.
 
 Filters — status, type, tag, and a title search — and the sort (Manual, Updated, Created, Title) live in the URL, so a filtered board is a link. They apply to the Pages list as well. Clear removes them.
 
-Settings owns the three property lists. Add, rename in place, recolour from a fixed palette, reorder, and delete. Deleting a status that holds pages asks which status they move to; deleting a type clears it from its pages; deleting a tag drops its links. The last status cannot be deleted, because the board needs a column. A new page starts in the first status with no type and no tags, and a new subpage inherits its parent's type.
+Settings owns the three property lists. Add, rename in place, recolour from a fixed palette, reorder, and delete. Deleting a status that holds pages asks which status they move to; deleting a type drops its links; deleting a tag drops its links. The last status cannot be deleted, because the board needs a column. A new page starts in the first status with no types and no tags, and a new subpage inherits its parent's types.
 
 ## Date ranges and charts
 

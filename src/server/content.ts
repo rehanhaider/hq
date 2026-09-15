@@ -71,8 +71,8 @@ type PageRow = {
   revision: number;
   deletion_group: string | null;
   status_id: string | null;
-  type_id: string | null;
   position: number;
+  type_ids: string | null;
   tag_ids: string | null;
 };
 
@@ -121,7 +121,7 @@ function textFromDocument(document: ContentBlock[]) {
 }
 
 function tagIdsFrom(value: string | null) {
-  return value ? value.split(",").filter(Boolean) : [];
+  return value ? [...new Set(value.split(",").filter(Boolean))] : [];
 }
 
 function propertyFromRow(row: PropertyRow): Property {
@@ -155,7 +155,7 @@ function pageFromRow(row: Omit<PageListRow, "preview"> & { preview: string }): C
     revision: row.revision,
     preview: row.preview,
     statusId: row.status_id,
-    typeId: row.type_id,
+    typeIds: tagIdsFrom(row.type_ids),
     tagIds: tagIdsFrom(row.tag_ids),
     position: row.position,
   };
@@ -163,7 +163,8 @@ function pageFromRow(row: Omit<PageListRow, "preview"> & { preview: string }): C
 
 const LIST_COLUMNS = `pages.id, pages.title, substr(pages.search_text, 1, 180) AS preview,
         pages.parent_id, pages.display_order, pages.created_at, pages.updated_at,
-        pages.deleted_at, pages.revision, pages.status_id, pages.type_id, pages.position,
+        pages.deleted_at, pages.revision, pages.status_id, pages.position,
+        (SELECT group_concat(type_id ORDER BY rowid) FROM page_types WHERE page_id = pages.id) AS type_ids,
         (SELECT group_concat(tag_id) FROM page_tags WHERE page_id = pages.id) AS tag_ids`;
 
 export class ContentStore {
@@ -245,6 +246,12 @@ export class ContentStore {
         PRIMARY KEY (page_id, tag_id)
       );
       CREATE INDEX IF NOT EXISTS page_tags_tag ON page_tags(tag_id);
+      CREATE TABLE IF NOT EXISTS page_types (
+        page_id TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+        type_id TEXT NOT NULL REFERENCES types(id) ON DELETE CASCADE,
+        PRIMARY KEY (page_id, type_id)
+      );
+      CREATE INDEX IF NOT EXISTS page_types_type ON page_types(type_id);
       CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS uploads (
         id TEXT NOT NULL,
@@ -270,10 +277,20 @@ export class ContentStore {
     // then sets a status, and `list` never invents one.
     if (!columns.has("status_id"))
       this.db.exec("ALTER TABLE pages ADD COLUMN status_id TEXT REFERENCES statuses(id)");
-    if (!columns.has("type_id"))
-      this.db.exec(
-        "ALTER TABLE pages ADD COLUMN type_id TEXT REFERENCES types(id) ON DELETE SET NULL",
-      );
+    // Types used to be one column per page. They are a link table now, like
+    // tags, so an existing column is carried over once and then dropped.
+    if (columns.has("type_id")) {
+      this.db.exec(`
+        INSERT OR IGNORE INTO page_types (page_id, type_id)
+        SELECT id, type_id FROM pages WHERE type_id IS NOT NULL
+      `);
+      try {
+        this.db.exec("ALTER TABLE pages DROP COLUMN type_id");
+      } catch {
+        // Older SQLite cannot drop a column. The column is then simply
+        // ignored: every read and write below uses page_types.
+      }
+    }
     if (!columns.has("position")) {
       this.db.exec("ALTER TABLE pages ADD COLUMN position INTEGER NOT NULL DEFAULT 0");
       // Oldest first, so a board that has never been reordered still reads in
@@ -345,20 +362,26 @@ export class ContentStore {
    */
   private unknownProperty(input: {
     statusId?: string;
-    typeId?: string | null;
+    addTypeId?: string;
     addTagId?: string;
   }) {
     if (input.statusId !== undefined && !this.propertyExists("status", input.statusId))
       return "unknown-status" as const;
-    if (
-      input.typeId !== undefined &&
-      input.typeId !== null &&
-      !this.propertyExists("type", input.typeId)
-    )
+    if (input.addTypeId !== undefined && !this.propertyExists("type", input.addTypeId))
       return "unknown-type" as const;
     if (input.addTagId !== undefined && !this.propertyExists("tag", input.addTagId))
       return "unknown-tag" as const;
     return null;
+  }
+
+  /** Replaces a page's types. Types that no longer exist are dropped. */
+  private setTypes(pageId: string, typeIds: string[]) {
+    this.db.prepare("DELETE FROM page_types WHERE page_id = ?").run(pageId);
+    const link = this.db.prepare(
+      "INSERT OR IGNORE INTO page_types (page_id, type_id) VALUES (?, ?)",
+    );
+    for (const typeId of new Set(typeIds))
+      if (this.propertyExists("type", typeId)) link.run(pageId, typeId);
   }
 
   /** Replaces a page's tags. Tags that no longer exist are dropped. */
@@ -403,7 +426,9 @@ export class ContentStore {
   private getAny(id: string): PageDetail | null {
     const row = this.db
       .prepare(
-        `SELECT pages.*, (SELECT group_concat(tag_id) FROM page_tags WHERE page_id = pages.id) AS tag_ids
+        `SELECT pages.*,
+          (SELECT group_concat(type_id ORDER BY rowid) FROM page_types WHERE page_id = pages.id) AS type_ids,
+          (SELECT group_concat(tag_id) FROM page_tags WHERE page_id = pages.id) AS tag_ids
          FROM pages WHERE id = ?`,
       )
       .get(id) as PageRow | undefined;
@@ -415,11 +440,11 @@ export class ContentStore {
     parentId: string | null = null,
     document = emptyDocument(),
     statusId: string | null = null,
-    typeId: string | null = null,
+    typeIds: string[] = [],
     tagIds: string[] = [],
   ): PageDetail {
     return this.transaction(() =>
-      this.insert(title, parentId, document, statusId, typeId, tagIds),
+      this.insert(title, parentId, document, statusId, typeIds, tagIds),
     );
   }
 
@@ -428,7 +453,7 @@ export class ContentStore {
     parentId: string | null,
     document: ContentBlock[],
     statusId: string | null,
-    typeId: string | null,
+    typeIds: string[],
     tagIds: string[],
   ): PageDetail {
     let parent: PageDetail | null = null;
@@ -439,9 +464,7 @@ export class ContentStore {
     const status =
       statusId && this.propertyExists("status", statusId) ? statusId : this.firstStatusId();
     // A subpage is usually more of whatever its parent is, so it starts there.
-    const requestedType = typeId ?? parent?.typeId ?? null;
-    const type =
-      requestedType && this.propertyExists("type", requestedType) ? requestedType : null;
+    const requestedTypes = typeIds.length ? typeIds : (parent?.typeIds ?? []);
     const id = randomUUID();
     const now = new Date().toISOString();
     const order = Number(
@@ -462,8 +485,8 @@ export class ContentStore {
       .prepare(
         `INSERT INTO pages
          (id, title, document, search_text, parent_id, display_order, created_at, updated_at,
-          deleted_at, revision, deletion_group, status_id, type_id, position)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, 0, NULL, ?, ?, ?)`,
+          deleted_at, revision, deletion_group, status_id, position)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, 0, NULL, ?, ?)`,
       )
       .run(
         id,
@@ -475,9 +498,12 @@ export class ContentStore {
         now,
         now,
         status,
-        type,
         position,
       );
+    const validTypes = [...new Set(requestedTypes)].filter((typeId) =>
+      this.propertyExists("type", typeId),
+    );
+    if (validTypes.length) this.setTypes(id, validTypes);
     if (tagIds.length) this.setTags(id, tagIds);
     this.adoptUploads(id, document);
     return this.get(id)!;
@@ -518,7 +544,7 @@ export class ContentStore {
   setProperties(input: {
     id: string;
     statusId?: string;
-    typeId?: string | null;
+    typeIds?: string[];
     tagIds?: string[];
   }) {
     return this.transaction(() => {
@@ -528,8 +554,7 @@ export class ContentStore {
       if (unknown) return { ok: false as const, code: unknown };
       if (input.statusId !== undefined)
         this.db.prepare("UPDATE pages SET status_id = ? WHERE id = ?").run(input.statusId, input.id);
-      if (input.typeId !== undefined)
-        this.db.prepare("UPDATE pages SET type_id = ? WHERE id = ?").run(input.typeId, input.id);
+      if (input.typeIds) this.setTypes(input.id, input.typeIds);
       if (input.tagIds) this.setTags(input.id, input.tagIds);
       this.db
         .prepare("UPDATE pages SET updated_at = ? WHERE id = ?")
@@ -545,9 +570,12 @@ export class ContentStore {
   moveCard(input: {
     id: string;
     statusId?: string;
-    typeId?: string | null;
+    addTypeId?: string;
+    removeTypeId?: string;
     addTagId?: string;
     removeTagId?: string;
+    /** The page's whole type list, for a drop that is not one type's worth. */
+    typeIds?: string[];
     /** The page's whole tag list, for a drop that is not one tag's worth. */
     tagIds?: string[];
     orderedIds?: string[];
@@ -559,8 +587,17 @@ export class ContentStore {
       if (unknown) return { ok: false as const, code: unknown };
       if (input.statusId !== undefined)
         this.db.prepare("UPDATE pages SET status_id = ? WHERE id = ?").run(input.statusId, input.id);
-      if (input.typeId !== undefined)
-        this.db.prepare("UPDATE pages SET type_id = ? WHERE id = ?").run(input.typeId, input.id);
+      if (input.typeIds) this.setTypes(input.id, input.typeIds);
+      else {
+        if (input.removeTypeId)
+          this.db
+            .prepare("DELETE FROM page_types WHERE page_id = ? AND type_id = ?")
+            .run(input.id, input.removeTypeId);
+        if (input.addTypeId)
+          this.db
+            .prepare("INSERT OR IGNORE INTO page_types (page_id, type_id) VALUES (?, ?)")
+            .run(input.id, input.addTypeId);
+      }
       if (input.tagIds) this.setTags(input.id, input.tagIds);
       else {
         if (input.removeTagId)
@@ -665,7 +702,7 @@ export class ContentStore {
 
   /**
    * Deleting a property never deletes a page. A status hands its pages to
-   * another one, a type is cleared, and a tag drops its links.
+   * another one, a type drops its links, and a tag drops its links.
    */
   deleteProperty(kind: PropertyKind, id: string, moveToId: string | null = null) {
     return this.transaction(() => {
@@ -692,7 +729,7 @@ export class ContentStore {
         }
       }
       if (kind === "type")
-        this.db.prepare("UPDATE pages SET type_id = NULL WHERE type_id = ?").run(id);
+        this.db.prepare("DELETE FROM page_types WHERE type_id = ?").run(id);
       if (kind === "tag") this.db.prepare("DELETE FROM page_tags WHERE tag_id = ?").run(id);
       this.db.prepare(`DELETE FROM ${PROPERTY_TABLES[kind]} WHERE id = ?`).run(id);
       return { ok: true as const };

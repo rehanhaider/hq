@@ -55,7 +55,9 @@ type MovePatch = {
   id: string;
   orderedIds: string[];
   statusId?: string;
-  typeId?: string | null;
+  typeIds?: string[];
+  addTypeId?: string;
+  removeTypeId?: string;
   addTagId?: string;
   removeTagId?: string;
   tagIds?: string[];
@@ -205,7 +207,16 @@ export function ContentBoard() {
       orderedIds: sort === "manual" ? orderedIds : [],
     };
     if (group === "status" && target !== NONE) patch.statusId = target;
-    if (group === "type") patch.typeId = target === NONE ? null : target;
+    if (group === "type" && from !== target) {
+      // No type means no types at all. Dropping a card there while only
+      // dropping the column it came from would leave it in its other type
+      // columns and never in the one it was dragged to.
+      if (target === NONE) patch.typeIds = [];
+      else {
+        if (from && from !== NONE) patch.removeTypeId = from;
+        patch.addTypeId = target;
+      }
+    }
     if (group === "tag" && from !== target) {
       // Untagged means no tags at all. Dropping a card there while only
       // dropping the column it came from would leave it in its other tag
@@ -236,7 +247,7 @@ export function ContentBoard() {
         data: {
           title: "",
           statusId: group === "status" ? bucket.id : null,
-          typeId: group === "type" ? bucket.id : null,
+          typeIds: group === "type" && bucket.id ? [bucket.id] : [],
           tagIds: group === "tag" && bucket.id ? [bucket.id] : [],
         },
       });
@@ -434,7 +445,9 @@ function Card({
   overlay?: boolean;
   hint?: string;
 }) {
-  const type = byId(properties.types, page.typeId);
+  const types = page.typeIds
+    .map((id) => byId(properties.types, id))
+    .filter((type) => type !== undefined);
   return (
     <article
       className={`rounded-lg border bg-background p-2.5 text-left shadow-xs ${
@@ -455,13 +468,14 @@ function Card({
         <span className="block text-sm font-medium break-words">{displayPageTitle(page.title)}</span>
       </button>
       <div className="mt-1.5 flex flex-wrap items-center gap-1">
-        {type && (
+        {types.map((type) => (
           <span
+            key={type.id}
             className={`inline-flex max-w-full items-center rounded-md px-1.5 py-0.5 text-[0.7rem] font-medium ${chipClass(type.color)}`}
           >
             <span className="truncate">{type.name}</span>
           </span>
-        )}
+        ))}
         {page.tagIds
           .map((id) => byId(properties.tags, id))
           .filter((tag) => tag !== undefined)

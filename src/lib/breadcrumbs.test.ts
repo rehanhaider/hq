@@ -13,7 +13,7 @@ const page = (id: string, title: string, parentId: string | null): ContentPage =
   revision: 1,
   preview: "",
   statusId: null,
-  typeId: null,
+  typeIds: [],
   tagIds: [],
   position: 0,
 });

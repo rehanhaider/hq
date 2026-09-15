@@ -475,9 +475,9 @@ describe("content migration", () => {
     const pages = store.list();
     const first = store.properties().statuses[0]!;
     expect(first.name).toBe("Idea");
-    expect(pages.map((page) => [page.title, page.statusId, page.typeId, page.tagIds])).toEqual([
-      ["Older page", first.id, null, []],
-      ["Newer page", first.id, null, []],
+    expect(pages.map((page) => [page.title, page.statusId, page.typeIds, page.tagIds])).toEqual([
+      ["Older page", first.id, [], []],
+      ["Newer page", first.id, [], []],
     ]);
     // Oldest first, and distinct, so manual ordering starts from real order.
     expect(pages[0]!.position).toBeLessThan(pages[1]!.position);
@@ -495,6 +495,22 @@ describe("content migration", () => {
     store = new ContentStore(path);
     expect(store.properties().types).toEqual([]);
     expect(store.properties().statuses).toHaveLength(8);
+  });
+
+  it("carries a single-type database forward into the type links", () => {
+    directory = mkdtempSync(join(tmpdir(), "hq-content-"));
+    const path = join(directory, "content.sqlite");
+    store = new ContentStore(path);
+    const type = store.properties().types[0]!;
+    const page = store.create("Legacy");
+    store.setProperties({ id: page.id, typeIds: [type.id] });
+    // Simulate a database written before types became a link table.
+    store.db.exec("ALTER TABLE pages ADD COLUMN type_id TEXT REFERENCES types(id)");
+    store.db.prepare("UPDATE pages SET type_id = ? WHERE id = ?").run(type.id, page.id);
+    store.db.prepare("DELETE FROM page_types WHERE page_id = ?").run(page.id);
+    store.close();
+    store = new ContentStore(path);
+    expect(store.get(page.id)?.typeIds).toEqual([type.id]);
   });
 
   it("renames a Notes database, and its write-ahead log, on start", () => {
@@ -557,12 +573,12 @@ describe("content properties", () => {
     const tag = store.createProperty("tag", "series");
     const page = store.create("Episode");
     expect(
-      store.setProperties({ id: page.id, typeId: type.id, tagIds: [tag.id] }).ok,
+      store.setProperties({ id: page.id, typeIds: [type.id], tagIds: [tag.id] }).ok,
     ).toBe(true);
-    expect(store.get(page.id)).toMatchObject({ typeId: type.id, tagIds: [tag.id] });
+    expect(store.get(page.id)).toMatchObject({ typeIds: [type.id], tagIds: [tag.id] });
     expect(store.deleteProperty("type", type.id).ok).toBe(true);
     expect(store.deleteProperty("tag", tag.id).ok).toBe(true);
-    expect(store.get(page.id)).toMatchObject({ typeId: null, tagIds: [] });
+    expect(store.get(page.id)).toMatchObject({ typeIds: [], tagIds: [] });
   });
 
   it("saves properties without touching the document revision", () => {
@@ -577,13 +593,13 @@ describe("content properties", () => {
     expect(store.save({ id: page.id, title: "Draft", revision: page.revision, document: paragraph("still mine") }).ok).toBe(true);
   });
 
-  it("gives a subpage its parent's type and the first status", () => {
+  it("gives a subpage its parent's types and the first status", () => {
     store = new ContentStore(":memory:");
-    const type = store.properties().types[1]!;
+    const types = store.properties().types;
     const parent = store.create("Series");
-    store.setProperties({ id: parent.id, typeId: type.id });
+    store.setProperties({ id: parent.id, typeIds: [types[0]!.id, types[1]!.id] });
     const child = store.create("Episode 1", parent.id);
-    expect(child.typeId).toBe(type.id);
+    expect(child.typeIds).toEqual([types[0]!.id, types[1]!.id]);
     expect(child.statusId).toBe(store.properties().statuses[0]!.id);
   });
 
@@ -624,6 +640,56 @@ describe("content properties", () => {
     const reversed = [...statuses].reverse().map((status) => status.id);
     expect(store.reorderProperties("status", reversed).ok).toBe(true);
     expect(store.properties().statuses.map((status) => status.id)).toEqual(reversed);
+  });
+
+  it("saves two or more types on the same page", () => {
+    store = new ContentStore(":memory:");
+    const types = store.properties().types;
+    const page = store.create("Crossover");
+    expect(
+      store.setProperties({ id: page.id, typeIds: [types[0]!.id, types[1]!.id] }).ok,
+    ).toBe(true);
+    expect(store.get(page.id)?.typeIds).toEqual([types[0]!.id, types[1]!.id]);
+    expect(
+      store.setProperties({ id: page.id, typeIds: [types[1]!.id] }).ok,
+    ).toBe(true);
+    expect(store.get(page.id)?.typeIds).toEqual([types[1]!.id]);
+    expect(store.setProperties({ id: page.id, typeIds: [] }).ok).toBe(true);
+    expect(store.get(page.id)?.typeIds).toEqual([]);
+  });
+
+  it("drops unknown types instead of failing the write", () => {
+    store = new ContentStore(":memory:");
+    const type = store.properties().types[0]!;
+    const page = store.create("Crossover");
+    expect(
+      store.setProperties({ id: page.id, typeIds: [type.id, randomUUID()] }).ok,
+    ).toBe(true);
+    expect(store.get(page.id)?.typeIds).toEqual([type.id]);
+  });
+
+  it("keeps the other type when one of two is deleted", () => {
+    store = new ContentStore(":memory:");
+    const types = store.properties().types;
+    const page = store.create("Crossover");
+    store.setProperties({ id: page.id, typeIds: [types[0]!.id, types[1]!.id] });
+    expect(store.deleteProperty("type", types[0]!.id).ok).toBe(true);
+    expect(store.get(page.id)?.typeIds).toEqual([types[1]!.id]);
+  });
+
+  it("preserves the order types were saved in", () => {
+    store = new ContentStore(":memory:");
+    const types = [...store.properties().types].sort((a, b) =>
+      a.id.localeCompare(b.id),
+    );
+    const page = store.create("Crossover");
+    // Saved in reverse lexical order, so UUID order alone would flip it back.
+    store.setProperties({ id: page.id, typeIds: [types[1]!.id, types[0]!.id] });
+    expect(store.get(page.id)?.typeIds).toEqual([types[1]!.id, types[0]!.id]);
+    expect(store.list().find((entry) => entry.id === page.id)?.typeIds).toEqual([
+      types[1]!.id,
+      types[0]!.id,
+    ]);
   });
 });
 
@@ -702,7 +768,7 @@ describe("board moves", () => {
     store = new ContentStore(":memory:");
     const [, planned] = store.properties().statuses;
     const tag = store.createProperty("tag", "stream");
-    const page = store.create("Crossover", null, undefined, null, null, [tag.id]);
+    const page = store.create("Crossover", null, undefined, null, [], [tag.id]);
     // The destination tag is gone, so nothing about this move may land — least
     // of all the removal of the tag the card was dragged out of.
     expect(
@@ -722,7 +788,7 @@ describe("board moves", () => {
     store = new ContentStore(":memory:");
     const one = store.createProperty("tag", "stream");
     const two = store.createProperty("tag", "article");
-    const page = store.create("Crossover", null, undefined, null, null, [one.id, two.id]);
+    const page = store.create("Crossover", null, undefined, null, [], [one.id, two.id]);
     expect(store.moveCard({ id: page.id, tagIds: [] }).ok).toBe(true);
     expect(store.get(page.id)?.tagIds).toEqual([]);
   });
@@ -747,5 +813,40 @@ describe("board moves", () => {
       store.moveCard({ id: page.id, removeTagId: from.id, addTagId: to.id }).ok,
     ).toBe(true);
     expect(store.get(page.id)?.tagIds).toEqual([to.id]);
+  });
+
+  it("adds and removes a type when a card is dragged between type columns", () => {
+    store = new ContentStore(":memory:");
+    const types = store.properties().types;
+    const page = store.create("Crossover");
+    store.setProperties({ id: page.id, typeIds: [types[0]!.id] });
+    expect(
+      store.moveCard({ id: page.id, removeTypeId: types[0]!.id, addTypeId: types[1]!.id })
+        .ok,
+    ).toBe(true);
+    expect(store.get(page.id)?.typeIds).toEqual([types[1]!.id]);
+  });
+
+  it("clears every type when a card is dropped on No type", () => {
+    store = new ContentStore(":memory:");
+    const types = store.properties().types;
+    const page = store.create("Crossover", null, undefined, null, [
+      types[0]!.id,
+      types[1]!.id,
+    ]);
+    expect(store.moveCard({ id: page.id, typeIds: [] }).ok).toBe(true);
+    expect(store.get(page.id)?.typeIds).toEqual([]);
+  });
+
+  it("rejects a move to a type that does not exist", () => {
+    store = new ContentStore(":memory:");
+    const types = store.properties().types;
+    const page = store.create("Crossover");
+    store.setProperties({ id: page.id, typeIds: [types[0]!.id] });
+    expect(store.moveCard({ id: page.id, addTypeId: randomUUID() })).toMatchObject({
+      ok: false,
+      code: "unknown-type",
+    });
+    expect(store.get(page.id)?.typeIds).toEqual([types[0]!.id]);
   });
 });
