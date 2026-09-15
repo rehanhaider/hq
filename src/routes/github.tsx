@@ -34,15 +34,11 @@ export const Route = createFileRoute("/github")({
   loader: ({ context, deps }) => {
     if (deps.view === "connections" || deps.view === "projects")
       return context.queryClient.ensureQueryData(connectionsQuery);
-    if (deps.view === "work")
-      return context.queryClient.ensureQueryData(openWorkQuery);
-    // The action Overview pairs live work with period figures, so it warms
-    // both; Statistics and history only need the figures.
-    if (deps.view === "overview")
-      return Promise.all([
-        context.queryClient.ensureQueryData(dashboardQuery(deps)),
-        context.queryClient.ensureQueryData(openWorkQuery),
-      ]);
+    // Open work is a live GitHub sweep that can take tens of seconds when
+    // the server has no copy yet. Start it, but never hold the page on it:
+    // Work and Overview render their own placeholders while it arrives.
+    void context.queryClient.prefetchQuery(openWorkQuery);
+    if (deps.view === "work") return;
     return context.queryClient.ensureQueryData(dashboardQuery(deps));
   },
   component: Dashboard,
