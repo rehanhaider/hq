@@ -230,10 +230,23 @@ export function ContentEditor({
             block.type === "paragraph" &&
             isEmptyParagraphContent(block.content),
         });
-        const tweet = { type: "tweet" as const, props: { url: plan.url } };
         if (after.kind === "ignore") return defaultPasteHandler();
-        if (after.kind === "replace") current.replaceBlocks([block], [tweet]);
-        else current.insertBlocks([tweet], block, "after");
+        if (after.kind === "replace") {
+          // replaceBlocks would drop indented children unless they travel with the tweet.
+          current.replaceBlocks([block], [
+            {
+              type: "tweet" as const,
+              props: { url: plan.url },
+              children: block.children,
+            },
+          ]);
+        } else {
+          current.insertBlocks(
+            [{ type: "tweet" as const, props: { url: plan.url } }],
+            block,
+            "after",
+          );
+        }
         return true;
       } catch {
         return defaultPasteHandler();
