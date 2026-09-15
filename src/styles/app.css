@@ -290,13 +290,19 @@
   }
 }
 
-/* Twitter's widget is a 550px iframe. Keep it on the text column instead of
-   stretching with the editor. */
+/* Twitter's widget is a 250–550px iframe sized to its parent. BlockNote's
+   `.bn-block-content` is a flex row, so a max-width-only wrapper shrinks to
+   the loading label and the embed paints at 250px. Pin the wrapper to
+   Twitter's max so the widget can use it, and still shrink on narrow pages. */
 .content-editor-shell .tweet-embed {
-  max-width: 550px;
+  width: 550px;
+  max-width: 100%;
+  min-width: 0;
   margin-inline: auto;
 }
 .content-editor-shell .tweet-embed iframe {
+  width: 100% !important;
+  max-width: 100% !important;
   margin-inline: auto !important;
 }
 
