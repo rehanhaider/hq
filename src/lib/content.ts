@@ -55,7 +55,7 @@ export type ContentPage = {
   revision: number;
   preview: string;
   statusId: string | null;
-  typeId: string | null;
+  typeIds: string[];
   tagIds: string[];
   /** Manual order within a board column. */
   position: number;
@@ -130,7 +130,7 @@ export const createPageSchema = z.object({
   title: pageTitleSchema.optional().default(""),
   parentId: idSchema.nullable().optional().default(null),
   statusId: idSchema.nullable().optional().default(null),
-  typeId: idSchema.nullable().optional().default(null),
+  typeIds: z.array(idSchema).max(60).optional().default([]),
   tagIds: z.array(idSchema).max(60).optional().default([]),
   document: z
     .custom<ContentBlock[]>(validateContentDocument, {
@@ -154,7 +154,7 @@ export const changePageStateSchema = z.object({
 export const setPagePropertiesSchema = z.object({
   id: idSchema,
   statusId: idSchema.optional(),
-  typeId: idSchema.nullable().optional(),
+  typeIds: z.array(idSchema).max(60).optional(),
   tagIds: z.array(idSchema).max(60).optional(),
 });
 
@@ -166,9 +166,12 @@ export const setPagePropertiesSchema = z.object({
 export const movePageCardSchema = z.object({
   id: idSchema,
   statusId: idSchema.optional(),
-  typeId: idSchema.nullable().optional(),
+  addTypeId: idSchema.optional(),
+  removeTypeId: idSchema.optional(),
   addTagId: idSchema.optional(),
   removeTagId: idSchema.optional(),
+  /** The page's whole type list, for a drop that is not one type's worth. */
+  typeIds: z.array(idSchema).max(60).optional(),
   /** The page's whole tag list, for a drop that is not one tag's worth. */
   tagIds: z.array(idSchema).max(60).optional(),
   orderedIds: z.array(idSchema).max(1_000).optional().default([]),
@@ -500,7 +503,7 @@ export function filterPages(
     (page) =>
       (!q || displayPageTitle(page.title).toLowerCase().includes(q)) &&
       matchesEvery(search.status, (id) => page.statusId === id) &&
-      matchesEvery(search.type, (id) => page.typeId === id) &&
+      matchesEvery(search.type, (id) => page.typeIds.includes(id)) &&
       matchesEvery(search.tag, (id) => page.tagIds.includes(id)),
   );
 }
@@ -538,7 +541,7 @@ export function groupPages(
     group === "status"
       ? page.statusId === id
       : group === "type"
-        ? page.typeId === id
+        ? page.typeIds.includes(id)
         : page.tagIds.includes(id);
   const buckets: ContentGroupBucket[] = list.map((property) => ({
     id: property.id,
@@ -630,14 +633,16 @@ export function contentSummary(
     .slice(0, limit)
     .map((page) => {
       const status = page.statusId ? statuses.get(page.statusId) : undefined;
-      const type = page.typeId ? types.get(page.typeId) : undefined;
+      const names = page.typeIds
+        .map((id) => types.get(id)?.name)
+        .filter((name) => name !== undefined);
       return {
         id: page.id,
         title: displayPageTitle(page.title),
         updatedAt: page.updatedAt,
         status: status?.name ?? null,
         statusColor: status?.color ?? null,
-        type: type?.name ?? null,
+        type: names.length ? names.join(", ") : null,
       };
     });
   return { total: pages.length, counts, recent };

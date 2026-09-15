@@ -6,7 +6,7 @@ import { chipClass } from "./properties";
 
 export type PropertyPatch = {
   statusId?: string;
-  typeId?: string | null;
+  typeIds?: string[];
   tagIds?: string[];
 };
 
@@ -30,7 +30,9 @@ export function PropertyPanel({
   onCreateTag: (name: string) => Promise<string | null>;
 }) {
   const status = properties.statuses.find((entry) => entry.id === page.statusId);
-  const type = properties.types.find((entry) => entry.id === page.typeId);
+  const types = page.typeIds
+    .map((id) => properties.types.find((entry) => entry.id === id))
+    .filter((type) => type !== undefined);
   const tags = page.tagIds
     .map((id) => properties.tags.find((entry) => entry.id === id))
     .filter((tag) => tag !== undefined);
@@ -62,7 +64,17 @@ export function PropertyPanel({
         <Picker
           disabled={disabled}
           label="Type"
-          value={type ? <Pill property={type} /> : <Empty>Empty</Empty>}
+          value={
+            types.length === 0 ? (
+              <Empty>Empty</Empty>
+            ) : (
+              <span className="flex flex-wrap items-center gap-1">
+                {types.map((type) => (
+                  <Pill key={type.id} property={type} />
+                ))}
+              </span>
+            )
+          }
         >
           {(close) => (
             <>
@@ -70,19 +82,22 @@ export function PropertyPanel({
                 <Option
                   key={option.id}
                   property={option}
-                  selected={option.id === page.typeId}
+                  selected={page.typeIds.includes(option.id)}
                   onSelect={() => {
-                    onChange({ typeId: option.id === page.typeId ? null : option.id });
-                    close();
+                    onChange({
+                      typeIds: page.typeIds.includes(option.id)
+                        ? page.typeIds.filter((id) => id !== option.id)
+                        : [...page.typeIds, option.id],
+                    });
                   }}
                 />
               ))}
-              {page.typeId && (
+              {page.typeIds.length > 0 && (
                 <button
                   type="button"
                   className="flex min-h-8 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-muted-foreground hover:bg-muted"
                   onClick={() => {
-                    onChange({ typeId: null });
+                    onChange({ typeIds: [] });
                     close();
                   }}
                 >

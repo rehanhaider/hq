@@ -313,7 +313,12 @@ export function ContentWorkspace() {
   const applyProperties = async (patch: PropertyPatch) => {
     const current = draftRef.current;
     if (!current) return;
-    const next = { ...current, ...patch, tagIds: patch.tagIds ?? current.tagIds };
+    const next = {
+      ...current,
+      ...patch,
+      typeIds: patch.typeIds ?? current.typeIds,
+      tagIds: patch.tagIds ?? current.tagIds,
+    };
     draftRef.current = next;
     setDraft(next);
     // Only the properties this request set, and only while they are still the
@@ -326,8 +331,8 @@ export function ContentWorkspace() {
       const restored = { ...latest };
       if (patch.statusId !== undefined && latest.statusId === next.statusId)
         restored.statusId = current.statusId;
-      if (patch.typeId !== undefined && latest.typeId === next.typeId)
-        restored.typeId = current.typeId;
+      if (patch.typeIds !== undefined && latest.typeIds.join() === next.typeIds.join())
+        restored.typeIds = current.typeIds;
       if (patch.tagIds !== undefined && latest.tagIds.join() === next.tagIds.join())
         restored.tagIds = current.tagIds;
       draftRef.current = restored;

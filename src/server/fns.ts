@@ -145,7 +145,7 @@ export const createPage = createServerFn({ method: "POST" })
       data.parentId,
       data.document,
       data.statusId,
-      data.typeId,
+      data.typeIds,
       data.tagIds,
     ),
   );
