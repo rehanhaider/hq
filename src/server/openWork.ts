@@ -7,6 +7,7 @@ import {
   sweepQueries,
 } from "../lib/openWork";
 import type { OpenWork, WorkItem } from "../lib/openWork";
+import { getStore } from "./db";
 import { github, type GithubClient } from "./github";
 
 /**
@@ -102,6 +103,62 @@ async function pool<T, R>(
     }),
   );
   return out;
+}
+
+/**
+ * The whole feed is served stale-while-revalidate. A sweep costs a dozen
+ * search round trips and ten to thirty seconds on the Pi, so a page should
+ * never wait on one: whatever was last assembled is returned at once, and a
+ * fresh sweep runs behind it when the copy is older than FEED_TTL. The last
+ * result is also kept in SQLite so a restart does not start from cold.
+ */
+export const FEED_TTL = 5 * 60000;
+const FEED_KEY = "openWork";
+let feed: Cached<OpenWork> | null | undefined;
+let sweeping: Promise<OpenWork> | null = null;
+
+function storedFeed(): Cached<OpenWork> | null {
+  if (feed !== undefined) return feed;
+  const saved = getStore().read<OpenWork>(FEED_KEY);
+  feed = saved ? { at: Date.parse(saved.fetchedAt), value: saved } : null;
+  return feed;
+}
+
+function sweep(): Promise<OpenWork> {
+  if (sweeping) return sweeping;
+  sweeping = loadOpenWork()
+    .then((value) => {
+      // A run that could not even log in tells us nothing new; keep the
+      // last good copy rather than replace it with an empty one.
+      if (value.connected || !storedFeed()) {
+        feed = { at: Date.now(), value };
+        getStore().write(FEED_KEY, value);
+      }
+      return value;
+    })
+    .finally(() => {
+      sweeping = null;
+    });
+  return sweeping;
+}
+
+export function feedIsFresh(now = Date.now()) {
+  const hit = storedFeed();
+  return Boolean(hit && now - hit.at < FEED_TTL);
+}
+
+/** Refresh in the background when the copy is stale; never throws. */
+export function warmOpenWork() {
+  if (feedIsFresh()) return;
+  void sweep().catch(() => {});
+}
+
+/** What the page reads: the cached feed if there is one, else a live sweep. */
+export async function openWork(): Promise<OpenWork> {
+  const hit = storedFeed();
+  if (!hit) return sweep();
+  warmOpenWork();
+  return hit.value;
 }
 
 export async function loadOpenWork(): Promise<OpenWork> {

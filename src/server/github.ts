@@ -59,6 +59,24 @@ const pullsSchema = z.object({
   }),
 });
 
+const retries = 3;
+const retryDelayMs = process.env.VITEST ? 1 : 1000;
+/** GitHub's edge answers these for a moment and then recovers. */
+const transientStatuses = new Set([500, 502, 503, 504]);
+
+/** The cause behind a thrown fetch, in a form worth reading in a status row. */
+function describeFetchError(error: unknown): string {
+  if (!(error instanceof Error)) return "unknown error";
+  if (error.name === "TimeoutError") return "no response within 60s";
+  const cause = error.cause;
+  if (cause && typeof cause === "object") {
+    const code = (cause as { code?: unknown }).code;
+    if (typeof code === "string") return code;
+    if (cause instanceof Error && cause.message) return cause.message;
+  }
+  return error.message || error.name;
+}
+
 export class GithubClient {
   constructor(private token: string) {
     if (!token)
@@ -67,22 +85,43 @@ export class GithubClient {
       );
   }
   async request(path: string, init?: RequestInit) {
-    let response: Response;
-    try {
-      response = await fetch(`https://api.github.com${path}`, {
-        ...init,
-        headers: {
-          Accept: "application/vnd.github+json",
-          Authorization: `Bearer ${this.token}`,
-          "X-GitHub-Api-Version": "2022-11-28",
-          "Content-Type": "application/json",
-        },
-        signal: AbortSignal.timeout(60000),
-        redirect: "error",
-      });
-    } catch {
-      throw new Error(
-        "Could not reach GitHub. Check the server connection and run the import again.",
+    // A home network drops the odd connection: DNS stalls, a kept-alive
+    // socket GitHub has already closed, a 502 from their edge. One such blip
+    // used to end a ninety-repository run, so transient failures are retried
+    // with a short back-off before they are reported.
+    let response: Response | undefined;
+    for (let attempt = 1; ; attempt++) {
+      let failure: string;
+      try {
+        response = await fetch(`https://api.github.com${path}`, {
+          ...init,
+          headers: {
+            Accept: "application/vnd.github+json",
+            Authorization: `Bearer ${this.token}`,
+            "X-GitHub-Api-Version": "2022-11-28",
+            "Content-Type": "application/json",
+          },
+          signal: AbortSignal.timeout(60000),
+          redirect: "error",
+        });
+        if (!transientStatuses.has(response.status)) break;
+        failure = `HTTP ${response.status}`;
+      } catch (error) {
+        response = undefined;
+        failure = describeFetchError(error);
+      }
+      console.error(
+        `GitHub ${init?.method ?? "GET"} ${path.split("?")[0]} failed (${failure}), attempt ${attempt} of ${retries}`,
+      );
+      if (attempt >= retries) {
+        // A server error that outlasted the retries is reported as one below.
+        if (response) break;
+        throw new Error(
+          `Could not reach GitHub (${failure}). Check the server connection and run the import again.`,
+        );
+      }
+      await new Promise((resolve) =>
+        setTimeout(resolve, retryDelayMs * 2 ** (attempt - 1)),
       );
     }
     if (!response.ok) {
