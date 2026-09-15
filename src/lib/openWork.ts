@@ -350,3 +350,47 @@ export function arrangeWork(items: WorkItem[], view: WorkView) {
   }
   return { total: matched.length, shown: shown.length, groups: [...groups.values()] };
 }
+
+/**
+ * Which repository cards the Work view has folded shut. The list is the
+ * memory; the view only asks whether a name is in it. Sibling to the pane
+ * preference — same localStorage home, different key.
+ */
+export const COLLAPSED_REPOS_KEY = "hq:work-collapsed-repos";
+
+type StorageLike = Pick<Storage, "getItem" | "setItem">;
+
+/** Names that should render folded; anything else stays open. */
+export function readCollapsedRepos(storage?: StorageLike | null): string[] {
+  try {
+    const raw = storage?.getItem(COLLAPSED_REPOS_KEY);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((entry): entry is string => typeof entry === "string");
+  } catch {
+    return [];
+  }
+}
+
+export function writeCollapsedRepos(
+  repos: readonly string[],
+  storage?: StorageLike | null,
+) {
+  try {
+    storage?.setItem(COLLAPSED_REPOS_KEY, JSON.stringify([...repos]));
+  } catch {
+    /* nothing to remember it with */
+  }
+}
+
+/** Fold or unfold one repository; order is stable for the stored list. */
+export function toggleCollapsedRepo(
+  collapsed: readonly string[],
+  repo: string,
+): string[] {
+  const next = new Set(collapsed);
+  if (next.has(repo)) next.delete(repo);
+  else next.add(repo);
+  return [...next].sort((a, b) => a.localeCompare(b));
+}

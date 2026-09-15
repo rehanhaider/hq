@@ -15,6 +15,10 @@ import {
   tabItems,
   showsAuthor,
   searchResponseSchema,
+  COLLAPSED_REPOS_KEY,
+  readCollapsedRepos,
+  writeCollapsedRepos,
+  toggleCollapsedRepo,
 } from "./openWork";
 import type { SearchItem, WorkItem } from "./openWork";
 
@@ -280,5 +284,60 @@ describe("showsAuthor", () => {
   });
   it("keeps the opener on Mine when the signed-in login is unknown", () => {
     expect(showsAuthor(item({ author: "them" }), "mine")).toBe(true);
+  });
+});
+
+describe("collapsed repository cards", () => {
+  function memory(): Storage {
+    const data = new Map<string, string>();
+    return {
+      get length() {
+        return data.size;
+      },
+      clear: () => data.clear(),
+      getItem: (key) => data.get(key) ?? null,
+      key: (index) => [...data.keys()][index] ?? null,
+      removeItem: (key) => {
+        data.delete(key);
+      },
+      setItem: (key, value) => {
+        data.set(key, value);
+      },
+    };
+  }
+
+  it("starts empty when nothing is stored", () => {
+    expect(readCollapsedRepos(memory())).toEqual([]);
+    expect(readCollapsedRepos(null)).toEqual([]);
+  });
+
+  it("round-trips the folded names through storage", () => {
+    const store = memory();
+    writeCollapsedRepos(["me/hq", "me/app"], store);
+    expect(store.getItem(COLLAPSED_REPOS_KEY)).toBe(
+      JSON.stringify(["me/hq", "me/app"]),
+    );
+    expect(readCollapsedRepos(store)).toEqual(["me/hq", "me/app"]);
+  });
+
+  it("ignores a corrupt or non-array payload", () => {
+    const store = memory();
+    store.setItem(COLLAPSED_REPOS_KEY, "{");
+    expect(readCollapsedRepos(store)).toEqual([]);
+    store.setItem(COLLAPSED_REPOS_KEY, JSON.stringify({ repo: "me/app" }));
+    expect(readCollapsedRepos(store)).toEqual([]);
+    store.setItem(COLLAPSED_REPOS_KEY, JSON.stringify(["me/app", 3, null]));
+    expect(readCollapsedRepos(store)).toEqual(["me/app"]);
+  });
+
+  it("folds and unfolds one repository without disturbing the others", () => {
+    expect(toggleCollapsedRepo([], "me/app")).toEqual(["me/app"]);
+    expect(toggleCollapsedRepo(["me/app", "me/hq"], "me/app")).toEqual([
+      "me/hq",
+    ]);
+    expect(toggleCollapsedRepo(["me/hq"], "me/app")).toEqual([
+      "me/app",
+      "me/hq",
+    ]);
   });
 });
