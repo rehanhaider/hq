@@ -46,6 +46,7 @@ import {
   filterPages,
   hasFilters,
   persistedPageTitle,
+  splitTagNames,
   type ContentBlock,
   type ContentPage,
   type ContentProperties,
@@ -493,11 +494,24 @@ export function ContentWorkspace() {
     }
   };
 
-  const addTag = async (name: string) => {
+  const addTag = async (name: string): Promise<string[] | null> => {
+    const names = splitTagNames(name);
+    if (!names.length) return null;
     try {
-      const created = await createContentProperty({ data: { kind: "tag", name } });
+      const ids: string[] = [];
+      for (const entry of names) {
+        const created = (await createContentProperty({
+          data: { kind: "tag", name: entry },
+        })) as { ok?: boolean; id?: string; ids?: string[] };
+        if (created.ok === false) {
+          setActionError("The tag could not be created.");
+          return null;
+        }
+        const all = created.ids ?? (created.id ? [created.id] : []);
+        for (const id of all) if (!ids.includes(id)) ids.push(id);
+      }
       await invalidateContent(queryClient, contentKeys.properties);
-      return created.id;
+      return ids.length ? ids : null;
     } catch {
       setActionError("The tag could not be created.");
       return null;

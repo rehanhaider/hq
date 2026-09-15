@@ -96,6 +96,18 @@ export const propertyNameSchema = z.string().trim().min(1).max(60);
 export const propertyKindSchema = z.enum(PROPERTY_KINDS);
 export const propertyColorSchema = z.enum(PROPERTY_COLORS);
 
+/**
+ * Splits a tag input into individual names. Commas, semicolons, and colons
+ * all separate tags, so `foo, bar` or `foo;bar` becomes two tags. Each piece
+ * is trimmed and empty pieces are dropped.
+ */
+export function splitTagNames(input: string): string[] {
+  return input
+    .split(/[,;:]/)
+    .map((piece) => piece.trim())
+    .filter((piece) => piece.length > 0);
+}
+
 export const SORTS = ["manual", "updated", "created", "title"] as const;
 export type ContentSort = (typeof SORTS)[number];
 export const GROUPS = PROPERTY_KINDS;

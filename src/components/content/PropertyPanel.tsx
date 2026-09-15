@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Check, CircleDashed, Plus, Shapes, Tag as TagIcon, X } from "lucide-react";
 import { cn } from "cn";
-import type { ContentPage, ContentProperties, Property } from "@/lib/content";
+import {
+  splitTagNames,
+  type ContentPage,
+  type ContentProperties,
+  type Property,
+} from "@/lib/content";
 import { chipClass } from "./properties";
 
 export type PropertyPatch = {
@@ -27,7 +32,7 @@ export function PropertyPanel({
   properties: ContentProperties;
   disabled?: boolean;
   onChange: (patch: PropertyPatch) => void;
-  onCreateTag: (name: string) => Promise<string | null>;
+  onCreateTag: (name: string) => Promise<string[] | null>;
 }) {
   const status = properties.statuses.find((entry) => entry.id === page.statusId);
   const types = page.typeIds
@@ -257,17 +262,19 @@ function TagPicker({
   tags: Property[];
   disabled: boolean;
   onChange: (patch: PropertyPatch) => void;
-  onCreateTag: (name: string) => Promise<string | null>;
+  onCreateTag: (name: string) => Promise<string[] | null>;
 }) {
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const term = query.trim();
+  const names = splitTagNames(term);
+  const multi = names.length > 1;
   const matches = properties.tags.filter((tag) =>
     tag.name.toLowerCase().includes(term.toLowerCase()),
   );
-  const exact = properties.tags.find(
-    (tag) => tag.name.toLowerCase() === term.toLowerCase(),
-  );
+  const exact = multi
+    ? undefined
+    : properties.tags.find((tag) => tag.name.toLowerCase() === term.toLowerCase());
 
   const toggle = (id: string) =>
     onChange({
@@ -280,8 +287,11 @@ function TagPicker({
     if (!term || busy) return;
     setBusy(true);
     try {
-      const id = await onCreateTag(term);
-      if (id && !page.tagIds.includes(id)) onChange({ tagIds: [...page.tagIds, id] });
+      const ids = await onCreateTag(term);
+      if (ids?.length) {
+        const missing = ids.filter((id) => !page.tagIds.includes(id));
+        if (missing.length) onChange({ tagIds: [...page.tagIds, ...missing] });
+      }
       setQuery("");
     } finally {
       setBusy(false);
@@ -338,7 +348,8 @@ function TagPicker({
               disabled={busy}
               onClick={() => void create()}
             >
-              <Plus className="size-3.5" /> Create “{term}”
+              <Plus className="size-3.5" />{" "}
+              {multi ? `Create ${names.length} tags` : `Create “${term}”`}
             </button>
           )}
           {!matches.length && !term && (
