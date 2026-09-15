@@ -15,6 +15,13 @@ import {
   tabItems,
   showsAuthor,
   searchResponseSchema,
+  COLLAPSED_REPOS_KEY,
+  collapseAllRepos,
+  expandAllRepos,
+  readCollapsedRepos,
+  writeCollapsedRepos,
+  toggleCollapsedRepo,
+  visibleWorkRepos,
 } from "./openWork";
 import type { SearchItem, WorkItem } from "./openWork";
 
@@ -280,5 +287,136 @@ describe("showsAuthor", () => {
   });
   it("keeps the opener on Mine when the signed-in login is unknown", () => {
     expect(showsAuthor(item({ author: "them" }), "mine")).toBe(true);
+  });
+});
+
+describe("collapsed repository cards", () => {
+  function memory(): Storage {
+    const data = new Map<string, string>();
+    return {
+      get length() {
+        return data.size;
+      },
+      clear: () => data.clear(),
+      getItem: (key) => data.get(key) ?? null,
+      key: (index) => [...data.keys()][index] ?? null,
+      removeItem: (key) => {
+        data.delete(key);
+      },
+      setItem: (key, value) => {
+        data.set(key, value);
+      },
+    };
+  }
+
+  it("starts empty when nothing is stored", () => {
+    expect(readCollapsedRepos(memory())).toEqual([]);
+    expect(readCollapsedRepos(null)).toEqual([]);
+  });
+
+  it("round-trips the folded names through storage", () => {
+    const store = memory();
+    writeCollapsedRepos(["me/hq", "me/app"], store);
+    expect(store.getItem(COLLAPSED_REPOS_KEY)).toBe(
+      JSON.stringify(["me/hq", "me/app"]),
+    );
+    expect(readCollapsedRepos(store)).toEqual(["me/hq", "me/app"]);
+  });
+
+  it("ignores a corrupt or non-array payload", () => {
+    const store = memory();
+    store.setItem(COLLAPSED_REPOS_KEY, "{");
+    expect(readCollapsedRepos(store)).toEqual([]);
+    store.setItem(COLLAPSED_REPOS_KEY, JSON.stringify({ repo: "me/app" }));
+    expect(readCollapsedRepos(store)).toEqual([]);
+    store.setItem(COLLAPSED_REPOS_KEY, JSON.stringify(["me/app", 3, null]));
+    expect(readCollapsedRepos(store)).toEqual(["me/app"]);
+  });
+
+  it("folds and unfolds one repository without disturbing the others", () => {
+    expect(toggleCollapsedRepo([], "me/app")).toEqual(["me/app"]);
+    expect(toggleCollapsedRepo(["me/app", "me/hq"], "me/app")).toEqual([
+      "me/hq",
+    ]);
+    expect(toggleCollapsedRepo(["me/hq"], "me/app")).toEqual([
+      "me/app",
+      "me/hq",
+    ]);
+  });
+
+  it("folds every visible repository into the collapsed set", () => {
+    expect(collapseAllRepos([], ["me/app", "me/hq"])).toEqual([
+      "me/app",
+      "me/hq",
+    ]);
+    expect(collapseAllRepos(["me/old"], ["me/app", "me/hq"])).toEqual([
+      "me/app",
+      "me/hq",
+      "me/old",
+    ]);
+    expect(collapseAllRepos(["me/app"], ["me/app", "me/hq"])).toEqual([
+      "me/app",
+      "me/hq",
+    ]);
+  });
+
+  it("unfolds every visible repository and leaves the rest folded", () => {
+    expect(expandAllRepos(["me/app", "me/hq", "me/old"], ["me/app", "me/hq"])).toEqual([
+      "me/old",
+    ]);
+    expect(expandAllRepos(["me/old"], ["me/app"])).toEqual(["me/old"]);
+    expect(expandAllRepos(["me/app"], [])).toEqual(["me/app"]);
+    expect(expandAllRepos([], ["me/app"])).toEqual([]);
+  });
+
+  it("names the repositories currently arranged in the active panes", () => {
+    const kinds = {
+      issue: [
+        item({ id: 1, kind: "issue", repo: "me/app", updatedAt: "2024-06-02" }),
+        item({ id: 2, kind: "issue", repo: "me/hq", updatedAt: "2024-06-01" }),
+      ],
+      pr: [
+        item({
+          id: 3,
+          kind: "pr",
+          repo: "me/app",
+          updatedAt: "2024-06-03",
+          title: "Ship it",
+        }),
+        item({
+          id: 4,
+          kind: "pr",
+          repo: "them/other",
+          updatedAt: "2024-06-04",
+          title: "Elsewhere",
+        }),
+      ],
+    };
+    const views = {
+      issue: { repo: "all", search: "", sort: "recent" as const, limit: 50 },
+      pr: { repo: "all", search: "", sort: "recent" as const, limit: 50 },
+    };
+    expect(visibleWorkRepos(kinds, views, "both")).toEqual([
+      "me/app",
+      "me/hq",
+      "them/other",
+    ]);
+    expect(visibleWorkRepos(kinds, views, "issue")).toEqual(["me/app", "me/hq"]);
+    expect(visibleWorkRepos(kinds, views, "pr")).toEqual([
+      "me/app",
+      "them/other",
+    ]);
+    expect(
+      visibleWorkRepos(kinds, {
+        ...views,
+        issue: { ...views.issue, repo: "me/hq" },
+      }, "both"),
+    ).toEqual(["me/app", "me/hq", "them/other"]);
+    expect(
+      visibleWorkRepos(kinds, {
+        ...views,
+        pr: { ...views.pr, limit: 1 },
+      }, "pr"),
+    ).toEqual(["them/other"]);
   });
 });

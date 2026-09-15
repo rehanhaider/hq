@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowUpRight,
+  ChevronDown,
+  ChevronsDownUp,
+  ChevronsUpDown,
   CircleAlert,
   CircleDot,
   GitPullRequest,
@@ -16,13 +19,19 @@ import { openWorkQuery } from "@/queries/dashboard";
 import {
   age,
   arrangeWork,
+  collapseAllRepos,
+  expandAllRepos,
+  readCollapsedRepos,
   repoOptions,
   splitByKind,
   tabCounts,
   tabItems,
   showsAuthor,
+  toggleCollapsedRepo,
+  visibleWorkRepos,
+  writeCollapsedRepos,
 } from "@/lib/openWork";
-import type { WorkItem, WorkKind, WorkSort, WorkTab } from "@/lib/openWork";
+import type { WorkGroup, WorkItem, WorkKind, WorkSort, WorkTab } from "@/lib/openWork";
 import { cn } from "@/lib/utils";
 
 /** One screenful, per pane. 166 rows at once is a wall, not a list. */
@@ -50,6 +59,14 @@ function readPane(): Pane {
   return "both";
 }
 
+function storage(): Storage | null {
+  try {
+    return localStorage;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * The GitHub module's Work view: what is mine, and what nobody has taken. The
  * tab picks the list, the row below narrows it, and the list itself is two
@@ -65,6 +82,7 @@ export function OpenWork() {
   const [sort, setSort] = useState<WorkSort>("recent");
   const [limits, setLimits] = useState({ issue: PAGE, pr: PAGE });
   const [pane, setPane] = useState<Pane>("both");
+  const [collapsedRepos, setCollapsedRepos] = useState<string[]>([]);
   const [restored, setRestored] = useState(false);
   // A clock, so "Updated 12s ago" is true a minute after it was rendered.
   const [, tick] = useState(0);
@@ -73,7 +91,9 @@ export function OpenWork() {
     return () => clearInterval(timer);
   }, []);
   useEffect(() => {
+    const store = storage();
     setPane(readPane());
+    setCollapsedRepos(readCollapsedRepos(store));
     setRestored(true);
   }, []);
   useEffect(() => {
@@ -84,6 +104,17 @@ export function OpenWork() {
       /* nothing to remember it with */
     }
   }, [pane, restored]);
+  useEffect(() => {
+    if (!restored) return;
+    writeCollapsedRepos(collapsedRepos, storage());
+  }, [collapsedRepos, restored]);
+  const collapsed = useMemo(
+    () => new Set(collapsedRepos),
+    [collapsedRepos],
+  );
+  const toggleRepo = (repo: string) => {
+    setCollapsedRepos((current) => toggleCollapsedRepo(current, repo));
+  };
 
   const items = data ? tabItems(data, tab) : emptyItems;
   // The repository list is counted through every filter but the repository
@@ -106,6 +137,16 @@ export function OpenWork() {
     }),
     [repo, search, sort, limits],
   );
+  const visibleRepos = useMemo(
+    () => visibleWorkRepos(kinds, views, pane),
+    [kinds, views, pane],
+  );
+  const collapseAll = () => {
+    setCollapsedRepos((current) => collapseAllRepos(current, visibleRepos));
+  };
+  const expandAll = () => {
+    setCollapsedRepos((current) => expandAllRepos(current, visibleRepos));
+  };
 
   function narrow<T>(set: (value: T) => void) {
     return (value: T) => {
@@ -227,6 +268,30 @@ export function OpenWork() {
               <option value="recent">Recently updated</option>
               <option value="oldest">Oldest</option>
             </select>
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={visibleRepos.length === 0}
+                onClick={expandAll}
+                aria-label="Expand all repository cards"
+              >
+                <ChevronsUpDown />
+                Expand all
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={visibleRepos.length === 0}
+                onClick={collapseAll}
+                aria-label="Collapse all repository cards"
+              >
+                <ChevronsDownUp />
+                Collapse all
+              </Button>
+            </div>
           </div>
 
           <div className="work-panes" data-pane={pane}>
@@ -240,6 +305,8 @@ export function OpenWork() {
                 tab={tab}
                 login={data?.login}
                 view={views[entry.kind]}
+                collapsed={collapsed}
+                onToggleRepo={toggleRepo}
                 expanded={pane === entry.kind}
                 railed={pane !== "both" && pane !== entry.kind}
                 open={(pane === "pr" ? "pr" : "issue") === entry.kind}
@@ -272,6 +339,8 @@ function Pane({
   tab,
   login,
   view,
+  collapsed,
+  onToggleRepo,
   expanded,
   railed,
   open,
@@ -285,6 +354,8 @@ function Pane({
   tab: WorkTab;
   login?: string;
   view: { repo: string; search: string; sort: WorkSort; limit: number };
+  collapsed: ReadonlySet<string>;
+  onToggleRepo: (repo: string) => void;
   expanded: boolean;
   railed: boolean;
   open: boolean;
@@ -356,28 +427,14 @@ function Pane({
           <>
             <div className="space-y-3">
               {groups.map((group) => (
-                <section
+                <RepoCard
                   key={group.repo}
-                  aria-label={group.repo}
-                  className="min-w-0 overflow-hidden rounded-xl border bg-muted/30"
-                >
-                  <div className="flex items-center gap-2.5 px-3 py-2.5">
-                    <OrgAvatar repo={group.repo} />
-                    <RepoName repo={group.repo} />
-                    <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground tabular-nums">
-                      {group.items.length}
-                    </span>
-                  </div>
-                  <ul className="min-w-0 px-1.5 pb-1.5">
-                    {group.items.map((item) => (
-                      <Row
-                        key={item.id}
-                        item={item}
-                        showAuthor={showsAuthor(item, tab, login)}
-                      />
-                    ))}
-                  </ul>
-                </section>
+                  group={group}
+                  tab={tab}
+                  login={login}
+                  folded={collapsed.has(group.repo)}
+                  onToggle={() => onToggleRepo(group.repo)}
+                />
               ))}
             </div>
             {total > shown ? (
@@ -398,16 +455,75 @@ function Pane({
   );
 }
 
+/**
+ * One repository inside a pane. The header always names it and shows how many
+ * rows it holds; the list underneath folds away when the card is collapsed.
+ */
+function RepoCard({
+  group,
+  tab,
+  login,
+  folded,
+  onToggle,
+}: {
+  group: WorkGroup;
+  tab: WorkTab;
+  login?: string;
+  folded: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <section
+      aria-label={group.repo}
+      className="min-w-0 overflow-hidden rounded-xl border bg-muted/30"
+    >
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={!folded}
+        className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left hover:bg-muted/50"
+      >
+        <OrgAvatar repo={group.repo} />
+        <RepoName repo={group.repo} />
+        <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground tabular-nums">
+          {group.items.length}
+        </span>
+        <ChevronDown
+          className={cn(
+            "ml-auto size-3.5 shrink-0 text-muted-foreground transition-transform",
+            folded && "-rotate-90",
+          )}
+          aria-hidden
+        />
+        <span className="sr-only">
+          {folded ? `Expand ${group.repo}` : `Collapse ${group.repo}`}
+        </span>
+      </button>
+      {folded ? null : (
+        <ul className="min-w-0 px-1.5 pb-1.5">
+          {group.items.map((item) => (
+            <Row
+              key={item.id}
+              item={item}
+              showAuthor={showsAuthor(item, tab, login)}
+            />
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 /** The org stays quiet so the repository name reads first. */
 function RepoName({ repo }: { repo: string }) {
   const slash = repo.indexOf("/");
   const org = slash < 0 ? null : repo.slice(0, slash);
   const name = slash < 0 ? repo : repo.slice(slash + 1);
   return (
-    <h3 className="min-w-0 flex-1 truncate text-sm">
+    <span className="min-w-0 flex-1 truncate text-sm">
       {org ? <span className="text-muted-foreground">{org}/</span> : null}
       <span className="font-semibold">{name}</span>
-    </h3>
+    </span>
   );
 }
 
