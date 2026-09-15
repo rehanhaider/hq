@@ -317,6 +317,9 @@ export function ContentWorkspace() {
   const searching = Boolean(search.q) || hasFilters({ ...search, q: undefined });
   const [localPages, setLocalPages] = useState<ContentPage[] | null>(null);
   const [draggedId, setDraggedId] = useState<string | null>(null);
+  // Reorder commits run one at a time, in drag order: two quick drags would
+  // otherwise race and the earlier drag's order could land last in SQLite.
+  const orderChain = useRef<Promise<void>>(Promise.resolve());
   const rows = useMemo(() => {
     const pages = filterPages(localPages ?? list.data ?? [], {
       status: search.status,
@@ -335,14 +338,15 @@ export function ContentWorkspace() {
   );
 
   const commitOrder = async (id: string, orderedIds: string[]) => {
+    // Total: never rejects, so the serialized chain behind it cannot stall.
     try {
       const result = await movePage({ data: { id, orderedIds } });
       if (!result.ok) setActionError("That page could not be moved. The list has been refreshed.");
       else setActionError("");
+      await invalidateContent(queryClient);
     } catch {
       setActionError("That page could not be moved. The list has been refreshed.");
     }
-    await invalidateContent(queryClient);
     setLocalPages(null);
   };
 
@@ -380,7 +384,7 @@ export function ContentWorkspace() {
     const orderOf = new Map(orderedIds.map((id, index) => [id, slots[index]!]));
     setLocalPages(source.map((page) => (orderOf.has(page.id) ? { ...page, order: orderOf.get(page.id)! } : page)));
     setActionError("");
-    void commitOrder(activeId, orderedIds);
+    orderChain.current = orderChain.current.then(() => commitOrder(activeId, orderedIds));
   };
 
   const updateSearch = (patch: ToolbarPatch) =>
@@ -857,7 +861,7 @@ function SortablePageRow({
   onSelect: (id: string) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: page.id });
+    useSortable({ id: page.id, disabled });
   return (
     <div
       ref={setNodeRef}
