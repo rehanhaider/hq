@@ -3,6 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import {
   ArrowUpRight,
   ChevronDown,
+  ChevronsDownUp,
+  ChevronsUpDown,
   CircleAlert,
   CircleDot,
   GitPullRequest,
@@ -17,6 +19,8 @@ import { openWorkQuery } from "@/queries/dashboard";
 import {
   age,
   arrangeWork,
+  collapseAllRepos,
+  expandAllRepos,
   readCollapsedRepos,
   repoOptions,
   splitByKind,
@@ -24,6 +28,7 @@ import {
   tabItems,
   showsAuthor,
   toggleCollapsedRepo,
+  visibleWorkRepos,
   writeCollapsedRepos,
 } from "@/lib/openWork";
 import type { WorkGroup, WorkItem, WorkKind, WorkSort, WorkTab } from "@/lib/openWork";
@@ -132,6 +137,16 @@ export function OpenWork() {
     }),
     [repo, search, sort, limits],
   );
+  const visibleRepos = useMemo(
+    () => visibleWorkRepos(kinds, views, pane),
+    [kinds, views, pane],
+  );
+  const collapseAll = () => {
+    setCollapsedRepos((current) => collapseAllRepos(current, visibleRepos));
+  };
+  const expandAll = () => {
+    setCollapsedRepos((current) => expandAllRepos(current, visibleRepos));
+  };
 
   function narrow<T>(set: (value: T) => void) {
     return (value: T) => {
@@ -253,6 +268,30 @@ export function OpenWork() {
               <option value="recent">Recently updated</option>
               <option value="oldest">Oldest</option>
             </select>
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={visibleRepos.length === 0}
+                onClick={expandAll}
+                aria-label="Expand all repository cards"
+              >
+                <ChevronsUpDown />
+                Expand all
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={visibleRepos.length === 0}
+                onClick={collapseAll}
+                aria-label="Collapse all repository cards"
+              >
+                <ChevronsDownUp />
+                Collapse all
+              </Button>
+            </div>
           </div>
 
           <div className="work-panes" data-pane={pane}>

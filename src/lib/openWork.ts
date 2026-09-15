@@ -394,3 +394,42 @@ export function toggleCollapsedRepo(
   else next.add(repo);
   return [...next].sort((a, b) => a.localeCompare(b));
 }
+
+/** Fold every visible repository into the collapsed set; others stay as they were. */
+export function collapseAllRepos(
+  collapsed: readonly string[],
+  visible: readonly string[],
+): string[] {
+  const next = new Set(collapsed);
+  for (const repo of visible) next.add(repo);
+  return [...next].sort((a, b) => a.localeCompare(b));
+}
+
+/** Unfold every visible repository; collapsed names not on screen stay collapsed. */
+export function expandAllRepos(
+  collapsed: readonly string[],
+  visible: readonly string[],
+): string[] {
+  if (visible.length === 0) return [...collapsed];
+  const open = new Set(visible);
+  return collapsed.filter((repo) => !open.has(repo));
+}
+
+/**
+ * Repository names currently on screen in the active Work panes — the same
+ * groups arrangeWork hands each pane after filters and limits.
+ */
+export function visibleWorkRepos(
+  kinds: Record<WorkKind, readonly WorkItem[]>,
+  views: Record<WorkKind, WorkView>,
+  pane: "both" | WorkKind,
+): string[] {
+  const active: WorkKind[] = pane === "both" ? ["issue", "pr"] : [pane];
+  const names = new Set<string>();
+  for (const kind of active) {
+    for (const group of arrangeWork([...kinds[kind]], views[kind]).groups) {
+      names.add(group.repo);
+    }
+  }
+  return [...names].sort((a, b) => a.localeCompare(b));
+}
