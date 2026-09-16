@@ -62,6 +62,7 @@ export function ActivityFilters({
           {[1, 2].map((weeks) => (
             <Button
               key={`week-${weeks}`}
+              size="sm"
               aria-label={`${weeks} week${weeks === 1 ? "" : "s"}`}
               aria-pressed={filters.from === weekFrom(weeks)}
               variant={filters.from === weekFrom(weeks) ? "outline" : "ghost"}
@@ -76,6 +77,7 @@ export function ActivityFilters({
           {[1, 3, 6, 12].map((m) => (
             <Button
               key={m}
+              size="sm"
               aria-label={rangeLabel(m)}
               aria-pressed={active === m}
               variant={active === m ? "outline" : "ghost"}
@@ -85,6 +87,7 @@ export function ActivityFilters({
             </Button>
           ))}
           <Button
+            size="sm"
             variant={active && active > 12 ? "outline" : "ghost"}
             aria-expanded={open}
             aria-controls="date-options"
@@ -98,7 +101,7 @@ export function ActivityFilters({
           <Button
             variant="ghost"
             size="sm"
-            className="h-auto max-w-full justify-start px-1 font-normal text-muted-foreground"
+            className="max-w-full justify-start font-normal text-muted-foreground"
             aria-label="Edit custom dates"
             aria-expanded={open}
             onClick={() => setOpen((value) => !value)}
@@ -132,7 +135,8 @@ export function ActivityFilters({
               {[24, 36, 48, 60, 72].map((m) => (
                 <Button
                   key={m}
-                  variant={active === m ? "default" : "outline"}
+                  size="sm"
+                  variant={active === m ? "outline" : "ghost"}
                   aria-pressed={active === m}
                   onClick={() => select(m)}
                 >

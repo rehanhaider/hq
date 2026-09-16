@@ -151,6 +151,9 @@
   html {
     @apply font-sans;
     color-scheme: light;
+    /* Reserve the scrollbar gutter so right-aligned chrome (e.g. the header
+       New page button) does not shift between scrollable and short pages. */
+    scrollbar-gutter: stable;
   }
   [data-theme="dark"] {
     color-scheme: dark;

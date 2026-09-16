@@ -134,7 +134,7 @@ export function Connections({ importing }: { importing: boolean }) {
     <div className="space-y-5">
       <div className="flex min-h-10 items-center justify-end">
         <Button
-          className="h-10 px-4"
+          size="lg"
           variant="default"
           onClick={() => setShowAdd((open) => !open)}
           aria-expanded={showAdd}
