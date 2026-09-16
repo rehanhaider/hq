@@ -78,3 +78,36 @@ export function planTweetPaste(
   if (current?.type === "paragraph" && current.empty) return { kind: "replace", url };
   return { kind: "insert", url };
 }
+
+/**
+ * Status ids from tweet blocks in a page document, in document order.
+ * Used to start the embed fetch while the editor chunk is still loading.
+ */
+export function tweetIdsFromDocument(document: unknown): string[] {
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  const visit = (value: unknown) => {
+    if (!Array.isArray(value)) return;
+    for (const item of value) {
+      if (!item || typeof item !== "object") continue;
+      const block = item as {
+        type?: unknown;
+        props?: unknown;
+        children?: unknown;
+      };
+      if (block.type === "tweet" && block.props && typeof block.props === "object") {
+        const url = (block.props as { url?: unknown }).url;
+        if (typeof url === "string") {
+          const id = tweetStatusId(url);
+          if (id && !seen.has(id)) {
+            seen.add(id);
+            ids.push(id);
+          }
+        }
+      }
+      visit(block.children);
+    }
+  };
+  visit(document);
+  return ids;
+}

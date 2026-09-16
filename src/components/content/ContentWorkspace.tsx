@@ -53,6 +53,7 @@ import {
   type PageDetail,
   type Property,
 } from "@/lib/content";
+import { tweetIdsFromDocument } from "@/lib/tweet";
 import { createUploadGate } from "@/lib/uploads";
 import {
   contentKeys,
@@ -61,6 +62,7 @@ import {
   pageQuery,
   pagesQuery,
 } from "@/queries/content";
+import { tweetEmbedQuery } from "@/queries/tweet";
 import {
   createContentProperty,
   createPage,
@@ -563,10 +565,20 @@ export function ContentWorkspace() {
   const addPageRef = useRef(addPage);
   addPageRef.current = addPage;
   const setPageCreator = useUI((state) => state.setPageCreator);
+  const theme = useUI((state) => state.theme);
   useEffect(() => {
     setPageCreator(() => addPageRef.current(null));
     return () => setPageCreator(null);
   }, [setPageCreator]);
+
+  // The editor is lazy and client-only. Start the embed fetch while that
+  // chunk loads so a first visit can paint tweet HTML instead of a skeleton.
+  useEffect(() => {
+    if (!draft) return;
+    for (const id of tweetIdsFromDocument(draft.document)) {
+      void queryClient.prefetchQuery(tweetEmbedQuery(id, theme));
+    }
+  }, [draft, queryClient, theme]);
 
   const saveAsNewPage = async (openCopy = true) => {
     if (recoveringRef.current) return false;

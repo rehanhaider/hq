@@ -297,12 +297,16 @@
    `.bn-block-content` is a flex row, so a max-width-only wrapper shrinks to
    the loading label and the embed paints at 250px. Pin the wrapper to
    Twitter's max so the widget can use it, and still shrink on narrow pages.
-   Alignment is BlockNote's `textAlignment` on the block (`justify-content`),
-   not auto margins, so left is the default and center/right still work. */
+   The min-height reserves space for the skeleton and the cached text, so a
+   refresh paints content in place instead of flashing empty and shifting
+   the page when the iframe lands. Alignment is BlockNote's `textAlignment`
+   on the block (`justify-content`), not auto margins, so left is the
+   default and center/right still work. */
 .content-editor-shell .tweet-embed {
   width: 550px;
   max-width: 100%;
   min-width: 0;
+  min-height: 120px;
 }
 .content-editor-shell .tweet-embed iframe {
   width: 100% !important;

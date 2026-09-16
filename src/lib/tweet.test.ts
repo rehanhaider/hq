@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   isEmptyParagraphContent,
   planTweetPaste,
+  tweetIdsFromDocument,
   tweetStatusId,
   tweetStatusUrl,
   tweetUrlFromPaste,
@@ -78,6 +79,39 @@ describe("planTweetPaste", () => {
     expect(planTweetPaste("https://example.com", { type: "paragraph", empty: true })).toEqual({
       kind: "ignore",
     });
+  });
+});
+
+describe("tweetIdsFromDocument", () => {
+  it("collects unique status ids in document order, including nested blocks", () => {
+    expect(
+      tweetIdsFromDocument([
+        {
+          type: "tweet",
+          props: { url: `https://x.com/alice/status/${ID}` },
+          children: [
+            {
+              type: "tweet",
+              props: { url: "https://twitter.com/bob/status/20" },
+            },
+          ],
+        },
+        { type: "paragraph", props: {}, children: [] },
+        {
+          type: "tweet",
+          props: { url: `https://x.com/alice/status/${ID}` },
+        },
+      ]),
+    ).toEqual([ID, "20"]);
+  });
+
+  it("ignores missing urls and non-arrays", () => {
+    expect(tweetIdsFromDocument(undefined)).toEqual([]);
+    expect(
+      tweetIdsFromDocument([
+        { type: "tweet", props: { url: "https://x.com/alice" } },
+      ]),
+    ).toEqual([]);
   });
 });
 
