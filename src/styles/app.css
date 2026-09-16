@@ -377,3 +377,29 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* Sidebar first paint. The server always renders the rail open, and the
+   blocking script in __root sets data-sidebar before the first paint.
+   These rules stay unlayered so they beat the layered Tailwind widths: a
+   stored collapsed rail paints collapsed, then hydration lands on the same
+   value with nothing visible to correct. Only the desktop rail is covered;
+   mobile stays a hidden drawer either way. */
+@media (min-width: 48rem) {
+  html[data-sidebar="collapsed"] aside[aria-label="Sidebar"] {
+    width: 3.5rem;
+  }
+  html[data-sidebar="collapsed"] .sidebar-offset {
+    margin-left: 3.5rem;
+  }
+  html[data-sidebar="collapsed"] .sidebar-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+}

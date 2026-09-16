@@ -34,10 +34,17 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         {
           children: `(function(){try{var t=localStorage.getItem('hq:theme')==='light'?'light':'dark';var r=document.documentElement;r.dataset.theme=t;r.style.colorScheme=t;var m=document.querySelector('meta[name=theme-color]');if(m)m.content=t==='dark'?'#131311':'#faf9f6'}catch(e){}})();`,
         },
+        // Same idea as the theme: the rail is open unless the browser holds
+        // a stored collapsed value, and that has to land before the first
+        // paint or the rail flashes open on reload. The stylesheet reads
+        // this attribute until React hydrates onto the same value.
+        {
+          children: `(function(){try{document.documentElement.dataset.sidebar=localStorage.getItem('hq:sidebar')==='collapsed'?'collapsed':'open'}catch(e){}})();`,
+        },
       ],
     }),
-    component: () => (
-      <html lang="en" data-theme="dark" suppressHydrationWarning>
+      component: () => (
+        <html lang="en" data-theme="dark" data-sidebar="open" suppressHydrationWarning>
         <head>
           <HeadContent />
         </head>
