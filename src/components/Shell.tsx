@@ -167,7 +167,7 @@ export function Shell() {
             setPreview(false);
         }}
       >
-        <div className="flex h-12 shrink-0 items-center gap-3 px-3">
+        <div className="flex h-12 shrink-0 items-center gap-3 border-b border-sidebar-border px-3">
           <Link
             to="/"
             aria-label="HQ home"
