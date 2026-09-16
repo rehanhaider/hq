@@ -259,9 +259,9 @@ function HomePage() {
           <div className="mt-5 flex-1" />
           <Link
             to="/deen"
-            className={cn(buttonVariants({ size: "lg" }), "self-start")}
+            className="text-[0.8125rem] font-medium text-primary"
           >
-            Log today <ArrowRight className="size-4" />
+            Open Nasr tracker <ArrowRight className="inline size-3.5" />
           </Link>
         </section>
 
