@@ -259,7 +259,7 @@ function HomePage() {
           <div className="mt-5 flex-1" />
           <Link
             to="/deen"
-            className={cn(buttonVariants(), "h-10 self-start px-4")}
+            className={cn(buttonVariants({ size: "lg" }), "self-start")}
           >
             Log today <ArrowRight className="size-4" />
           </Link>
@@ -297,8 +297,8 @@ function HomePage() {
                 to="/github/repositories"
                 search={defaultFilters()}
                 className={cn(
-                  buttonVariants({ variant: "outline" }),
-                  "mt-4 h-10 px-4",
+                  buttonVariants({ variant: "outline", size: "lg" }),
+                  "mt-4",
                 )}
               >
                 Add repositories <ArrowRight className="size-4" />
@@ -393,7 +393,8 @@ function HomePage() {
               page.
             </p>
             <Button
-              className="mt-4 h-10 px-4"
+              size="lg"
+              className="mt-4"
               disabled={creating}
               onClick={() => {
                 setCreating(true);

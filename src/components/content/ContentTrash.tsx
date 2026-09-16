@@ -84,7 +84,7 @@ export function ContentTrash() {
     <section aria-label="Trash">
       <div className="flex min-h-10 items-center justify-end">
         {pages.length > 0 && (
-          <Button className="h-10 px-4" variant="outline" onClick={() => setConfirming("all")}>
+          <Button size="lg" variant="outline" onClick={() => setConfirming("all")}>
             <Trash2 /> Empty trash
           </Button>
         )}

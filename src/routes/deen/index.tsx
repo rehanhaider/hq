@@ -567,16 +567,18 @@ function IstighfarCounter({
         {[1, 10, 33].map((step) => (
           <Button
             key={step}
+            size="lg"
             variant={step === 1 ? "default" : "secondary"}
-            className="min-h-11 flex-1 tabular-nums"
+            className="flex-1 tabular-nums"
             onClick={() => onUpdate(count + step)}
           >
             +{step}
           </Button>
         ))}
         <Button
+          size="lg"
           variant="ghost"
-          className="min-h-11 tabular-nums"
+          className="tabular-nums"
           disabled={count === 0}
           aria-label="Decrement istighfar count"
           onClick={() => onUpdate(Math.max(0, count - 1))}
