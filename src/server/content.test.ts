@@ -698,14 +698,23 @@ describe("content properties", () => {
     expect(store.save({ id: page.id, title: "Draft", revision: page.revision, document: paragraph("still mine") }).ok).toBe(true);
   });
 
-  it("gives a subpage its parent's types and the first status", () => {
+  it("starts a subpage with no types and the first status", () => {
     store = new ContentStore(":memory:");
     const types = store.properties().types;
     const parent = store.create("Series");
     store.setProperties({ id: parent.id, typeIds: [types[0]!.id, types[1]!.id] });
     const child = store.create("Episode 1", parent.id);
-    expect(child.typeIds).toEqual([types[0]!.id, types[1]!.id]);
+    expect(child.typeIds).toEqual([]);
     expect(child.statusId).toBe(store.properties().statuses[0]!.id);
+  });
+
+  it("keeps types that were asked for when creating a subpage", () => {
+    store = new ContentStore(":memory:");
+    const types = store.properties().types;
+    const parent = store.create("Series");
+    store.setProperties({ id: parent.id, typeIds: [types[0]!.id] });
+    const child = store.create("Episode 1", parent.id, undefined, null, [types[1]!.id]);
+    expect(child.typeIds).toEqual([types[1]!.id]);
   });
 
   it("reuses a tag that already exists instead of creating a duplicate", () => {

@@ -457,15 +457,12 @@ export class ContentStore {
     typeIds: string[],
     tagIds: string[],
   ): PageDetail {
-    let parent: PageDetail | null = null;
     if (parentId) {
-      parent = this.get(parentId);
+      const parent = this.get(parentId);
       if (!parent || parent.deletedAt) throw new Error("The parent page is not available.");
     }
     const status =
       statusId && this.propertyExists("status", statusId) ? statusId : this.firstStatusId();
-    // A subpage is usually more of whatever its parent is, so it starts there.
-    const requestedTypes = typeIds.length ? typeIds : (parent?.typeIds ?? []);
     const id = randomUUID();
     const now = new Date().toISOString();
     const order = Number(
@@ -501,7 +498,7 @@ export class ContentStore {
         status,
         position,
       );
-    const validTypes = [...new Set(requestedTypes)].filter((typeId) =>
+    const validTypes = [...new Set(typeIds)].filter((typeId) =>
       this.propertyExists("type", typeId),
     );
     if (validTypes.length) this.setTypes(id, validTypes);
