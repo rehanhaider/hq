@@ -827,7 +827,8 @@ export function ContentWorkspace() {
                   <PageTypeIcon
                     typeIds={draft.typeIds}
                     types={properties.types}
-                    className="mt-1.5 size-8 shrink-0 text-muted-foreground"
+                    size="title"
+                    className="mt-1.5"
                   />
                   <input
                     aria-label="Page title"

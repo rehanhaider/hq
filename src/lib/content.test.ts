@@ -7,7 +7,7 @@ import {
   filterPages,
   groupPages,
   hasFilters,
-  pageTypeIcon,
+  pageTypeIcons,
   persistedPageTitle,
   relativeTime,
   sortPages,
@@ -296,7 +296,7 @@ describe("contentSummary", () => {
   });
 });
 
-describe("pageTypeIcon", () => {
+describe("pageTypeIcons", () => {
   const types: Property[] = [
     { id: "stream", name: "Stream", color: "pink", position: 0 },
     { id: "video", name: "YouTube video", color: "red", position: 1 },
@@ -305,36 +305,41 @@ describe("pageTypeIcon", () => {
     { id: "custom", name: "Newsletter", color: "teal", position: 4 },
   ];
 
-  it("uses a distinct icon for each seeded type", () => {
-    const kinds = types.slice(0, 4).map((type) => pageTypeIcon([type.id], types));
-    expect(kinds).toEqual(["stream", "video", "post", "article"]);
-    expect(new Set(kinds).size).toBe(4);
+  it("maps YouTube, stream, and writing types onto three glyphs", () => {
+    expect(pageTypeIcons(["video"], types)).toEqual(["youtube"]);
+    expect(pageTypeIcons(["stream"], types)).toEqual(["stream"]);
+    expect(pageTypeIcons(["post"], types)).toEqual(["note"]);
+    expect(pageTypeIcons(["article"], types)).toEqual(["note"]);
   });
 
-  it("keeps the default page icon when no type is selected", () => {
-    expect(pageTypeIcon([], types)).toBe("page");
+  it("uses the note icon when no type is selected", () => {
+    expect(pageTypeIcons([], types)).toEqual(["note"]);
   });
 
-  it("uses a dedicated combination icon rather than any single-type icon", () => {
-    const combo = pageTypeIcon(["stream", "video"], types);
-    expect(combo).toBe("combo");
-    expect(combo).not.toBe(pageTypeIcon(["stream"], types));
-    expect(combo).not.toBe(pageTypeIcon(["video"], types));
-    expect(pageTypeIcon(["post", "article"], types)).toBe("combo");
-    expect(pageTypeIcon(["stream", "video", "post"], types)).toBe("combo");
+  it("stacks the distinct glyphs rather than inventing a combination mark", () => {
+    expect(pageTypeIcons(["stream", "video"], types)).toEqual(["youtube", "stream"]);
+    expect(pageTypeIcons(["video", "post"], types)).toEqual(["youtube", "note"]);
+    expect(pageTypeIcons(["stream", "video", "post"], types)).toEqual([
+      "youtube",
+      "stream",
+      "note",
+    ]);
+  });
+
+  it("does not stack two copies of the note icon", () => {
+    expect(pageTypeIcons(["post", "article"], types)).toEqual(["note"]);
   });
 
   it("matches seeded names without regard to case or extra spaces", () => {
     expect(
-      pageTypeIcon(["x"], [
+      pageTypeIcons(["x"], [
         { id: "x", name: "  YouTube VIDEO ", color: "red", position: 0 },
       ]),
-    ).toBe("video");
+    ).toEqual(["youtube"]);
   });
 
-  it("gives an unknown single type its own icon, not a seeded one", () => {
-    expect(pageTypeIcon(["custom"], types)).toBe("custom");
-    expect(pageTypeIcon(["custom"], types)).not.toBe(pageTypeIcon(["post"], types));
-    expect(pageTypeIcon(["missing"], types)).toBe("custom");
+  it("treats an unknown type as a note", () => {
+    expect(pageTypeIcons(["custom"], types)).toEqual(["note"]);
+    expect(pageTypeIcons(["missing"], types)).toEqual(["note"]);
   });
 });

@@ -686,37 +686,36 @@ export function contentSummary(
 }
 
 /**
- * Which glyph a page should show. Seeded types each have their own; any mix
- * of two or more types uses one combination glyph rather than picking a
- * winner from the selection.
+ * The three glyphs a page can show. Mixed types stack these, they do not
+ * collapse to a fourth "combination" mark.
  */
-export const PAGE_TYPE_ICONS = [
-  "page",
-  "stream",
-  "video",
-  "post",
-  "article",
-  "custom",
-  "combo",
-] as const;
-export type PageTypeIcon = (typeof PAGE_TYPE_ICONS)[number];
+export const PAGE_TYPE_ICONS = ["youtube", "stream", "note"] as const;
+export type PageTypeIconKind = (typeof PAGE_TYPE_ICONS)[number];
 
-const SINGLE_TYPE_ICONS: Record<string, PageTypeIcon> = {
+const TYPE_NAME_ICONS: Record<string, PageTypeIconKind> = {
   stream: "stream",
-  "youtube video": "video",
-  "blog post": "post",
-  "architecture article": "article",
+  "youtube video": "youtube",
+  "blog post": "note",
+  "architecture article": "note",
 };
 
 function typeNameKey(name: string) {
   return name.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-/** Icon key for a page's current type selection. */
-export function pageTypeIcon(typeIds: string[], types: Property[]): PageTypeIcon {
-  if (typeIds.length === 0) return "page";
-  if (typeIds.length > 1) return "combo";
-  const selected = types.find((type) => type.id === typeIds[0]);
-  if (!selected) return "custom";
-  return SINGLE_TYPE_ICONS[typeNameKey(selected.name)] ?? "custom";
+function kindForType(type: Property | undefined): PageTypeIconKind {
+  if (!type) return "note";
+  return TYPE_NAME_ICONS[typeNameKey(type.name)] ?? "note";
+}
+
+/**
+ * Icons for a page's current type selection, in a stable order, with
+ * duplicates removed so two article types still draw as one note.
+ */
+export function pageTypeIcons(typeIds: string[], types: Property[]): PageTypeIconKind[] {
+  if (typeIds.length === 0) return ["note"];
+  const kinds = new Set(
+    typeIds.map((id) => kindForType(types.find((type) => type.id === id))),
+  );
+  return PAGE_TYPE_ICONS.filter((kind) => kinds.has(kind));
 }
