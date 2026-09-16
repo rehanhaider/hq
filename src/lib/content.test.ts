@@ -7,11 +7,13 @@ import {
   filterPages,
   groupPages,
   hasFilters,
+  pageTypeIcon,
   persistedPageTitle,
   relativeTime,
   sortPages,
   type ContentPage,
   type ContentProperties,
+  type Property,
 } from "./content";
 
 const page = (
@@ -273,13 +275,6 @@ describe("contentSummary", () => {
     });
   });
 
-  it("summarises an empty pipeline without inventing rows", () => {
-    const summary = contentSummary([], properties);
-    expect(summary.total).toBe(0);
-    expect(summary.recent).toEqual([]);
-    expect(summary.counts.every((entry) => entry.count === 0)).toBe(true);
-  });
-
   it("joins more than one type in the recent list", () => {
     const crossover = page("Crossover", {
       id: "d",
@@ -291,5 +286,55 @@ describe("contentSummary", () => {
       title: "Crossover",
       type: "YouTube video, Blog post",
     });
+  });
+
+  it("summarises an empty pipeline without inventing rows", () => {
+    const summary = contentSummary([], properties);
+    expect(summary.total).toBe(0);
+    expect(summary.recent).toEqual([]);
+    expect(summary.counts.every((entry) => entry.count === 0)).toBe(true);
+  });
+});
+
+describe("pageTypeIcon", () => {
+  const types: Property[] = [
+    { id: "stream", name: "Stream", color: "pink", position: 0 },
+    { id: "video", name: "YouTube video", color: "red", position: 1 },
+    { id: "post", name: "Blog post", color: "blue", position: 2 },
+    { id: "article", name: "Architecture article", color: "violet", position: 3 },
+    { id: "custom", name: "Newsletter", color: "teal", position: 4 },
+  ];
+
+  it("uses a distinct icon for each seeded type", () => {
+    const kinds = types.slice(0, 4).map((type) => pageTypeIcon([type.id], types));
+    expect(kinds).toEqual(["stream", "video", "post", "article"]);
+    expect(new Set(kinds).size).toBe(4);
+  });
+
+  it("keeps the default page icon when no type is selected", () => {
+    expect(pageTypeIcon([], types)).toBe("page");
+  });
+
+  it("uses a dedicated combination icon rather than any single-type icon", () => {
+    const combo = pageTypeIcon(["stream", "video"], types);
+    expect(combo).toBe("combo");
+    expect(combo).not.toBe(pageTypeIcon(["stream"], types));
+    expect(combo).not.toBe(pageTypeIcon(["video"], types));
+    expect(pageTypeIcon(["post", "article"], types)).toBe("combo");
+    expect(pageTypeIcon(["stream", "video", "post"], types)).toBe("combo");
+  });
+
+  it("matches seeded names without regard to case or extra spaces", () => {
+    expect(
+      pageTypeIcon(["x"], [
+        { id: "x", name: "  YouTube VIDEO ", color: "red", position: 0 },
+      ]),
+    ).toBe("video");
+  });
+
+  it("gives an unknown single type its own icon, not a seeded one", () => {
+    expect(pageTypeIcon(["custom"], types)).toBe("custom");
+    expect(pageTypeIcon(["custom"], types)).not.toBe(pageTypeIcon(["post"], types));
+    expect(pageTypeIcon(["missing"], types)).toBe("custom");
   });
 });

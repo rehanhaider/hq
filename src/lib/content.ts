@@ -684,3 +684,39 @@ export function contentSummary(
     });
   return { total: pages.length, counts, recent };
 }
+
+/**
+ * Which glyph a page should show. Seeded types each have their own; any mix
+ * of two or more types uses one combination glyph rather than picking a
+ * winner from the selection.
+ */
+export const PAGE_TYPE_ICONS = [
+  "page",
+  "stream",
+  "video",
+  "post",
+  "article",
+  "custom",
+  "combo",
+] as const;
+export type PageTypeIcon = (typeof PAGE_TYPE_ICONS)[number];
+
+const SINGLE_TYPE_ICONS: Record<string, PageTypeIcon> = {
+  stream: "stream",
+  "youtube video": "video",
+  "blog post": "post",
+  "architecture article": "article",
+};
+
+function typeNameKey(name: string) {
+  return name.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/** Icon key for a page's current type selection. */
+export function pageTypeIcon(typeIds: string[], types: Property[]): PageTypeIcon {
+  if (typeIds.length === 0) return "page";
+  if (typeIds.length > 1) return "combo";
+  const selected = types.find((type) => type.id === typeIds[0]);
+  if (!selected) return "custom";
+  return SINGLE_TYPE_ICONS[typeNameKey(selected.name)] ?? "custom";
+}
