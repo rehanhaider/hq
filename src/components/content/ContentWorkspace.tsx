@@ -828,7 +828,7 @@ export function ContentWorkspace() {
                     typeIds={draft.typeIds}
                     types={properties.types}
                     size="title"
-                    className="mt-1.5"
+                    className="mt-0.5"
                   />
                   <input
                     aria-label="Page title"
