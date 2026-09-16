@@ -71,6 +71,7 @@ import {
 import { ContentToolbar, type ToolbarPatch } from "./ContentToolbar";
 import { SearchBox } from "./SearchBox";
 import { PropertyPanel, type PropertyPatch } from "./PropertyPanel";
+import { useUI } from "@/store/ui";
 
 const ContentEditor = lazy(() =>
   import("./ContentEditor").then((module) => ({ default: module.ContentEditor })),
@@ -545,6 +546,16 @@ export function ContentWorkspace() {
     }
   };
 
+  // The top bar's New page runs this flow so pending edits are saved and the
+  // list overlay is cleared before the created page opens.
+  const addPageRef = useRef(addPage);
+  addPageRef.current = addPage;
+  const setPageCreator = useUI((state) => state.setPageCreator);
+  useEffect(() => {
+    setPageCreator(() => addPageRef.current(null));
+    return () => setPageCreator(null);
+  }, [setPageCreator]);
+
   const saveAsNewPage = async (openCopy = true) => {
     if (recoveringRef.current) return false;
     await uploads.idle();
@@ -596,18 +607,15 @@ export function ContentWorkspace() {
 
   return (
     <section aria-label="Pages">
-      <div className="flex min-h-10 items-center justify-end">
-        <Button className="h-10 px-4" disabled={recovering} onClick={() => void addPage(null)}><FilePlus2 /> New page</Button>
-      </div>
       {actionError && (
         <p
-          className="mt-3 rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive"
+          className="mb-5 rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive"
           role="alert"
         >
           {actionError}
         </p>
       )}
-      <div className="mt-5">
+      <div>
         <ContentToolbar
           properties={properties}
           search={search}

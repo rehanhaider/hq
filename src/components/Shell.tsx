@@ -86,7 +86,6 @@ export function Shell() {
     return () => window.removeEventListener("keydown", keydown);
   }, [sidebarOpen]);
   const ui = useUI();
-  const inContent = pathname === "/content" || pathname.startsWith("/content/");
   const newPage = useNewPage();
   const [creating, setCreating] = useState(false);
   const queryClient = useQueryClient();
@@ -294,23 +293,23 @@ export function Shell() {
               {sidebarOpen ? <PanelLeftClose /> : <PanelLeftOpen />}
             </Button>
             <Breadcrumbs />
-            {/* The top bar does one job: a page can be started from anywhere
-                but Content, which has its own New page. */}
+            {/* The top bar does one job: a page can be started from anywhere.
+                Content registers its own handler so unsaved edits are flushed
+                before the new page opens. */}
             <div className="ml-auto flex items-center gap-2">
-              {!inContent && (
-                <Button
-                  variant="outline"
-                  disabled={creating}
-                  onClick={() => {
-                    setCreating(true);
-                    void newPage().finally(() => setCreating(false));
-                  }}
-                >
-                  <FilePlus2 />
-                  <span className="hidden sm:inline">New page</span>
-                  <span className="sr-only sm:hidden">New page</span>
-                </Button>
-              )}
+              <Button
+                disabled={creating}
+                onClick={() => {
+                  setCreating(true);
+                  void (ui.pageCreator ?? newPage)().finally(() =>
+                    setCreating(false),
+                  );
+                }}
+              >
+                <FilePlus2 />
+                <span className="hidden sm:inline">New page</span>
+                <span className="sr-only sm:hidden">New page</span>
+              </Button>
             </div>
           </header>
         </div>
