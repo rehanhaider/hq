@@ -44,8 +44,7 @@ export function Shell() {
   const navClass =
     "flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground aria-[current=page]:bg-sidebar-accent aria-[current=page]:font-medium aria-[current=page]:text-foreground md:min-h-9";
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [preview, setPreview] = useState(false);
-  const expanded = sidebarOpen || preview;
+  const expanded = sidebarOpen;
   const labelClass = mobileOpen
     ? "truncate"
     : expanded
@@ -57,7 +56,6 @@ export function Shell() {
     } catch {}
   }, []);
   const toggleSidebar = () => {
-    setPreview(false);
     const next = !sidebarOpen;
     setSidebarOpen(next);
     try {
@@ -79,7 +77,6 @@ export function Shell() {
       }
       if (event.key === "Escape") {
         setMobileOpen(false);
-        setPreview(false);
       }
     };
     window.addEventListener("keydown", keydown);
@@ -138,7 +135,7 @@ export function Shell() {
       )}
       <aside
         ref={drawer}
-        className={`fixed inset-y-0 left-0 z-30 flex w-64 flex-col border-r bg-sidebar transition-[width,transform] duration-150 motion-reduce:transition-none ${mobileOpen ? "visible translate-x-0 shadow-lg" : "invisible -translate-x-full"} md:visible md:translate-x-0 ${expanded ? "md:w-64" : "md:w-14"} ${!sidebarOpen && preview ? "md:shadow-lg" : ""}`}
+        className={`fixed inset-y-0 left-0 z-30 flex w-64 flex-col border-r bg-sidebar transition-[width,transform] duration-150 motion-reduce:transition-none ${mobileOpen ? "visible translate-x-0 shadow-lg" : "invisible -translate-x-full"} md:visible md:translate-x-0 ${expanded ? "md:w-64" : "md:w-14"}`}
         aria-label="Sidebar"
         onKeyDown={(event) => {
           if (!mobileOpen || event.key !== "Tab") return;
@@ -158,13 +155,6 @@ export function Shell() {
             event.preventDefault();
             first?.focus();
           }
-        }}
-        onMouseEnter={() => setPreview(true)}
-        onMouseLeave={() => setPreview(false)}
-        onFocusCapture={() => setPreview(true)}
-        onBlurCapture={(event) => {
-          if (!event.currentTarget.contains(event.relatedTarget as Node | null))
-            setPreview(false);
         }}
       >
         <div className="flex h-12 shrink-0 items-center gap-3 border-b border-sidebar-border px-3">
