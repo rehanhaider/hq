@@ -34,6 +34,7 @@ export function tweetOembedUrl(id: string, theme: TweetTheme): string {
     theme,
     dnt: "true",
     omit_script: "true",
+    hide_thread: "true",
   });
   return `${OEMBED_ENDPOINT}?${params.toString()}`;
 }

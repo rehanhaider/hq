@@ -41,7 +41,7 @@ function memoryStorage(
 }
 
 describe("tweetOembedUrl", () => {
-  it("points at X with the canonical URL, theme, and no script", () => {
+  it("points at X with the canonical URL, theme, no script, and no parent thread", () => {
     const parsed = new URL(tweetOembedUrl(ID, "dark"));
     expect(parsed.origin + parsed.pathname).toBe("https://publish.x.com/oembed");
     expect(parsed.searchParams.get("url")).toBe(
@@ -50,6 +50,7 @@ describe("tweetOembedUrl", () => {
     expect(parsed.searchParams.get("theme")).toBe("dark");
     expect(parsed.searchParams.get("omit_script")).toBe("true");
     expect(parsed.searchParams.get("dnt")).toBe("true");
+    expect(parsed.searchParams.get("hide_thread")).toBe("true");
   });
 });
 
