@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileText, RotateCcw, Trash2 } from "lucide-react";
+import { RotateCcw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -12,9 +12,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { displayPageTitle, type ContentPage } from "@/lib/content";
-import { contentKeys, invalidateContent, pagesQuery } from "@/queries/content";
+import { contentKeys, contentPropertiesQuery, invalidateContent, pagesQuery } from "@/queries/content";
 import { deletePageForever, emptyContentTrash, restorePage } from "@/server/fns";
 import { SearchBox } from "./SearchBox";
+import { PageTypeIcon } from "./PageTypeIcon";
 
 function message(error: unknown, fallback: string) {
   const text = error instanceof Error ? error.message.trim() : "";
@@ -31,6 +32,7 @@ export function ContentTrash() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const list = useQuery(pagesQuery(search.q, true));
+  const properties = useQuery(contentPropertiesQuery);
   const [error, setError] = useState("");
   const [confirming, setConfirming] = useState<ContentPage | "all" | null>(null);
   const [busy, setBusy] = useState(false);
@@ -109,7 +111,10 @@ export function ContentTrash() {
         ) : pages.length ? (
           pages.map((page) => (
             <div key={page.id} className="flex min-h-14 items-center gap-3 px-4 py-2">
-              <FileText className="size-4 shrink-0 text-muted-foreground" />
+              <PageTypeIcon
+                typeIds={page.typeIds}
+                types={properties.data?.types ?? []}
+              />
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium">{displayPageTitle(page.title)}</p>
                 <p className="truncate text-xs text-muted-foreground">{page.preview || "Empty page"}</p>

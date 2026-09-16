@@ -30,7 +30,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ArrowLeft, ChevronRight, FilePlus2, FileText, Trash2 } from "lucide-react";
+import { ArrowLeft, FilePlus2, FileText, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -51,6 +51,7 @@ import {
   type ContentPage,
   type ContentProperties,
   type PageDetail,
+  type Property,
 } from "@/lib/content";
 import { createUploadGate } from "@/lib/uploads";
 import {
@@ -70,6 +71,7 @@ import {
 } from "@/server/fns";
 import { ContentToolbar, type ToolbarPatch } from "./ContentToolbar";
 import { SearchBox } from "./SearchBox";
+import { PageTypeIcon } from "./PageTypeIcon";
 import { PropertyPanel, type PropertyPatch } from "./PropertyPanel";
 import { useUI } from "@/store/ui";
 
@@ -354,25 +356,35 @@ export function ContentWorkspace() {
   const searching = Boolean(search.q) || hasFilters({ ...search, q: undefined });
   const [localPages, setLocalPages] = useState<ContentPage[] | null>(null);
   const [draggedId, setDraggedId] = useState<string | null>(null);
+  const indexPages = useMemo(() => {
+    const source = localPages ?? list.data ?? [];
+    if (!draft || draft.id !== selectedId) return source;
+    return source.map((page) =>
+      page.id === draft.id ? { ...page, typeIds: draft.typeIds } : page,
+    );
+  }, [localPages, list.data, draft, selectedId]);
   // Reorder commits run one at a time, in drag order: two quick drags would
   // otherwise race and the earlier drag's order could land last in SQLite.
   const orderChain = useRef<Promise<void>>(Promise.resolve());
   const rows = useMemo(() => {
-    const pages = filterPages(localPages ?? list.data ?? [], {
+    const pages = filterPages(indexPages, {
       status: search.status,
       type: search.type,
       tag: search.tag,
     });
     return pageRows(pages, searching);
-  }, [list.data, localPages, search, searching]);
+  }, [indexPages, search, searching]);
   // Dragging a filtered or searched list would persist an order the user never
   // saw whole, so the index is only sortable when the full tree is on screen
   // and some sibling group actually has more than one page.
-  const tree = useMemo(() => pageTree(localPages ?? list.data ?? []), [list.data, localPages]);
+  const tree = useMemo(() => pageTree(indexPages), [indexPages]);
   const canReorder =
     !searching &&
     !list.isPending &&
     [...tree.children.values()].some((group) => group.length > 1);
+  const draggedPage = draggedId
+    ? indexPages.find((page) => page.id === draggedId)
+    : undefined;
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -633,6 +645,7 @@ export function ContentWorkspace() {
                   fallback={
                     <PageIndexList
                       rows={rows}
+                      types={properties.types}
                       selectedId={selectedId}
                       disabled={recovering}
                       onSelect={(id) => void selectPage(id)}
@@ -650,6 +663,7 @@ export function ContentWorkspace() {
                       parentId={null}
                       depth={0}
                       tree={tree}
+                      types={properties.types}
                       selectedId={selectedId}
                       disabled={recovering}
                       onSelect={(id) => void selectPage(id)}
@@ -658,6 +672,7 @@ export function ContentWorkspace() {
                       <PageIndexRow
                         key={page.id}
                         page={page}
+                        types={properties.types}
                         depth={0}
                         selected={selectedId === page.id}
                         disabled={recovering}
@@ -665,13 +680,14 @@ export function ContentWorkspace() {
                       />
                     ))}
                     <DragOverlay>
-                      {draggedId ? (
+                      {draggedPage ? (
                         <div className="flex min-h-10 w-full items-center gap-2 rounded-lg bg-accent px-2 text-sm font-medium shadow-lg">
-                          <FileText className="size-4 shrink-0 text-muted-foreground" />
+                          <PageTypeIcon
+                            typeIds={draggedPage.typeIds}
+                            types={properties.types}
+                          />
                           <span className="truncate">
-                            {displayPageTitle(
-                              (localPages ?? list.data ?? []).find((page) => page.id === draggedId)?.title ?? "",
-                            )}
+                            {displayPageTitle(draggedPage.title)}
                           </span>
                         </div>
                       ) : null}
@@ -681,6 +697,7 @@ export function ContentWorkspace() {
               ) : (
                 <PageIndexList
                   rows={rows}
+                  types={properties.types}
                   selectedId={selectedId}
                   disabled={recovering}
                   onSelect={(id) => void selectPage(id)}
@@ -806,14 +823,22 @@ export function ContentWorkspace() {
                 }}><Trash2 /></Button>
               </div>
               <div className="content-page-body">
-                <input
-                  aria-label="Page title"
-                  value={draft.title}
-                  disabled={recovering}
-                  placeholder={DEFAULT_PAGE_TITLE}
-                  className="w-full border-none bg-transparent p-0 text-3xl font-semibold tracking-tight outline-none placeholder:text-muted-foreground/40 sm:text-[2rem]"
-                  onChange={(event) => scheduleSave({ ...draftRef.current!, title: event.target.value })}
-                />
+                <div className="flex items-start gap-3">
+                  <PageTypeIcon
+                    typeIds={draft.typeIds}
+                    types={properties.types}
+                    size="title"
+                    className="mt-0.5"
+                  />
+                  <input
+                    aria-label="Page title"
+                    value={draft.title}
+                    disabled={recovering}
+                    placeholder={DEFAULT_PAGE_TITLE}
+                    className="min-w-0 flex-1 border-none bg-transparent p-0 text-3xl font-semibold tracking-tight outline-none placeholder:text-muted-foreground/40 sm:text-[2rem]"
+                    onChange={(event) => scheduleSave({ ...draftRef.current!, title: event.target.value })}
+                  />
+                </div>
                 <PropertyPanel
                   page={draft}
                   properties={properties}
@@ -878,12 +903,14 @@ export function ContentWorkspace() {
 
 function PageIndexRow({
   page,
+  types,
   depth,
   selected,
   disabled,
   onSelect,
 }: {
   page: ContentPage;
+  types: Property[];
   depth: number;
   selected: boolean;
   disabled: boolean;
@@ -898,7 +925,7 @@ function PageIndexRow({
       disabled={disabled}
       onClick={() => onSelect(page.id)}
     >
-      {depth > 0 ? <ChevronRight className="size-3 shrink-0 text-muted-foreground" /> : <FileText className="size-4 shrink-0 text-muted-foreground" />}
+      <PageTypeIcon typeIds={page.typeIds} types={types} />
       <span className="truncate">{displayPageTitle(page.title)}</span>
     </button>
   );
@@ -906,11 +933,13 @@ function PageIndexRow({
 
 function PageIndexList({
   rows,
+  types,
   selectedId,
   disabled,
   onSelect,
 }: {
   rows: { page: ContentPage; depth: number }[];
+  types: Property[];
   selectedId: string | undefined;
   disabled: boolean;
   onSelect: (id: string) => void;
@@ -921,6 +950,7 @@ function PageIndexList({
         <PageIndexRow
           key={page.id}
           page={page}
+          types={types}
           depth={depth}
           selected={selectedId === page.id}
           disabled={disabled}
@@ -940,6 +970,7 @@ function SortableGroup({
   parentId,
   depth,
   tree,
+  types,
   selectedId,
   disabled,
   onSelect,
@@ -947,6 +978,7 @@ function SortableGroup({
   parentId: string | null;
   depth: number;
   tree: PageTree;
+  types: Property[];
   selectedId: string | undefined;
   disabled: boolean;
   onSelect: (id: string) => void;
@@ -959,6 +991,7 @@ function SortableGroup({
         <SortablePageRow
           key={page.id}
           page={page}
+          types={types}
           depth={depth}
           selected={selectedId === page.id}
           disabled={disabled}
@@ -969,6 +1002,7 @@ function SortableGroup({
             parentId={page.id}
             depth={depth + 1}
             tree={tree}
+            types={types}
             selectedId={selectedId}
             disabled={disabled}
             onSelect={onSelect}
@@ -981,6 +1015,7 @@ function SortableGroup({
 
 function SortablePageRow({
   page,
+  types,
   depth,
   selected,
   disabled,
@@ -989,6 +1024,7 @@ function SortablePageRow({
   children,
 }: {
   page: ContentPage;
+  types: Property[];
   depth: number;
   selected: boolean;
   disabled: boolean;
@@ -1022,6 +1058,7 @@ function SortablePageRow({
       <div ref={setActivatorNodeRef} {...attributes} {...listeners}>
         <PageIndexRow
           page={page}
+          types={types}
           depth={depth}
           selected={selected}
           disabled={disabled}
