@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, Outlet, useLocation } from "@tanstack/react-router";
 import {
@@ -18,6 +18,11 @@ import { useUI } from "@/store/ui";
 import { defaultFilters } from "@/lib/model";
 import { statusQuery } from "@/queries/dashboard";
 import { useNewPage } from "@/queries/content";
+
+// Layout effects do nothing on the server, so this alias keeps server
+// rendering quiet while the client still syncs before paint.
+const useIsomorphicLayoutEffect =
+  typeof document !== "undefined" ? useLayoutEffect : useEffect;
 
 export function Shell() {
   const { pathname } = useLocation();
@@ -45,19 +50,35 @@ export function Shell() {
     "flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground aria-[current=page]:bg-sidebar-accent aria-[current=page]:font-medium aria-[current=page]:text-foreground md:min-h-9";
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const expanded = sidebarOpen;
-  const labelClass = mobileOpen
-    ? "truncate"
-    : expanded
-      ? "sr-only md:not-sr-only md:truncate"
-      : "sr-only";
-  useEffect(() => {
+  // Stable hook for the first-paint stylesheet, which hides these labels
+  // when the blocking script found a stored collapsed rail.
+  const labelClass = `sidebar-label ${
+    mobileOpen
+      ? "truncate"
+      : expanded
+        ? "sr-only md:not-sr-only md:truncate"
+        : "sr-only"
+  }`;
+  // Runs before paint on the client, after the blocking script already set
+  // data-sidebar. The first render matches the server (open), the
+  // stylesheet holds the collapsed geometry meanwhile, and this corrects
+  // state with no visible flash and no hydration mismatch.
+  useIsomorphicLayoutEffect(() => {
     try {
-      setSidebarOpen(localStorage.getItem("hq:sidebar") !== "collapsed");
+      const collapsed = localStorage.getItem("hq:sidebar") === "collapsed";
+      document.documentElement.dataset.sidebar = collapsed
+        ? "collapsed"
+        : "open";
+      if (collapsed) setSidebarOpen(false);
     } catch {}
   }, []);
   const toggleSidebar = () => {
     const next = !sidebarOpen;
     setSidebarOpen(next);
+    // Outside the try: when storage throws, state and attribute must still
+    // agree, or the first-paint rules would pin the rail shut. Matches
+    // applyTheme in the ui store.
+    document.documentElement.dataset.sidebar = next ? "open" : "collapsed";
     try {
       localStorage.setItem("hq:sidebar", next ? "open" : "collapsed");
     } catch {}
@@ -248,7 +269,7 @@ export function Shell() {
       </aside>
       <div
         inert={mobileOpen}
-        className={`min-h-dvh min-w-0 transition-[margin] duration-150 motion-reduce:transition-none ${sidebarOpen ? "md:ml-64" : "md:ml-14"}`}
+        className={`sidebar-offset min-h-dvh min-w-0 transition-[margin] duration-150 motion-reduce:transition-none ${sidebarOpen ? "md:ml-64" : "md:ml-14"}`}
       >
         <div className="sticky top-0 z-10 bg-background/95 backdrop-blur">
           <header className="flex h-12 items-center gap-3 border-b px-4 md:px-6 lg:px-8">
