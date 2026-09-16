@@ -116,7 +116,7 @@ Board draws one column per status, in the order Settings gives them. Cards show 
 
 Filters — status, type, tag, and a title search — and the sort (Manual, Updated, Created, Title) live in the URL, so a filtered board is a link. They apply to the Pages list as well. Clear removes them.
 
-Settings owns the three property lists. Add, rename in place, recolour from a fixed palette, reorder, and delete. Deleting a status that holds pages asks which status they move to; deleting a type drops its links; deleting a tag drops its links. The last status cannot be deleted, because the board needs a column. A new page starts in the first status with no types and no tags, and a new subpage inherits its parent's types.
+Settings owns the three property lists. Add, rename in place, recolour from a fixed palette, reorder, and delete. Deleting a status that holds pages asks which status they move to; deleting a type drops its links; deleting a tag drops its links. The last status cannot be deleted, because the board needs a column. A new page starts in the first status with no types and no tags, nested or not.
 
 ## Date ranges and charts
 
