@@ -24,12 +24,21 @@ function applyTheme(theme: Theme) {
 
 export const useUI = create<{
   theme: Theme;
+  /**
+   * The top bar's New page handler. Content registers its own so a page
+   * started from the top bar flushes unsaved edits first; elsewhere it is
+   * null and the top bar creates the page itself.
+   */
+  pageCreator: (() => Promise<void>) | null;
   hydrate: () => void;
   toggleTheme: () => void;
+  setPageCreator: (creator: (() => Promise<void>) | null) => void;
 }>((set, get) => ({
   // Dark is HQ's default. Only a stored preference moves it to light, which
   // the document already reflects by the time this store hydrates.
   theme: "dark",
+  pageCreator: null,
+  setPageCreator: (pageCreator) => set({ pageCreator }),
   hydrate: () =>
     set({
       theme:
