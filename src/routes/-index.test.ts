@@ -12,9 +12,9 @@ const work = source.slice(source.indexOf("function OpenWorkCard"));
 const footer = 'className="text-[0.8125rem] font-medium text-primary"';
 
 describe("Home Nasr card footer", () => {
-  it("shows Open nasr tracker at the bottom, matching the GitHub work footer", () => {
+  it("shows Open Nasr tracker at the bottom, matching the GitHub work footer", () => {
     expect(nasr).toMatch(/to="\/deen"/);
-    expect(nasr).toMatch(/Open nasr tracker/);
+    expect(nasr).toMatch(/Open Nasr tracker/);
     expect(nasr).toContain(footer);
     expect(work).toContain(footer);
     expect(work).toMatch(/Open GitHub work/);

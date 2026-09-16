@@ -261,7 +261,7 @@ function HomePage() {
             to="/deen"
             className="text-[0.8125rem] font-medium text-primary"
           >
-            Open nasr tracker <ArrowRight className="inline size-3.5" />
+            Open Nasr tracker <ArrowRight className="inline size-3.5" />
           </Link>
         </section>
 
