@@ -305,29 +305,36 @@ describe("pageTypeIcons", () => {
     { id: "custom", name: "Newsletter", color: "teal", position: 4 },
   ];
 
-  it("maps YouTube, stream, and writing types onto three glyphs", () => {
-    expect(pageTypeIcons(["video"], types)).toEqual(["youtube"]);
-    expect(pageTypeIcons(["stream"], types)).toEqual(["stream"]);
-    expect(pageTypeIcons(["post"], types)).toEqual(["note"]);
-    expect(pageTypeIcons(["article"], types)).toEqual(["note"]);
+  it("maps YouTube, stream, and writing types onto three glyphs in the type's colour", () => {
+    expect(pageTypeIcons(["video"], types)).toEqual([{ kind: "youtube", color: "red" }]);
+    expect(pageTypeIcons(["stream"], types)).toEqual([{ kind: "stream", color: "pink" }]);
+    expect(pageTypeIcons(["post"], types)).toEqual([{ kind: "note", color: "blue" }]);
+    expect(pageTypeIcons(["article"], types)).toEqual([{ kind: "note", color: "violet" }]);
   });
 
-  it("uses the note icon when no type is selected", () => {
-    expect(pageTypeIcons([], types)).toEqual(["note"]);
+  it("uses a neutral note when no type is selected", () => {
+    expect(pageTypeIcons([], types)).toEqual([{ kind: "note", color: "slate" }]);
   });
 
-  it("stacks the distinct glyphs rather than inventing a combination mark", () => {
-    expect(pageTypeIcons(["stream", "video"], types)).toEqual(["youtube", "stream"]);
-    expect(pageTypeIcons(["video", "post"], types)).toEqual(["youtube", "note"]);
+  it("lists the distinct glyphs rather than inventing a combination mark", () => {
+    expect(pageTypeIcons(["stream", "video"], types)).toEqual([
+      { kind: "youtube", color: "red" },
+      { kind: "stream", color: "pink" },
+    ]);
+    expect(pageTypeIcons(["video", "post"], types)).toEqual([
+      { kind: "youtube", color: "red" },
+      { kind: "note", color: "blue" },
+    ]);
     expect(pageTypeIcons(["stream", "video", "post"], types)).toEqual([
-      "youtube",
-      "stream",
-      "note",
+      { kind: "youtube", color: "red" },
+      { kind: "stream", color: "pink" },
+      { kind: "note", color: "blue" },
     ]);
   });
 
-  it("does not stack two copies of the note icon", () => {
-    expect(pageTypeIcons(["post", "article"], types)).toEqual(["note"]);
+  it("draws one note for two article types, in the colour of the first selected", () => {
+    expect(pageTypeIcons(["post", "article"], types)).toEqual([{ kind: "note", color: "blue" }]);
+    expect(pageTypeIcons(["article", "post"], types)).toEqual([{ kind: "note", color: "violet" }]);
   });
 
   it("matches seeded names without regard to case or extra spaces", () => {
@@ -335,11 +342,11 @@ describe("pageTypeIcons", () => {
       pageTypeIcons(["x"], [
         { id: "x", name: "  YouTube VIDEO ", color: "red", position: 0 },
       ]),
-    ).toEqual(["youtube"]);
+    ).toEqual([{ kind: "youtube", color: "red" }]);
   });
 
-  it("treats an unknown type as a note", () => {
-    expect(pageTypeIcons(["custom"], types)).toEqual(["note"]);
-    expect(pageTypeIcons(["missing"], types)).toEqual(["note"]);
+  it("treats an unknown type as a note in its own colour and a missing one as neutral", () => {
+    expect(pageTypeIcons(["custom"], types)).toEqual([{ kind: "note", color: "teal" }]);
+    expect(pageTypeIcons(["missing"], types)).toEqual([{ kind: "note", color: "slate" }]);
   });
 });

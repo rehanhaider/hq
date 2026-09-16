@@ -686,11 +686,14 @@ export function contentSummary(
 }
 
 /**
- * The three glyphs a page can show. Mixed types stack these, they do not
+ * The three glyphs a page can show. Mixed types sit side by side, they do not
  * collapse to a fourth "combination" mark.
  */
 export const PAGE_TYPE_ICONS = ["youtube", "stream", "note"] as const;
 export type PageTypeIconKind = (typeof PAGE_TYPE_ICONS)[number];
+
+/** A glyph in the colour of the type it stands for. */
+export type PageTypeIcon = { kind: PageTypeIconKind; color: PropertyColor };
 
 const TYPE_NAME_ICONS: Record<string, PageTypeIconKind> = {
   stream: "stream",
@@ -710,12 +713,20 @@ function kindForType(type: Property | undefined): PageTypeIconKind {
 
 /**
  * Icons for a page's current type selection, in a stable order, with
- * duplicates removed so two article types still draw as one note.
+ * duplicates removed so two article types still draw as one note. Each glyph
+ * takes the colour of the first selected type that maps onto it; a page with
+ * no type gets a neutral note.
  */
-export function pageTypeIcons(typeIds: string[], types: Property[]): PageTypeIconKind[] {
-  if (typeIds.length === 0) return ["note"];
-  const kinds = new Set(
-    typeIds.map((id) => kindForType(types.find((type) => type.id === id))),
-  );
-  return PAGE_TYPE_ICONS.filter((kind) => kinds.has(kind));
+export function pageTypeIcons(typeIds: string[], types: Property[]): PageTypeIcon[] {
+  if (typeIds.length === 0) return [{ kind: "note", color: "slate" }];
+  const colors = new Map<PageTypeIconKind, PropertyColor>();
+  for (const id of typeIds) {
+    const type = types.find((candidate) => candidate.id === id);
+    const kind = kindForType(type);
+    if (!colors.has(kind)) colors.set(kind, type?.color ?? "slate");
+  }
+  return PAGE_TYPE_ICONS.flatMap((kind) => {
+    const color = colors.get(kind);
+    return color ? [{ kind, color }] : [];
+  });
 }

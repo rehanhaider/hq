@@ -6,6 +6,7 @@ import {
   type PageTypeIconKind,
   type Property,
 } from "@/lib/content";
+import { chipClass } from "./properties";
 
 const ICONS: Record<PageTypeIconKind, LucideIcon> = {
   youtube: SquarePlay,
@@ -13,6 +14,12 @@ const ICONS: Record<PageTypeIconKind, LucideIcon> = {
   note: FileText,
 };
 
+/**
+ * Each glyph sits on a tile in its type's colour, the same pair the property
+ * chips use, so the icon and the chip always agree. Mixed types draw one tile
+ * each, side by side; outline glyphs have no body, so overlapping them only
+ * tangles the strokes.
+ */
 export function PageTypeIcon({
   typeIds,
   types,
@@ -24,36 +31,32 @@ export function PageTypeIcon({
   size?: "list" | "title";
   className?: string;
 }) {
-  const kinds = pageTypeIcons(typeIds, types);
-  const iconClass = size === "title" ? "size-8" : "size-4";
-  if (kinds.length === 1) {
-    const Icon = ICONS[kinds[0]!];
-    return (
-      <Icon
-        aria-hidden
-        className={cn("shrink-0 text-muted-foreground", iconClass, className)}
-      />
-    );
-  }
+  const icons = pageTypeIcons(typeIds, types);
+  const tileClass =
+    size === "title" ? "size-9 rounded-lg" : "size-5 rounded-[5px]";
+  const glyphClass = size === "title" ? "size-5" : "size-3.5";
   return (
     <span
       aria-hidden
       className={cn(
         "inline-flex shrink-0 items-center",
-        size === "title" ? "-space-x-2.5" : "-space-x-1.5",
+        size === "title" ? "gap-1.5" : "gap-1",
         className,
       )}
     >
-      {kinds.map((kind) => {
+      {icons.map(({ kind, color }) => {
         const Icon = ICONS[kind];
         return (
-          <Icon
+          <span
             key={kind}
             className={cn(
-              "shrink-0 bg-card text-muted-foreground",
-              iconClass,
+              "grid shrink-0 place-items-center",
+              tileClass,
+              chipClass(color),
             )}
-          />
+          >
+            <Icon className={glyphClass} />
+          </span>
         );
       })}
     </span>
