@@ -293,20 +293,35 @@
   }
 }
 
-/* Twitter's widget is a 250–550px iframe sized to its parent. BlockNote's
-   `.bn-block-content` is a flex row, so a max-width-only wrapper shrinks to
-   the loading label and the embed paints at 250px. Pin the wrapper to
-   Twitter's max so the widget can use it, and still shrink on narrow pages.
-   The min-height reserves space for the skeleton and the cached text, so a
-   refresh paints content in place instead of flashing empty and shifting
-   the page when the iframe lands. Alignment is BlockNote's `textAlignment`
-   on the block (`justify-content`), not auto margins, so left is the
-   default and center/right still work. */
+/* BlockNote's `.bn-block-content` is a flex row, so a max-width-only
+   wrapper shrinks to its content. Pin the wrapper to X's own 550px so the
+   card fills the column, and still shrink on narrow pages. The card sizes
+   itself from cached data and reserves its own media boxes, so nothing
+   here reserves height. Alignment is BlockNote's `textAlignment` on the
+   block (`justify-content`), not auto margins, so left is the default and
+   center/right still work. The iframe rule is for the fallback widget,
+   which only appears when the tweet cannot be fetched at all. */
 .content-editor-shell .tweet-embed {
   width: 550px;
   max-width: 100%;
   min-width: 0;
-  min-height: 120px;
+}
+/* The editor paints every link blue and underlined, which is right for
+   prose and wrong inside a card that has its own hierarchy. Reset the
+   anchors here — BlockNote's stylesheet is unlayered, so a utility class
+   would lose — and let the card name the few links that stay coloured or
+   underline on hover. */
+.content-editor-shell .tweet-embed a {
+  color: inherit;
+  text-decoration: none;
+}
+.content-editor-shell .tweet-embed a.tweet-card-link {
+  color: var(--primary);
+}
+.content-editor-shell .tweet-embed a.tweet-card-link:hover,
+.content-editor-shell .tweet-embed a.tweet-card-name:hover,
+.content-editor-shell .tweet-embed a.tweet-card-action:hover {
+  text-decoration: underline;
 }
 .content-editor-shell .tweet-embed iframe {
   width: 100% !important;

@@ -5,9 +5,19 @@ import type { TweetEmbedData } from "@/lib/tweetEmbed";
 
 const DATA: TweetEmbedData = {
   id: "20",
-  html: '<blockquote class="twitter-tweet"><p>just setting up my twttr</p></blockquote>',
-  authorName: "jack",
-  authorUrl: "https://x.com/jack",
+  name: "jack",
+  handle: "jack",
+  avatar: "https://pbs.twimg.com/profile_images/1/jack_normal.jpg",
+  verified: false,
+  createdAt: "2006-03-21T20:50:14.000Z",
+  text: "just setting up my twttr",
+  segments: [{ type: "text", text: "just setting up my twttr" }],
+  photos: [],
+  video: null,
+  likes: 129000,
+  replies: 180000,
+  permalink: "https://x.com/jack/status/20",
+  quote: null,
 };
 
 function memoryStorage() {
@@ -76,9 +86,7 @@ describe("tweetEmbedQuery", () => {
     const placeholder = options.placeholderData as (
       previous: TweetEmbedData | undefined,
     ) => TweetEmbedData | undefined;
-    expect(placeholder({ ...DATA, authorName: "live" })?.authorName).toBe(
-      "live",
-    );
+    expect(placeholder({ ...DATA, name: "live" })?.name).toBe("live");
     expect(placeholder(undefined)).toBeUndefined();
   });
 });

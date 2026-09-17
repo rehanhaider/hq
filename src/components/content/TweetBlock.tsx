@@ -4,6 +4,7 @@ import { createReactBlockSpec } from "@blocknote/react";
 import { tweetStatusId, tweetStatusUrl } from "@/lib/tweet";
 import { tweetEmbedQuery } from "@/queries/tweet";
 import { useUI } from "@/store/ui";
+import { TweetCard } from "./TweetCard";
 
 type TweetWidgets = {
   ready: (callback: (twttr: TweetWidgets) => void) => void;
@@ -18,8 +19,6 @@ type TweetWidgets = {
         theme?: "dark" | "light";
       },
     ) => Promise<HTMLElement | undefined>;
-    /** Upgrades cached oEmbed blockquotes to full widgets in place. */
-    load: (element?: HTMLElement) => Promise<unknown>;
   };
 };
 
@@ -95,37 +94,16 @@ function TweetFallback({ url }: { url: string }) {
 
 function TweetEmbed({ url }: { url: string }) {
   const theme = useUI((state) => state.theme);
-  const cacheHost = useRef<HTMLDivElement>(null);
   const legacyHost = useRef<HTMLDivElement>(null);
   const [legacy, setLegacy] = useState<"idle" | "loading" | "failed">("idle");
   const id = tweetStatusId(url);
   const href = tweetStatusUrl(url) ?? url;
   const embed = useQuery(tweetEmbedQuery(id ?? "", theme));
   const cached = id ? embed.data : undefined;
-  const cachedHtml = cached?.html;
 
-  // Upgrade the cached HTML to the full widget in place. Depend on the
-  // HTML string so a background refetch with the same markup does not
-  // tear down an iframe that already painted. The text stays readable if
-  // the widget script fails.
-  useEffect(() => {
-    if (!cachedHtml || !cacheHost.current) return;
-    let cancelled = false;
-    const host = cacheHost.current;
-    void loadTwitterWidgets()
-      .then((twttr) => {
-        if (!cancelled) return twttr.widgets.load(host);
-      })
-      .catch(() => {
-        /* The cached text stays readable. */
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [cachedHtml]);
-
-  // Last resort: no cached or fresh HTML (X unreachable, tweet deleted).
-  // This is the old path, kept so a failed fetch still shows the tweet.
+  // Last resort: no cached or fresh tweet data (X unreachable, tweet
+  // deleted). This is the old widget path, kept so a failed fetch still
+  // shows something. It is the only place the X script is ever loaded.
   useEffect(() => {
     const element = legacyHost.current;
     if (!id || cached || !embed.isError || !element) return;
@@ -173,12 +151,7 @@ function TweetEmbed({ url }: { url: string }) {
         contentEditable={false}
         data-testid="tweet-embed"
       >
-        {/* The HTML is X's oEmbed blockquote, fetched server-side and
-            script-stripped. The widget script upgrades it in place. */}
-        <div
-          ref={cacheHost}
-          dangerouslySetInnerHTML={{ __html: cached.html }}
-        />
+        <TweetCard tweet={cached} />
       </div>
     );
   }

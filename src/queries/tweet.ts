@@ -23,11 +23,11 @@ type TweetEmbedFetcher = (args: {
 }) => Promise<TweetEmbedData>;
 
 /**
- * The cached HTML is real query data, not a placeholder. A refresh seeds
- * React Query from localStorage so the tweet text paints with the editor,
- * and staleTime keeps widgets.js from refetching on every reload. A theme
- * toggle with no stored copy for the new theme keeps the previous HTML
- * until the matching fetch lands.
+ * The cached tweet is real query data, not a placeholder. A refresh seeds
+ * React Query from localStorage so the card paints with the editor instead
+ * of fetching again. The card draws from theme tokens, so the payload is
+ * theme-neutral; the theme stays in the key because the block and the
+ * prefetch in ContentWorkspace share it, and a toggle costs one refetch.
  */
 export const tweetEmbedQuery = (
   id: string,
