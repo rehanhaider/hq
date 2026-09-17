@@ -307,7 +307,7 @@ export function ContentEditor({
         onChange={(current) =>
           onDocumentChange(current.document as unknown as ContentBlock[])
         }
-        className="min-h-[28rem]"
+        className="min-h-112"
         data-testid="content-editor"
       />
       <div className="flex flex-wrap items-center gap-2 border-t px-3 py-2 text-xs text-muted-foreground sm:px-4">
