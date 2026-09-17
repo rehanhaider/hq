@@ -54,31 +54,6 @@ export function tweetUrlFromPaste(text: string): string | null {
   return tweetStatusUrl(lines[0] ?? "");
 }
 
-export function isEmptyParagraphContent(content: unknown): boolean {
-  if (!Array.isArray(content) || content.length === 0) return true;
-  return content.every((item) => {
-    if (!item || typeof item !== "object") return false;
-    const node = item as { type?: unknown; text?: unknown };
-    return node.type === "text" && node.text === "";
-  });
-}
-
-export type TweetPastePlan =
-  | { kind: "ignore" }
-  | { kind: "replace"; url: string }
-  | { kind: "insert"; url: string };
-
-export function planTweetPaste(
-  clipboardText: string,
-  current: { type: string; empty: boolean } | null,
-): TweetPastePlan {
-  const url = tweetUrlFromPaste(clipboardText);
-  if (!url) return { kind: "ignore" };
-  if (current?.type === "codeBlock") return { kind: "ignore" };
-  if (current?.type === "paragraph" && current.empty) return { kind: "replace", url };
-  return { kind: "insert", url };
-}
-
 /**
  * Status ids from tweet blocks in a page document, in document order.
  * Used to start the embed fetch while the editor chunk is still loading.

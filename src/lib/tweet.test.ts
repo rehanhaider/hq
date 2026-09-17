@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  isEmptyParagraphContent,
-  planTweetPaste,
   tweetIdsFromDocument,
   tweetStatusId,
   tweetStatusUrl,
@@ -54,34 +52,6 @@ describe("tweetUrlFromPaste", () => {
   });
 });
 
-describe("planTweetPaste", () => {
-  const url = `https://x.com/alice/status/${ID}`;
-
-  it("replaces an empty paragraph and inserts after other blocks", () => {
-    expect(planTweetPaste(url, { type: "paragraph", empty: true })).toEqual({
-      kind: "replace",
-      url: CANONICAL,
-    });
-    expect(planTweetPaste(url, { type: "paragraph", empty: false })).toEqual({
-      kind: "insert",
-      url: CANONICAL,
-    });
-    expect(planTweetPaste(url, { type: "heading", empty: true })).toEqual({
-      kind: "insert",
-      url: CANONICAL,
-    });
-  });
-
-  it("does not intercept code blocks or non-tweet pastes", () => {
-    expect(planTweetPaste(url, { type: "codeBlock", empty: true })).toEqual({
-      kind: "ignore",
-    });
-    expect(planTweetPaste("https://example.com", { type: "paragraph", empty: true })).toEqual({
-      kind: "ignore",
-    });
-  });
-});
-
 describe("tweetIdsFromDocument", () => {
   it("collects unique status ids in document order, including nested blocks", () => {
     expect(
@@ -112,22 +82,5 @@ describe("tweetIdsFromDocument", () => {
         { type: "tweet", props: { url: "https://x.com/alice" } },
       ]),
     ).toEqual([]);
-  });
-});
-
-describe("isEmptyParagraphContent", () => {
-  it("treats no nodes, or only empty text nodes, as empty", () => {
-    expect(isEmptyParagraphContent([])).toBe(true);
-    expect(isEmptyParagraphContent([{ type: "text", text: "", styles: {} }])).toBe(true);
-    expect(isEmptyParagraphContent([{ type: "text", text: "hi", styles: {} }])).toBe(false);
-    expect(
-      isEmptyParagraphContent([
-        {
-          type: "link",
-          href: `https://x.com/alice/status/${ID}`,
-          content: [{ type: "text", text: "tweet", styles: {} }],
-        },
-      ]),
-    ).toBe(false);
   });
 });

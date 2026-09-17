@@ -328,6 +328,20 @@
   max-width: 100% !important;
 }
 
+/* A bookmark card shares the tweet card's column and the same anchor
+   reset: the card is one anchor, and the editor's blue underline would
+   colour every line of it. The fallback link, shown when there is no
+   preview, keeps the editor's own link styling via its own classes. */
+.content-editor-shell .bookmark-embed {
+  width: 550px;
+  max-width: 100%;
+  min-width: 0;
+}
+.content-editor-shell .bookmark-embed a.bookmark-card {
+  color: inherit;
+  text-decoration: none;
+}
+
 /* Image and video resize handles. BlockNote ships its 8x30px hover-only
    handle unlayered, which beats anything inside `@layer components`
    regardless of specificity — so these overrides stay unlayered, like the

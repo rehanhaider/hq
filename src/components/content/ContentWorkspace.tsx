@@ -59,6 +59,7 @@ import {
   type PageDetail,
   type Property,
 } from "@/lib/content";
+import { bookmarkUrlsFromDocument } from "@/lib/linkPreview";
 import { tweetIdsFromDocument } from "@/lib/tweet";
 import { createUploadGate } from "@/lib/uploads";
 import {
@@ -68,6 +69,7 @@ import {
   pageQuery,
   pagesQuery,
 } from "@/queries/content";
+import { linkPreviewQuery } from "@/queries/linkPreview";
 import { tweetEmbedQuery } from "@/queries/tweet";
 import {
   createContentProperty,
@@ -577,12 +579,15 @@ export function ContentWorkspace() {
     return () => setPageCreator(null);
   }, [setPageCreator]);
 
-  // The editor is lazy and client-only. Start the embed fetch while that
-  // chunk loads so a first visit can paint tweet HTML instead of a skeleton.
+  // The editor is lazy and client-only. Start the embed fetches while that
+  // chunk loads so a first visit can paint the cards instead of skeletons.
   useEffect(() => {
     if (!draft) return;
     for (const id of tweetIdsFromDocument(draft.document)) {
       void queryClient.prefetchQuery(tweetEmbedQuery(id, theme));
+    }
+    for (const url of bookmarkUrlsFromDocument(draft.document)) {
+      void queryClient.prefetchQuery(linkPreviewQuery(url));
     }
   }, [draft, queryClient, theme]);
 

@@ -24,6 +24,8 @@ import {
 } from "../lib/deen";
 import { z } from "zod";
 import { fetchTweetData, type TweetEmbedData } from "../lib/tweetEmbed";
+import { fetchLinkPreview } from "./linkPreview";
+import { linkPreviewUrl, type LinkPreviewData } from "../lib/linkPreview";
 import {
   changePageStateSchema,
   createPageSchema,
@@ -172,6 +174,51 @@ export const getTweetEmbed = createServerFn({ method: "GET" })
       return fresh;
     } catch {
       throw new Error("Could not load tweet.");
+    }
+  });
+/**
+ * Link preview data for a bookmark block, fetched server-side because the
+ * page would not answer the browser. A miss — no tags, an error, a private
+ * host — is remembered for an hour so a page of dead links does not refetch
+ * on every visit; a hit lives a day.
+ */
+const linkPreviewSchema = z.object({
+  url: z.string().max(2_048).refine((value) => linkPreviewUrl(value) !== null),
+});
+const LINK_PREVIEW_MEMORY_TTL_MS = 24 * 60 * 60 * 1000;
+const LINK_PREVIEW_MISS_TTL_MS = 60 * 60 * 1000;
+const LINK_PREVIEW_MEMORY_LIMIT = 500;
+const linkPreviewMemory = new Map<
+  string,
+  { data: LinkPreviewData | null; expires: number }
+>();
+function rememberLinkPreview(key: string, data: LinkPreviewData | null) {
+  if (linkPreviewMemory.size >= LINK_PREVIEW_MEMORY_LIMIT) {
+    const oldest = linkPreviewMemory.keys().next();
+    if (!oldest.done) linkPreviewMemory.delete(oldest.value);
+  }
+  linkPreviewMemory.set(key, {
+    data,
+    expires:
+      Date.now() + (data ? LINK_PREVIEW_MEMORY_TTL_MS : LINK_PREVIEW_MISS_TTL_MS),
+  });
+}
+export const getLinkPreview = createServerFn({ method: "GET" })
+  .validator(linkPreviewSchema)
+  .handler(async ({ data }) => {
+    const key = linkPreviewUrl(data.url) ?? data.url;
+    const hit = linkPreviewMemory.get(key);
+    if (hit && hit.expires > Date.now()) {
+      if (hit.data) return hit.data;
+      throw new Error("Could not load a preview for this link.");
+    }
+    try {
+      const fresh = await fetchLinkPreview(key);
+      rememberLinkPreview(key, fresh);
+      return fresh;
+    } catch {
+      rememberLinkPreview(key, null);
+      throw new Error("Could not load a preview for this link.");
     }
   });
 export const getContentProperties = createServerFn({ method: "GET" }).handler(() =>
