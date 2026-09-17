@@ -33,6 +33,12 @@ import { CSS } from "@dnd-kit/utilities";
 import { ArrowLeft, FilePlus2, FileText, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -661,6 +667,7 @@ export function ContentWorkspace() {
                       selectedId={selectedId}
                       disabled={recovering}
                       onSelect={(id) => void selectPage(id)}
+                      onCreateSubpage={(id) => void addPage(id)}
                     />
                   }
                 >
@@ -679,6 +686,7 @@ export function ContentWorkspace() {
                       selectedId={selectedId}
                       disabled={recovering}
                       onSelect={(id) => void selectPage(id)}
+                      onCreateSubpage={(id) => void addPage(id)}
                     />
                     {tree.orphans.map((page) => (
                       <PageIndexRow
@@ -689,6 +697,7 @@ export function ContentWorkspace() {
                         selected={selectedId === page.id}
                         disabled={recovering}
                         onSelect={(id) => void selectPage(id)}
+                        onCreateSubpage={(id) => void addPage(id)}
                       />
                     ))}
                     <DragOverlay>
@@ -713,6 +722,7 @@ export function ContentWorkspace() {
                   selectedId={selectedId}
                   disabled={recovering}
                   onSelect={(id) => void selectPage(id)}
+                  onCreateSubpage={(id) => void addPage(id)}
                 />
               )
             ) : (
@@ -913,7 +923,7 @@ export function ContentWorkspace() {
   );
 }
 
-function PageIndexRow({
+function PageIndexButton({
   page,
   types,
   depth,
@@ -943,18 +953,85 @@ function PageIndexRow({
   );
 }
 
+/**
+ * Trigger sits outside the drag handle so a touchstart `stopPropagation` on
+ * the menu cannot swallow the pointer events dnd-kit needs to reorder.
+ */
+function PageContextMenu({
+  page,
+  disabled,
+  onCreateSubpage,
+  children,
+}: {
+  page: ContentPage;
+  disabled: boolean;
+  onCreateSubpage: (id: string) => void;
+  children: ReactNode;
+}) {
+  return (
+    <ContextMenu disabled={disabled}>
+      <ContextMenuTrigger className="block w-full">{children}</ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem
+          disabled={disabled}
+          onClick={() => onCreateSubpage(page.id)}
+        >
+          <FilePlus2 className="size-4" /> New subpage
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  );
+}
+
+function PageIndexRow({
+  page,
+  types,
+  depth,
+  selected,
+  disabled,
+  onSelect,
+  onCreateSubpage,
+}: {
+  page: ContentPage;
+  types: Property[];
+  depth: number;
+  selected: boolean;
+  disabled: boolean;
+  onSelect: (id: string) => void;
+  onCreateSubpage: (id: string) => void;
+}) {
+  return (
+    <PageContextMenu
+      page={page}
+      disabled={disabled}
+      onCreateSubpage={onCreateSubpage}
+    >
+      <PageIndexButton
+        page={page}
+        types={types}
+        depth={depth}
+        selected={selected}
+        disabled={disabled}
+        onSelect={onSelect}
+      />
+    </PageContextMenu>
+  );
+}
+
 function PageIndexList({
   rows,
   types,
   selectedId,
   disabled,
   onSelect,
+  onCreateSubpage,
 }: {
   rows: { page: ContentPage; depth: number }[];
   types: Property[];
   selectedId: string | undefined;
   disabled: boolean;
   onSelect: (id: string) => void;
+  onCreateSubpage: (id: string) => void;
 }) {
   return (
     <>
@@ -967,6 +1044,7 @@ function PageIndexList({
           selected={selectedId === page.id}
           disabled={disabled}
           onSelect={onSelect}
+          onCreateSubpage={onCreateSubpage}
         />
       ))}
     </>
@@ -986,6 +1064,7 @@ function SortableGroup({
   selectedId,
   disabled,
   onSelect,
+  onCreateSubpage,
 }: {
   parentId: string | null;
   depth: number;
@@ -994,6 +1073,7 @@ function SortableGroup({
   selectedId: string | undefined;
   disabled: boolean;
   onSelect: (id: string) => void;
+  onCreateSubpage: (id: string) => void;
 }) {
   const pages = tree.children.get(parentId) ?? [];
   if (!pages.length) return null;
@@ -1009,6 +1089,7 @@ function SortableGroup({
           disabled={disabled}
           sortable={pages.length > 1}
           onSelect={onSelect}
+          onCreateSubpage={onCreateSubpage}
         >
           <SortableGroup
             parentId={page.id}
@@ -1018,6 +1099,7 @@ function SortableGroup({
             selectedId={selectedId}
             disabled={disabled}
             onSelect={onSelect}
+            onCreateSubpage={onCreateSubpage}
           />
         </SortablePageRow>
       ))}
@@ -1033,6 +1115,7 @@ function SortablePageRow({
   disabled,
   sortable,
   onSelect,
+  onCreateSubpage,
   children,
 }: {
   page: ContentPage;
@@ -1043,6 +1126,7 @@ function SortablePageRow({
   /** False when the page has no sibling to swap with: the row stays a button. */
   sortable: boolean;
   onSelect: (id: string) => void;
+  onCreateSubpage: (id: string) => void;
   /** The page's own subtree, carried along when the row moves. */
   children?: ReactNode;
 }) {
@@ -1060,23 +1144,30 @@ function SortablePageRow({
     disabled: disabled || !sortable,
   });
   // Only the row itself is the handle; the subtree below it is outside the
-  // handle, so grabbing a child never drags the parent.
+  // handle, so grabbing a child never drags the parent. The context-menu
+  // trigger wraps the handle so a right-click still opens New subpage.
   return (
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform), transition }}
       className={isDragging ? "opacity-40" : ""}
     >
-      <div ref={setActivatorNodeRef} {...attributes} {...listeners}>
-        <PageIndexRow
-          page={page}
-          types={types}
-          depth={depth}
-          selected={selected}
-          disabled={disabled}
-          onSelect={onSelect}
-        />
-      </div>
+      <PageContextMenu
+        page={page}
+        disabled={disabled}
+        onCreateSubpage={onCreateSubpage}
+      >
+        <div ref={setActivatorNodeRef} {...attributes} {...listeners}>
+          <PageIndexButton
+            page={page}
+            types={types}
+            depth={depth}
+            selected={selected}
+            disabled={disabled}
+            onSelect={onSelect}
+          />
+        </div>
+      </PageContextMenu>
       {children}
     </div>
   );
