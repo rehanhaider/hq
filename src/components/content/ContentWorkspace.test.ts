@@ -16,6 +16,9 @@ describe("Content page index context menu", () => {
     );
     expect(menu).toMatch(/<ContextMenuTrigger className="block w-full">/);
     expect(menu).toMatch(/<FilePlus2 className="size-4" \/> New subpage/);
+    expect(menu).toMatch(/page\.parentId === null/);
+    expect(menu).toMatch(/onClick=\{\(\) => onFilterTree\(page\.id\)\}/);
+    expect(menu).toMatch(/<ListFilter className="size-4" \/> Filter to this page/);
   });
 
   it("creates a subpage under the right-clicked page", () => {

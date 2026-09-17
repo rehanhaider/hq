@@ -149,7 +149,13 @@ export function ContentToolbar({
           size="sm"
           className="text-muted-foreground"
           onClick={() =>
-            onChange({ q: undefined, status: undefined, type: undefined, tag: undefined })
+            onChange({
+              q: undefined,
+              tree: undefined,
+              status: undefined,
+              type: undefined,
+              tag: undefined,
+            })
           }
         >
           <X /> Clear
