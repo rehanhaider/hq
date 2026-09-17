@@ -24,6 +24,8 @@ import {
 
 const FETCH_TIMEOUT_MS = 8_000;
 const MAX_REDIRECTS = 5;
+/** Resolved addresses dialled in turn before the hop is given up on. */
+const MAX_ADDRESSES = 3;
 /**
  * A megabyte of HTML at most, and usually far less: reading stops once the
  * `<head>` closes. YouTube puts 700 KB of script before its tags, which is
@@ -155,16 +157,16 @@ export function isPublicHostname(hostname: string): boolean {
 }
 
 /**
- * The address the connection must use: the literal itself, or the first
- * resolved address once every resolved address has passed. An address
- * that belongs to one of this machine's own interfaces is refused whatever
- * its range.
+ * The addresses the connection may use, in resolver order: the literal
+ * itself, or the resolved addresses once every one of them has passed. An
+ * address that belongs to one of this machine's own interfaces is refused
+ * whatever its range.
  */
-async function checkedAddress(
+async function checkedAddresses(
   url: URL,
   lookup: HostLookup,
   local: Set<string>,
-): Promise<string> {
+): Promise<string[]> {
   const hostname = url.hostname;
   if (!isPublicHostname(hostname)) throw new Error("Refused to fetch a local address.");
   const literal = hostname.replace(/^\[|\]$/g, "");
@@ -177,16 +179,15 @@ async function checkedAddress(
       throw new Error("Could not resolve the link's host.");
     }
   }
-  const first = addresses[0];
   if (
-    !first ||
+    addresses.length === 0 ||
     !addresses.every((address) => {
       const canonical = canonicalAddress(address);
       return canonical !== null && isPublicAddress(canonical) && !local.has(canonical);
     })
   )
     throw new Error("Refused to fetch a local address.");
-  return first;
+  return addresses;
 }
 
 export interface TransportInit {
@@ -339,8 +340,33 @@ interface ResolvedOptions {
 }
 
 /**
+ * One hop: the checked addresses are dialled in resolver order until one
+ * answers, each attempt pinned to its own address. A host that lists an
+ * unreachable AAAA record first still gets its A record tried.
+ */
+async function dial(
+  url: URL,
+  accept: string,
+  addresses: string[],
+  transport: LinkTransport,
+): Promise<Response> {
+  for (const address of addresses.slice(0, MAX_ADDRESSES)) {
+    try {
+      return await transport(url.toString(), {
+        headers: { accept, "user-agent": USER_AGENT },
+        address,
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      });
+    } catch {
+      /* Try the next address. */
+    }
+  }
+  throw new Error("Could not reach the link.");
+}
+
+/**
  * GET with redirects followed by hand, so each hop passes the same host
- * check as the first URL and dials the address that passed. Returns the
+ * check as the first URL and dials only addresses that passed. Returns the
  * final response and the URL it came from.
  */
 async function fetchPublic(
@@ -350,17 +376,8 @@ async function fetchPublic(
 ): Promise<{ response: Response; url: URL }> {
   let url = start;
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-    const address = await checkedAddress(url, options.lookup, options.local);
-    let response: Response;
-    try {
-      response = await options.transport(url.toString(), {
-        headers: { accept, "user-agent": USER_AGENT },
-        address,
-        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-      });
-    } catch {
-      throw new Error("Could not reach the link.");
-    }
+    const addresses = await checkedAddresses(url, options.lookup, options.local);
+    const response = await dial(url, accept, addresses, options.transport);
     if (response.status >= 300 && response.status < 400) {
       const location = response.headers.get("location");
       void response.body?.cancel().catch(() => undefined);

@@ -255,6 +255,33 @@ describe("fetchLinkPreview", () => {
     expect(literal[0]?.init.address).toBe("2606:2800:220:1:248:1893:25c8:1946");
   });
 
+  it("dials the next checked address when the first does not answer, three at most", async () => {
+    const tried: string[] = [];
+    const transport = async (url: string, init: TransportInit) => {
+      tried.push(init.address);
+      if (init.address === "2606:2800:220:1:248:1893:25c8:1946") throw new Error("ENETUNREACH");
+      return html(PAGE);
+    };
+    const data = await fetchLinkPreview("https://example.com/post", {
+      transport,
+      lookup: async () => ["2606:2800:220:1:248:1893:25c8:1946", "93.184.216.34"],
+    });
+    expect(data.title).toBe("OG title");
+    expect(tried).toEqual(["2606:2800:220:1:248:1893:25c8:1946", "93.184.216.34"]);
+
+    const dead: string[] = [];
+    await expect(
+      fetchLinkPreview("https://example.com/post", {
+        transport: async (_url, init) => {
+          dead.push(init.address);
+          throw new Error("ECONNREFUSED");
+        },
+        lookup: async () => ["203.0.113.1", "203.0.113.2", "203.0.113.3", "203.0.113.4"],
+      }),
+    ).rejects.toThrow(/reach/);
+    expect(dead).toEqual(["203.0.113.1", "203.0.113.2", "203.0.113.3"]);
+  });
+
   it("refuses private hosts, on the first URL and after a redirect", async () => {
     const calls: Call[] = [];
     const transport = fakeFetch(
