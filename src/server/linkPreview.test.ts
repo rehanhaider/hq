@@ -2,6 +2,7 @@ import { createServer, type Server } from "node:http";
 import { gzipSync } from "node:zlib";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  canonicalAddress,
   fetchLinkPreview,
   isPublicAddress,
   isPublicHostname,
@@ -76,6 +77,27 @@ describe("isPublicAddress", () => {
     expect(isPublicAddress("::ffff:5db8:d822")).toBe(true);
     expect(isPublicAddress("64:ff9b::5db8:d822")).toBe(true);
     expect(isPublicAddress("2002:5db8:d822::1")).toBe(true);
+  });
+});
+
+describe("canonicalAddress", () => {
+  it("reduces every IPv4 embedding to the IPv4 and expands the rest", () => {
+    for (const spelling of [
+      "::ffff:203.0.113.5",
+      "::ffff:cb00:7105",
+      "::FFFF:CB00:7105",
+      "::ffff:0:203.0.113.5",
+      "::203.0.113.5",
+      "64:ff9b::203.0.113.5",
+      "2002:cb00:7105::1",
+    ])
+      expect(canonicalAddress(spelling), spelling).toBe("203.0.113.5");
+    expect(canonicalAddress("2001:DB8::1")).toBe("2001:db8:0:0:0:0:0:1");
+    expect(canonicalAddress("2001:db8:0:0:0:0:0:1")).toBe("2001:db8:0:0:0:0:0:1");
+    expect(canonicalAddress("::1")).toBe("0:0:0:0:0:0:0:1");
+    expect(canonicalAddress("::")).toBe("0:0:0:0:0:0:0:0");
+    expect(canonicalAddress("93.184.216.34")).toBe("93.184.216.34");
+    expect(canonicalAddress("example.com")).toBeNull();
   });
 });
 
@@ -264,6 +286,18 @@ describe("fetchLinkPreview", () => {
     const calls: Call[] = [];
     const transport = fakeFetch({ "http://203.0.113.5:8080/": () => html(PAGE), "https://self.example/": () => html(PAGE) }, calls);
     const localAddresses = ["203.0.113.5", "2001:DB8::1"];
+    for (const literal of ["[::ffff:203.0.113.5]", "[::ffff:cb00:7105]", "[2002:cb00:7105::1]", "[64:ff9b::cb00:7105]", "[2001:db8:0:0:0:0:0:1]"])
+      await expect(
+        fetchLinkPreview(`http://${literal}:8080/`, { transport, lookup: publicLookup, localAddresses }),
+        literal,
+      ).rejects.toThrow(/local/);
+    await expect(
+      fetchLinkPreview("https://self.example/", {
+        transport,
+        lookup: async () => ["::ffff:cb00:7105"],
+        localAddresses,
+      }),
+    ).rejects.toThrow(/local/);
     await expect(
       fetchLinkPreview("http://203.0.113.5:8080/", { transport, lookup: publicLookup, localAddresses }),
     ).rejects.toThrow(/local/);

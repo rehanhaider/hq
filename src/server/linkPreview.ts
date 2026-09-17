@@ -38,14 +38,17 @@ const USER_AGENT =
 export type HostLookup = (hostname: string) => Promise<string[]>;
 
 /**
- * Every address on this machine's interfaces. A public address here is
- * still this box, and a fetch to it would reach whatever else listens on
- * 0.0.0.0 beside the app.
+ * Every address on this machine's interfaces, in canonical spelling. A
+ * public address here is still this box, and a fetch to it would reach
+ * whatever else listens on 0.0.0.0 beside the app.
  */
 export function localInterfaceAddresses(): Set<string> {
   const addresses = new Set<string>();
   for (const entries of Object.values(networkInterfaces())) {
-    for (const entry of entries ?? []) addresses.add(entry.address.replace(/%.*$/, ""));
+    for (const entry of entries ?? []) {
+      const canonical = canonicalAddress(entry.address);
+      if (canonical) addresses.add(canonical);
+    }
   }
   return addresses;
 }
@@ -85,17 +88,44 @@ function ipv4FromGroups(high: number, low: number): string {
 }
 
 /**
+ * One spelling per address, so two addresses compare as strings: IPv4 as
+ * is, IPv6 expanded to eight lower-case groups, and every IPv6 form that
+ * carries an IPv4 address inside it reduced to that IPv4 — mapped
+ * (`::ffff:`), translated (`::ffff:0:`), compatible (`::a.b.c.d`), NAT64
+ * (`64:ff9b::`), and 6to4 (`2002::/16`). Node's URL parser rewrites
+ * `[::ffff:127.0.0.1]` to `[::ffff:7f00:1]`, so the hex form is the one
+ * that reaches these checks. Null when the value is not an address.
+ */
+export function canonicalAddress(address: string): string | null {
+  const family = isIP(address);
+  if (family === 4) return address;
+  if (family !== 6) return null;
+  const groups = ipv6Groups(address);
+  if (!groups) return null;
+  const [g0, g1, g2, g3, g4, g5, g6, g7] = groups as [
+    number, number, number, number, number, number, number, number,
+  ];
+  const leadingZeros = (count: number) => groups.slice(0, count).every((g) => g === 0);
+  if (leadingZeros(5) && g5 === 0xffff) return ipv4FromGroups(g6, g7);
+  if (leadingZeros(4) && g4 === 0xffff && g5 === 0) return ipv4FromGroups(g6, g7);
+  // The deprecated IPv4-compatible ::a.b.c.d, but not :: or ::1 themselves.
+  if (leadingZeros(6) && (g6 > 1 || g7 > 1)) return ipv4FromGroups(g6, g7);
+  if (g0 === 0x64 && g1 === 0xff9b && g2 === 0 && g3 === 0 && g4 === 0 && g5 === 0)
+    return ipv4FromGroups(g6, g7);
+  if (g0 === 0x2002) return ipv4FromGroups(g1, g2);
+  return groups.map((g) => g.toString(16)).join(":");
+}
+
+/**
  * Loopback, link-local, private, carrier-grade NAT, multicast, and
- * unspecified — in IPv4, in IPv6, and in every IPv6 form that carries an
- * IPv4 address inside it: mapped (`::ffff:`), translated (`::ffff:0:`),
- * compatible (`::a.b.c.d`), NAT64 (`64:ff9b::`), and 6to4 (`2002::/16`).
- * Node's URL parser rewrites `[::ffff:127.0.0.1]` to `[::ffff:7f00:1]`, so
- * the hex form is the one that reaches this check.
+ * unspecified, in IPv4 and IPv6, after `canonicalAddress` has reduced any
+ * embedded IPv4 form to the IPv4 it carries.
  */
 export function isPublicAddress(address: string): boolean {
-  const family = isIP(address);
-  if (family === 4) {
-    const [a = 0, b = 0] = address.split(".").map(Number);
+  const canonical = canonicalAddress(address);
+  if (!canonical) return false;
+  if (isIP(canonical) === 4) {
+    const [a = 0, b = 0] = canonical.split(".").map(Number);
     if (a === 0 || a === 10 || a === 127) return false;
     if (a === 169 && b === 254) return false;
     if (a === 172 && b >= 16 && b <= 31) return false;
@@ -104,23 +134,9 @@ export function isPublicAddress(address: string): boolean {
     if (a >= 224) return false;
     return true;
   }
-  if (family !== 6) return false;
-  const groups = ipv6Groups(address);
-  if (!groups) return false;
-  const [g0, g1, g2, g3, g4, g5, g6, g7] = groups as [
-    number, number, number, number, number, number, number, number,
-  ];
-  const leadingZeros = (count: number) => groups.slice(0, count).every((g) => g === 0);
-  // ::ffff:a.b.c.d and ::ffff:0:a.b.c.d
-  if (leadingZeros(5) && g5 === 0xffff) return isPublicAddress(ipv4FromGroups(g6, g7));
-  if (leadingZeros(4) && g4 === 0xffff && g5 === 0) return isPublicAddress(ipv4FromGroups(g6, g7));
-  // ::, ::1, and the deprecated IPv4-compatible ::a.b.c.d
-  if (leadingZeros(6)) return false;
-  // NAT64 64:ff9b::a.b.c.d
-  if (g0 === 0x64 && g1 === 0xff9b && g2 === 0 && g3 === 0 && g4 === 0 && g5 === 0)
-    return isPublicAddress(ipv4FromGroups(g6, g7));
-  // 6to4 2002:a.b.c.d::
-  if (g0 === 0x2002) return isPublicAddress(ipv4FromGroups(g1, g2));
+  const [g0 = 0] = canonical.split(":").map((g) => parseInt(g, 16));
+  // ::, ::1
+  if (canonical === "0:0:0:0:0:0:0:0" || canonical === "0:0:0:0:0:0:0:1") return false;
   // Unique local fc00::/7, link-local fe80::/10, multicast ff00::/8
   if ((g0 & 0xfe00) === 0xfc00) return false;
   if ((g0 & 0xffc0) === 0xfe80) return false;
@@ -164,7 +180,10 @@ async function checkedAddress(
   const first = addresses[0];
   if (
     !first ||
-    !addresses.every((address) => isPublicAddress(address) && !local.has(address.toLowerCase()))
+    !addresses.every((address) => {
+      const canonical = canonicalAddress(address);
+      return canonical !== null && isPublicAddress(canonical) && !local.has(canonical);
+    })
   )
     throw new Error("Refused to fetch a local address.");
   return first;
@@ -394,11 +413,13 @@ export async function fetchLinkPreview(
   const resolved: ResolvedOptions = {
     transport: options.transport ?? nodeTransport,
     lookup: options.lookup ?? defaultLookup,
-    local: new Set(
-      [...(options.localAddresses ?? localInterfaceAddresses())].map((address) =>
-        address.toLowerCase(),
-      ),
-    ),
+    local: options.localAddresses
+      ? new Set(
+          [...options.localAddresses]
+            .map(canonicalAddress)
+            .filter((address): address is string => address !== null),
+        )
+      : localInterfaceAddresses(),
   };
   const { response, url: finalUrl } = await fetchPublic(
     new URL(url),

@@ -193,7 +193,7 @@ const linkPreviewMemory = new Map<
   { data: LinkPreviewData | null; expires: number }
 >();
 function rememberLinkPreview(key: string, data: LinkPreviewData | null) {
-  if (linkPreviewMemory.size >= LINK_PREVIEW_MEMORY_LIMIT) {
+  if (!linkPreviewMemory.has(key) && linkPreviewMemory.size >= LINK_PREVIEW_MEMORY_LIMIT) {
     const oldest = linkPreviewMemory.keys().next();
     if (!oldest.done) linkPreviewMemory.delete(oldest.value);
   }
