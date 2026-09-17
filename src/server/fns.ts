@@ -23,7 +23,7 @@ import {
   settingsUpdateSchema,
 } from "../lib/deen";
 import { z } from "zod";
-import { fetchTweetOembed, type TweetEmbedData } from "../lib/tweetEmbed";
+import { fetchTweetData, type TweetEmbedData } from "../lib/tweetEmbed";
 import {
   changePageStateSchema,
   createPageSchema,
@@ -138,10 +138,10 @@ export const getPage = createServerFn({ method: "GET" })
   .handler(({ data }) => getContentStore().get(data.id));
 
 /**
- * Tweet oEmbed HTML, fetched server-side because X sends no CORS headers.
- * Tweets are immutable enough to cache hard: a day in memory per server,
- * a week stale in React Query, a month in localStorage. A deleted tweet or
- * an X outage throws, and the editor falls back to the live widget path.
+ * Tweet data, fetched server-side because X sends no CORS headers. Tweets
+ * are immutable enough to cache hard: a day in memory per server, a week
+ * stale in React Query, a month in localStorage. A deleted tweet or an X
+ * outage throws, and the editor falls back to the live widget path.
  */
 const tweetEmbedSchema = z.object({
   id: z.string().regex(/^\d{1,20}$/),
@@ -160,7 +160,7 @@ export const getTweetEmbed = createServerFn({ method: "GET" })
     const hit = tweetEmbedMemory.get(key);
     if (hit && hit.expires > Date.now()) return hit.data;
     try {
-      const fresh = await fetchTweetOembed(data.id, data.theme);
+      const fresh = await fetchTweetData(data.id);
       if (tweetEmbedMemory.size >= TWEET_EMBED_MEMORY_LIMIT) {
         const oldest = tweetEmbedMemory.keys().next();
         if (!oldest.done) tweetEmbedMemory.delete(oldest.value);
