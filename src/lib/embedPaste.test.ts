@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   isEmptyParagraphContent,
   loneUrlFromPaste,
+  pasteTarget,
   planEmbedPaste,
 } from "./embedPaste";
 
@@ -71,6 +72,33 @@ describe("planEmbedPaste", () => {
     expect(planEmbedPaste("hello world", { type: "paragraph", empty: true })).toEqual({
       kind: "ignore",
     });
+  });
+});
+
+describe("pasteTarget", () => {
+  const text = [{ type: "text", text: "hello", styles: {} }];
+
+  it("treats a paragraph as empty when it has no text or its selection is about to go", () => {
+    expect(pasteTarget({ type: "paragraph", content: [] }, true)).toEqual({
+      type: "paragraph",
+      empty: true,
+    });
+    expect(pasteTarget({ type: "paragraph", content: text }, true)).toEqual({
+      type: "paragraph",
+      empty: false,
+    });
+    expect(pasteTarget({ type: "paragraph", content: text }, false)).toEqual({
+      type: "paragraph",
+      empty: true,
+    });
+  });
+
+  it("never treats another block as empty", () => {
+    expect(pasteTarget({ type: "heading", content: [] }, false)).toEqual({
+      type: "heading",
+      empty: false,
+    });
+    expect(pasteTarget({ type: "codeBlock", content: [] }, true).empty).toBe(false);
   });
 });
 

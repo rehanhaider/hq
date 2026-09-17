@@ -19,7 +19,7 @@ import { useCreateBlockNote } from "@blocknote/react";
 import { BlockNoteView, ShadCNDefaultComponents } from "@blocknote/shadcn";
 import { Link as LinkIcon } from "lucide-react";
 import type { ContentBlock, PageDetail } from "@/lib/content";
-import { isEmptyParagraphContent, planEmbedPaste } from "@/lib/embedPaste";
+import { pasteTarget, planEmbedPaste } from "@/lib/embedPaste";
 import { MAX_UPLOAD_BYTES, formatBytes, uploadRejection } from "@/lib/uploads";
 import { bookmarkBlock } from "./BookmarkBlock";
 import { tweetBlock } from "./TweetBlock";
@@ -201,17 +201,15 @@ export function ContentEditor({
     // A clipboard that is only a URL becomes an embed: a tweet block for a
     // tweet, a bookmark card on an empty paragraph for anything else. Mixed
     // content and code blocks fall through so ordinary paste is unchanged.
-    // A non-empty selection is deleted first, matching ordinary paste.
+    // A non-empty selection is deleted first, matching ordinary paste, and
+    // the plan is made again on what is left: a paragraph emptied by that
+    // deletion is replaced, a paragraph with text around the selection is
+    // handed back to ordinary paste.
     pasteHandler: ({ event, editor: current, defaultPasteHandler }) => {
       let cursor: { type: string; empty: boolean } | null = null;
       try {
         const { block } = current.getTextCursorPosition();
-        cursor = {
-          type: block.type,
-          empty:
-            block.type === "paragraph" &&
-            isEmptyParagraphContent(block.content),
-        };
+        cursor = pasteTarget(block, current.prosemirrorState.selection.empty);
       } catch {
         cursor = null;
       }
@@ -227,12 +225,7 @@ export function ContentEditor({
           if (!tr.selection.empty) tr.deleteSelection();
         });
         const { block } = current.getTextCursorPosition();
-        const after = planEmbedPaste(plan.url, {
-          type: block.type,
-          empty:
-            block.type === "paragraph" &&
-            isEmptyParagraphContent(block.content),
-        });
+        const after = planEmbedPaste(plan.url, pasteTarget(block, true));
         if (after.kind === "ignore") return defaultPasteHandler();
         if (after.kind === "replace") {
           // replaceBlocks would drop indented children unless they travel with the embed.

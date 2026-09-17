@@ -36,6 +36,24 @@ export function loneUrlFromPaste(text: string): string | null {
   return linkPreviewUrl(line);
 }
 
+/**
+ * The block a paste lands in, as the planner sees it. A paragraph whose
+ * selected text is about to be replaced counts as empty: once the
+ * selection goes, a lone URL is all that is left, which is the same
+ * gesture as pasting into a blank line.
+ */
+export function pasteTarget(
+  block: { type: string; content?: unknown },
+  selectionEmpty: boolean,
+): { type: string; empty: boolean } {
+  return {
+    type: block.type,
+    empty:
+      block.type === "paragraph" &&
+      (!selectionEmpty || isEmptyParagraphContent(block.content)),
+  };
+}
+
 export type EmbedBlockType = "tweet" | "bookmark";
 
 export type EmbedPastePlan =
