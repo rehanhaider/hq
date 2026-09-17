@@ -37,6 +37,7 @@ import {
   pageIdSchema,
   reorderPropertiesSchema,
   savePageSchema,
+  setPagePinnedSchema,
   setPagePropertiesSchema,
   updatePropertySchema,
   contentSummary,
@@ -239,6 +240,9 @@ export const createPage = createServerFn({ method: "POST" })
 export const setPageProperties = createServerFn({ method: "POST" })
   .validator(setPagePropertiesSchema)
   .handler(({ data }) => getContentStore().setProperties(data));
+export const setPagePinned = createServerFn({ method: "POST" })
+  .validator(setPagePinnedSchema)
+  .handler(({ data }) => getContentStore().setPinned(data));
 export const movePageCard = createServerFn({ method: "POST" })
   .validator(movePageCardSchema)
   .handler(({ data }) => getContentStore().moveCard(data));

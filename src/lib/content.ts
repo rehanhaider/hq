@@ -61,6 +61,8 @@ export type ContentPage = {
   tagIds: string[];
   /** Manual order within a board column. */
   position: number;
+  /** When true, the page sits above its unpinned siblings in the Pages index. */
+  pinned: boolean;
 };
 
 export type PageDetail = ContentPage & {
@@ -171,6 +173,15 @@ export const setPagePropertiesSchema = z.object({
   statusId: idSchema.optional(),
   typeIds: z.array(idSchema).max(60).optional(),
   tagIds: z.array(idSchema).max(60).optional(),
+});
+
+/**
+ * Pin is index layout, not a document edit: no revision, so an open editor
+ * keeps saving against the revision it already holds.
+ */
+export const setPagePinnedSchema = z.object({
+  id: idSchema,
+  pinned: z.boolean(),
 });
 
 /**
@@ -598,6 +609,15 @@ export function filterPageSearchResults(
     type: search.type,
     tag: search.tag,
   }).filter((page) => !treeIds || treeIds.has(page.id));
+}
+
+/**
+ * Pinned pages sit above their unpinned siblings. Order among each group is
+ * the stored display order, then title.
+ */
+export function compareIndexPages(a: ContentPage, b: ContentPage) {
+  if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+  return a.order - b.order || a.title.localeCompare(b.title);
 }
 
 export function sortPages(pages: ContentPage[], sort: ContentSort = "manual") {
