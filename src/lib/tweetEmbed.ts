@@ -38,6 +38,8 @@ export interface TweetQuote {
   handle: string;
   text: string;
   permalink: string;
+  /** The quoted post's own photos, if any. Rendered inside the quote box. */
+  photos: TweetPhoto[];
 }
 
 export interface TweetEmbedData {
@@ -69,9 +71,9 @@ const PHOTO_LIMIT = 4;
 /** localStorage entries outlive the session; a month matches X's cache age. */
 export const TWEET_EMBED_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
-/** v2 is syndication data. v1 held oEmbed HTML and is pruned on sight. */
+/** v3 adds the quoted post's photos. v2 held the same shape without them. */
 const CACHE_NAMESPACE = "hq:tweet-embed:";
-const CACHE_PREFIX = `${CACHE_NAMESPACE}v2`;
+const CACHE_PREFIX = `${CACHE_NAMESPACE}v3`;
 
 /** Only X's own media hosts may reach an `img`, `video`, or `poster`. */
 const MEDIA_HOSTS = new Set(["pbs.twimg.com", "video.twimg.com"]);
@@ -349,6 +351,8 @@ function quote(value: unknown): TweetQuote | null {
     display_text_range?: unknown;
     entities?: unknown;
     user?: unknown;
+    photos?: unknown;
+    mediaDetails?: unknown;
   };
   const user = (source.user ?? {}) as { name?: unknown; screen_name?: unknown };
   const handle = text(user.screen_name, 100);
@@ -362,6 +366,7 @@ function quote(value: unknown): TweetQuote | null {
       .join("")
       .slice(0, 500),
     permalink: tweetPermalink(handle, id),
+    photos: photos(source),
   };
 }
 
@@ -505,6 +510,20 @@ export function parseTweetEmbedData(
   const storedQuote = source.quote;
   const quoteHandle = text(storedQuote?.handle, 100);
   const quotePermalink = linkUrl(storedQuote?.permalink);
+  const storedQuotePhotos = Array.isArray(storedQuote?.photos)
+    ? storedQuote.photos
+    : [];
+  const quotePhotoList: TweetPhoto[] = [];
+  for (const item of storedQuotePhotos.slice(0, PHOTO_LIMIT)) {
+    const url = mediaUrl(item?.url);
+    if (!url) continue;
+    quotePhotoList.push({
+      url,
+      width: dimension(item?.width) || 1,
+      height: dimension(item?.height) || 1,
+      alt: text(item?.alt, 500),
+    });
+  }
   return {
     id,
     name: text(source.name) || handle,
@@ -526,6 +545,7 @@ export function parseTweetEmbedData(
             handle: quoteHandle,
             text: text(storedQuote?.text, 500),
             permalink: quotePermalink,
+            photos: quotePhotoList,
           }
         : null,
   };

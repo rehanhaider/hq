@@ -209,13 +209,16 @@ export function TweetCard({ tweet }: { tweet: TweetEmbedData }) {
               @{tweet.quote.handle}
             </span>
           </span>
-          <span className="mt-1 block whitespace-pre-wrap break-words text-sm text-muted-foreground">
+          <span className="mt-1 block whitespace-pre-wrap break-words text-sm text-card-foreground">
             {tweet.quote.text}
           </span>
+          {tweet.quote.photos.length > 0 ? (
+            <TweetPhotos photos={tweet.quote.photos} />
+          ) : null}
         </a>
       ) : null}
 
-      <footer className="mt-3 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+      <footer className="mt-3 flex flex-wrap items-center gap-4 border-t border-border pt-3 text-sm text-muted-foreground">
         {posted ? (
           <time dateTime={tweet.createdAt}>{dateFormat.format(posted)}</time>
         ) : null}

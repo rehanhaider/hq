@@ -174,7 +174,38 @@ describe("normalizeTweet", () => {
       handle: "jack",
       text: "just setting up my twttr",
       permalink: "https://x.com/jack/status/20",
+      photos: [],
     });
+  });
+
+  it("keeps a quoted tweet's photo so the card shows the whole quote", () => {
+    const quoting = normalizeTweet(
+      {
+        ...PAYLOAD,
+        quoted_tweet: {
+          id_str: "21",
+          text: "chart",
+          display_text_range: [0, 5],
+          user: { name: "ed", screen_name: "ed" },
+          photos: [
+            {
+              url: "https://pbs.twimg.com/media/HSGIOvubwAAhS4-.jpg",
+              width: 800,
+              height: 668,
+            },
+          ],
+        },
+      },
+      ID,
+    );
+    expect(quoting?.quote?.photos).toEqual([
+      {
+        url: "https://pbs.twimg.com/media/HSGIOvubwAAhS4-.jpg",
+        width: 800,
+        height: 668,
+        alt: "",
+      },
+    ]);
   });
 
   it("refuses media and links from anywhere but X", () => {
@@ -246,14 +277,18 @@ describe("tweet cache", () => {
     );
   });
 
-  it("ignores the v1 oEmbed entries this replaced", () => {
+  it("ignores the v1 oEmbed and v2 photo-less entries this replaced", () => {
     const legacy = memoryStorage({
       [`hq:tweet-embed:v1:dark:${ID}`]: JSON.stringify({
         html: '<blockquote class="twitter-tweet"><p>old</p></blockquote>',
         savedAt: Date.now(),
       }),
+      [`hq:tweet-embed:v2:dark:${ID}`]: JSON.stringify({
+        savedAt: Date.now(),
+        data: { ...DATA, quote: { ...DATA.quote, photos: undefined } },
+      }),
     });
-    expect(tweetEmbedCacheKey(ID, "dark")).toContain("v2");
+    expect(tweetEmbedCacheKey(ID, "dark")).toContain("v3");
     expect(readTweetEmbedCache(legacy, ID, "dark")).toBeUndefined();
   });
 
