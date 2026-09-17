@@ -168,7 +168,10 @@ export function ContentWorkspace() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const list = useQuery(pagesQuery(search.q));
-  const hierarchy = useQuery(pagesQuery());
+  const hierarchy = useQuery({
+    ...pagesQuery(),
+    enabled: Boolean(search.tree),
+  });
   const propertyQuery = useQuery(contentPropertiesQuery);
   const properties: ContentProperties = propertyQuery.data ?? {
     statuses: [],
@@ -673,6 +676,20 @@ export function ContentWorkspace() {
           <div className="min-h-0 flex-1 overflow-y-auto px-2 py-3">
             {list.isPending || (search.tree && hierarchy.isPending) ? (
               <p className="p-3 text-muted-foreground">Loading pages…</p>
+            ) : search.tree && hierarchy.isError ? (
+              <div className="p-4 text-center">
+                <p className="text-sm text-destructive" role="alert">
+                  The page tree could not load.
+                </p>
+                <Button
+                  className="mt-3"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void hierarchy.refetch()}
+                >
+                  Reload pages
+                </Button>
+              </div>
             ) : rows.length ? (
               canReorder ? (
                 <ClientOnly

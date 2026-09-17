@@ -41,3 +41,18 @@ describe("Content page index context menu", () => {
     );
   });
 });
+
+describe("Content page tree loading", () => {
+  it("only fetches the complete hierarchy for an active tree filter", () => {
+    expect(source).toMatch(
+      /const hierarchy = useQuery\(\{[\s\S]*?\.\.\.pagesQuery\(\),[\s\S]*?enabled: Boolean\(search\.tree\),[\s\S]*?\}\);/,
+    );
+  });
+
+  it("shows hierarchy failures separately from an empty filter result", () => {
+    expect(source).toMatch(/search\.tree && hierarchy\.isError/);
+    expect(source).toMatch(/The page tree could not load\./);
+    expect(source).toMatch(/onClick=\{\(\) => void hierarchy\.refetch\(\)\}/);
+    expect(source).toMatch(/Reload pages/);
+  });
+});
