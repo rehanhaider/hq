@@ -1,5 +1,13 @@
-import { describe, expect, it } from "vitest";
-import { fetchLinkPreview, isPublicAddress, isPublicHostname } from "./linkPreview";
+import { createServer, type Server } from "node:http";
+import { gzipSync } from "node:zlib";
+import { afterEach, describe, expect, it } from "vitest";
+import {
+  fetchLinkPreview,
+  isPublicAddress,
+  isPublicHostname,
+  nodeTransport,
+  type TransportInit,
+} from "./linkPreview";
 
 const PAGE = `<html><head>
   <title>Doc title</title>
@@ -9,19 +17,15 @@ const PAGE = `<html><head>
   <meta property="og:image" content="https://example.com/og.png">
 </head><body></body></html>`;
 
-type Call = { url: string; init?: RequestInit };
+type Call = { url: string; init: TransportInit };
 
-function fakeFetch(
-  routes: Record<string, () => Response>,
-  calls: Call[] = [],
-): typeof fetch {
-  return (async (input: string | URL | Request, init?: RequestInit) => {
-    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+function fakeFetch(routes: Record<string, () => Response>, calls: Call[] = []) {
+  return async (url: string, init: TransportInit) => {
     calls.push({ url, init });
     const route = routes[url];
     if (!route) return new Response("missing", { status: 404 });
     return route();
-  }) as typeof fetch;
+  };
 }
 
 const html = (body: string, contentType = "text/html; charset=utf-8") =>
@@ -48,6 +52,16 @@ describe("isPublicAddress", () => {
       "fe80::1",
       "::ffff:127.0.0.1",
       "::ffff:10.0.0.1",
+      "::ffff:7f00:1",
+      "::FFFF:A9FE:A9FE",
+      "::ffff:0:7f00:1",
+      "::7f00:1",
+      "::127.0.0.1",
+      "64:ff9b::7f00:1",
+      "64:ff9b::10.0.0.1",
+      "2002:7f00:1::1",
+      "2002:c0a8:101::",
+      "ff02::1",
       "not an ip",
     ])
       expect(isPublicAddress(address), address).toBe(false);
@@ -58,6 +72,9 @@ describe("isPublicAddress", () => {
     expect(isPublicAddress("172.32.0.1")).toBe(true);
     expect(isPublicAddress("2606:2800:220:1:248:1893:25c8:1946")).toBe(true);
     expect(isPublicAddress("::ffff:93.184.216.34")).toBe(true);
+    expect(isPublicAddress("::ffff:5db8:d822")).toBe(true);
+    expect(isPublicAddress("64:ff9b::5db8:d822")).toBe(true);
+    expect(isPublicAddress("2002:5db8:d822::1")).toBe(true);
   });
 });
 
@@ -72,6 +89,7 @@ describe("isPublicHostname", () => {
       "nas.home.arpa",
       "127.0.0.1",
       "[::1]",
+      "[::ffff:7f00:1]",
       "",
     ])
       expect(isPublicHostname(host), host).toBe(false);
@@ -84,7 +102,7 @@ describe("fetchLinkPreview", () => {
   it("reads Open Graph tags from the page", async () => {
     const calls: Call[] = [];
     const data = await fetchLinkPreview("https://example.com/post#frag", {
-      fetchImpl: fakeFetch({ "https://example.com/post": () => html(PAGE) }, calls),
+      transport: fakeFetch({ "https://example.com/post": () => html(PAGE) }, calls),
       lookup: publicLookup,
     });
     expect(data).toEqual({
@@ -95,14 +113,14 @@ describe("fetchLinkPreview", () => {
       image: { url: "https://example.com/og.png", width: 0, height: 0 },
     });
     expect(calls).toHaveLength(1);
-    expect(calls[0]?.init?.redirect).toBe("manual");
-    expect(new Headers(calls[0]?.init?.headers).get("accept")).toContain("text/html");
+    expect(calls[0]?.init.address).toBe("93.184.216.34");
+    expect(calls[0]?.init.headers.accept).toContain("text/html");
   });
 
   it("follows redirects and links the card to the final URL", async () => {
     const calls: Call[] = [];
     const data = await fetchLinkPreview("http://example.com/old", {
-      fetchImpl: fakeFetch(
+      transport: fakeFetch(
         {
           "http://example.com/old": () =>
             new Response(null, { status: 301, headers: { location: "/new" } }),
@@ -128,7 +146,7 @@ describe("fetchLinkPreview", () => {
   it("gives up after too many redirects", async () => {
     await expect(
       fetchLinkPreview("https://example.com/loop", {
-        fetchImpl: fakeFetch({
+        transport: fakeFetch({
           "https://example.com/loop": () =>
             new Response(null, { status: 302, headers: { location: "/loop" } }),
         }),
@@ -142,7 +160,7 @@ describe("fetchLinkPreview", () => {
       <link rel="alternate" type="application/json+oembed" href="https://example.com/oembed?u=1">
     </head></html>`;
     const data = await fetchLinkPreview("https://example.com/video", {
-      fetchImpl: fakeFetch({
+      transport: fakeFetch({
         "https://example.com/video": () => html(page),
         "https://example.com/oembed?u=1": () =>
           new Response(
@@ -173,7 +191,7 @@ describe("fetchLinkPreview", () => {
       <link rel="alternate" type="application/json+oembed" href="https://example.com/oembed">
     </head></html>`;
     const data = await fetchLinkPreview("https://example.com/", {
-      fetchImpl: fakeFetch({
+      transport: fakeFetch({
         "https://example.com/": () => html(page),
         "https://example.com/oembed": () => new Response("nope", { status: 500 }),
       }),
@@ -183,9 +201,40 @@ describe("fetchLinkPreview", () => {
     expect(data.image).toBeNull();
   });
 
+  it("pins each hop to the address that passed the check", async () => {
+    const calls: Call[] = [];
+    const answers: Record<string, string[]> = {
+      "example.com": ["93.184.216.34", "2606:2800:220:1:248:1893:25c8:1946"],
+      "cdn.example.net": ["151.101.1.69"],
+    };
+    await fetchLinkPreview("https://example.com/hop", {
+      transport: fakeFetch(
+        {
+          "https://example.com/hop": () =>
+            new Response(null, { status: 302, headers: { location: "https://cdn.example.net/p" } }),
+          "https://cdn.example.net/p": () => html(PAGE),
+        },
+        calls,
+      ),
+      lookup: async (host) => answers[host] ?? [],
+    });
+    expect(calls.map((call) => call.init.address)).toEqual(["93.184.216.34", "151.101.1.69"]);
+    const literal: Call[] = [];
+    await fetchLinkPreview("http://[2606:2800:220:1:248:1893:25c8:1946]/", {
+      transport: fakeFetch(
+        { "http://[2606:2800:220:1:248:1893:25c8:1946]/": () => html(PAGE) },
+        literal,
+      ),
+      lookup: async () => {
+        throw new Error("a literal is never looked up");
+      },
+    });
+    expect(literal[0]?.init.address).toBe("2606:2800:220:1:248:1893:25c8:1946");
+  });
+
   it("refuses private hosts, on the first URL and after a redirect", async () => {
     const calls: Call[] = [];
-    const fetchImpl = fakeFetch(
+    const transport = fakeFetch(
       {
         "https://example.com/hop": () =>
           new Response(null, { status: 302, headers: { location: "http://127.0.0.1:3000/" } }),
@@ -193,28 +242,31 @@ describe("fetchLinkPreview", () => {
       calls,
     );
     await expect(
-      fetchLinkPreview("http://localhost:3000/", { fetchImpl, lookup: publicLookup }),
+      fetchLinkPreview("http://localhost:3000/", { transport, lookup: publicLookup }),
+    ).rejects.toThrow(/local/);
+    await expect(
+      fetchLinkPreview("http://[::ffff:127.0.0.1]/", { transport, lookup: publicLookup }),
     ).rejects.toThrow(/local/);
     await expect(
       fetchLinkPreview("https://intranet.example/", {
-        fetchImpl,
+        transport,
         lookup: async () => ["10.0.0.5"],
       }),
     ).rejects.toThrow(/local/);
     await expect(
-      fetchLinkPreview("https://example.com/hop", { fetchImpl, lookup: publicLookup }),
+      fetchLinkPreview("https://example.com/hop", { transport, lookup: publicLookup }),
     ).rejects.toThrow(/local/);
     expect(calls.map((call) => call.url)).toEqual(["https://example.com/hop"]);
   });
 
   it("refuses a host with no addresses or a failed lookup", async () => {
-    const fetchImpl = fakeFetch({ "https://example.com/": () => html(PAGE) });
+    const transport = fakeFetch({ "https://example.com/": () => html(PAGE) });
     await expect(
-      fetchLinkPreview("https://example.com/", { fetchImpl, lookup: async () => [] }),
+      fetchLinkPreview("https://example.com/", { transport, lookup: async () => [] }),
     ).rejects.toThrow();
     await expect(
       fetchLinkPreview("https://example.com/", {
-        fetchImpl,
+        transport,
         lookup: async () => {
           throw new Error("ENOTFOUND");
         },
@@ -231,52 +283,77 @@ describe("fetchLinkPreview", () => {
     };
     const lookup = publicLookup;
     await expect(
-      fetchLinkPreview("https://example.com/file.pdf", { fetchImpl: fakeFetch(routes), lookup }),
+      fetchLinkPreview("https://example.com/file.pdf", { transport: fakeFetch(routes), lookup }),
     ).rejects.toThrow(/not a web page/);
     await expect(
-      fetchLinkPreview("https://example.com/missing", { fetchImpl: fakeFetch(routes), lookup }),
+      fetchLinkPreview("https://example.com/missing", { transport: fakeFetch(routes), lookup }),
     ).rejects.toThrow(/404/);
     await expect(
-      fetchLinkPreview("https://example.com/bare", { fetchImpl: fakeFetch(routes), lookup }),
+      fetchLinkPreview("https://example.com/bare", { transport: fakeFetch(routes), lookup }),
     ).rejects.toThrow(/no preview/);
     await expect(
       fetchLinkPreview("https://example.com/down", {
-        fetchImpl: (async () => {
+        transport: async () => {
           throw new TypeError("fetch failed");
-        }) as typeof fetch,
+        },
         lookup,
       }),
     ).rejects.toThrow(/reach/);
     await expect(fetchLinkPreview("ftp://example.com/", { lookup })).rejects.toThrow(/Not a link/);
   });
 
-  it("stops reading a page after half a megabyte", async () => {
-    const head = `<html><head><meta property="og:title" content="Big page"></head><body>`;
-    const filler = "x".repeat(1024);
+  function endless(chunks: string[], filler = "x".repeat(1024)) {
     let pulls = 0;
     const stream = new ReadableStream<Uint8Array>({
       pull(controller) {
         pulls += 1;
-        if (pulls === 1) controller.enqueue(new TextEncoder().encode(head));
+        const next = chunks[pulls - 1];
+        if (next !== undefined) controller.enqueue(new TextEncoder().encode(next));
         else if (pulls > 5_000) controller.close();
         else controller.enqueue(new TextEncoder().encode(filler));
       },
     });
-    const data = await fetchLinkPreview("https://example.com/big", {
-      fetchImpl: fakeFetch({
+    return { stream, pulls: () => pulls };
+  }
+
+  async function previewOf(stream: ReadableStream<Uint8Array>) {
+    return fetchLinkPreview("https://example.com/big", {
+      transport: fakeFetch({
         "https://example.com/big": () =>
           new Response(stream, { status: 200, headers: { "content-type": "text/html" } }),
       }),
       lookup: publicLookup,
     });
+  }
+
+  it("stops reading once the head closes, even mid-chunk, and never past a megabyte", async () => {
+    const closed = endless([`<html><head><meta property="og:title" content="Big page"></HEAD`, `>\n<body>`]);
+    const data = await previewOf(closed.stream);
     expect(data.title).toBe("Big page");
-    expect(pulls).toBeLessThan(1_000);
+    // The stream pulls one chunk ahead of the reader, so two chunks read is three pulled.
+    expect(closed.pulls()).toBeLessThanOrEqual(3);
+
+    const open = endless([`<html><head><meta property="og:title" content="Open head">`]);
+    const data2 = await previewOf(open.stream);
+    expect(data2.title).toBe("Open head");
+    expect(open.pulls()).toBeGreaterThan(1_000);
+    expect(open.pulls()).toBeLessThanOrEqual(1_030);
+  });
+
+  it("reads tags that sit behind hundreds of kilobytes of script", async () => {
+    const script = `<script>${"y".repeat(700 * 1024)}</script>`;
+    const late = endless([
+      `<html><head>${script}<meta property="og:title" content="Late tags"></head><body>`,
+    ]);
+    const data = await previewOf(late.stream);
+    expect(data.title).toBe("Late tags");
+    expect(late.pulls()).toBeLessThanOrEqual(2);
   });
 
   it("decodes the charset the page declares", async () => {
     const latin = new Uint8Array([...new TextEncoder().encode('<title>Caf'), 0xe9, ...new TextEncoder().encode("</title>")]);
     const data = await fetchLinkPreview("https://example.com/latin", {
-      fetchImpl: fakeFetch({
+      transport: fakeFetch({
         "https://example.com/latin": () =>
           new Response(latin, {
             status: 200,
@@ -286,5 +363,74 @@ describe("fetchLinkPreview", () => {
       lookup: publicLookup,
     });
     expect(data.title).toBe("Café");
+  });
+});
+
+describe("nodeTransport", () => {
+  let server: Server | undefined;
+  afterEach(async () => {
+    await new Promise((resolve) => (server ? server.close(resolve) : resolve(undefined)));
+    server = undefined;
+  });
+
+  async function listen(handler: Parameters<typeof createServer>[1]) {
+    server = createServer(handler);
+    await new Promise<void>((resolve) => server!.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("no port");
+    return address.port;
+  }
+
+  it("dials the pinned address, not the hostname, and answers as a Response", async () => {
+    const seen: { host?: string; agent?: string }[] = [];
+    const port = await listen((req, res) => {
+      seen.push({ host: req.headers.host, agent: req.headers["user-agent"] });
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "x-echo": "1" });
+      res.end("<title>Pinned</title>");
+    });
+    const response = await nodeTransport(`http://pinned.invalid:${port}/page`, {
+      headers: { accept: "text/html", "user-agent": "test-agent" },
+      address: "127.0.0.1",
+      signal: AbortSignal.timeout(5_000),
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-echo")).toBe("1");
+    expect(await response.text()).toBe("<title>Pinned</title>");
+    expect(seen).toEqual([{ host: `pinned.invalid:${port}`, agent: "test-agent" }]);
+  });
+
+  it("keeps redirects unfollowed and unwraps gzip bodies", async () => {
+    const port = await listen((req, res) => {
+      if (req.url === "/go") {
+        res.writeHead(302, { location: "/zipped" });
+        res.end();
+        return;
+      }
+      res.writeHead(200, { "content-type": "text/html", "content-encoding": "gzip" });
+      res.end(gzipSync("<title>Zipped</title>"));
+    });
+    const init = {
+      headers: {},
+      address: "127.0.0.1",
+      signal: AbortSignal.timeout(5_000),
+    };
+    const redirect = await nodeTransport(`http://pinned.invalid:${port}/go`, init);
+    expect(redirect.status).toBe(302);
+    expect(redirect.headers.get("location")).toBe("/zipped");
+    const zipped = await nodeTransport(`http://pinned.invalid:${port}/zipped`, init);
+    expect(await zipped.text()).toBe("<title>Zipped</title>");
+  });
+
+  it("rejects when nothing listens at the pinned address", async () => {
+    const port = await listen(() => undefined);
+    await new Promise((resolve) => server!.close(resolve));
+    server = undefined;
+    await expect(
+      nodeTransport(`http://pinned.invalid:${port}/`, {
+        headers: {},
+        address: "127.0.0.1",
+        signal: AbortSignal.timeout(5_000),
+      }),
+    ).rejects.toThrow();
   });
 });
