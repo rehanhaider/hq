@@ -100,7 +100,7 @@ function calendarDay(ms) {
 /**
  * Resolves the databases the app actually opens.
  *
- * The server stores read HQ_DEEN_DATABASE, HQ_DATABASE, and HQ_CONTENT_DATABASE,
+ * The server stores read HQ_NASR_DATABASE, HQ_DATABASE, and HQ_CONTENT_DATABASE,
  * so a scan of `data/` alone would back up whatever happened to
  * be left in the default location while the live databases went untouched —
  * and still report success. Both units set the same WorkingDirectory, so
@@ -111,7 +111,7 @@ function calendarDay(ms) {
  */
 function sources() {
   const configured = [
-    { vars: ["HQ_DEEN_DATABASE"], fallback: "data/deen.sqlite" },
+    { vars: ["HQ_NASR_DATABASE"], fallback: "data/nasr.sqlite" },
     { vars: ["HQ_DATABASE"], fallback: "data/activity.sqlite" },
     // HQ_NOTES_DATABASE is the name Content had before it was renamed. It is
     // still read here, or a Pi that never updated its env file would have its

@@ -11,21 +11,21 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ContentRouteImport } from './routes/content'
-import { Route as DeenRouteImport } from './routes/deen'
 import { Route as GithubRouteImport } from './routes/github'
+import { Route as NasrRouteImport } from './routes/nasr'
 import { Route as NotesRouteImport } from './routes/notes'
 import { Route as ApiUploadsRouteImport } from './routes/api/uploads'
 import { Route as ContentIndexRouteImport } from './routes/content/index'
 import { Route as ContentBoardRouteImport } from './routes/content/board'
 import { Route as ContentSettingsRouteImport } from './routes/content/settings'
 import { Route as ContentTrashRouteImport } from './routes/content/trash'
-import { Route as DeenIndexRouteImport } from './routes/deen/index'
-import { Route as DeenHistoryRouteImport } from './routes/deen/history'
-import { Route as DeenSettingsRouteImport } from './routes/deen/settings'
 import { Route as GithubIndexRouteImport } from './routes/github/index'
 import { Route as GithubRepositoriesRouteImport } from './routes/github/repositories'
 import { Route as GithubStatisticsRouteImport } from './routes/github/statistics'
 import { Route as GithubWorkRouteImport } from './routes/github/work'
+import { Route as NasrIndexRouteImport } from './routes/nasr/index'
+import { Route as NasrHistoryRouteImport } from './routes/nasr/history'
+import { Route as NasrSettingsRouteImport } from './routes/nasr/settings'
 import { Route as NotesSplatRouteImport } from './routes/notes/$'
 import { Route as ApiAvatarsOrgRouteImport } from './routes/api/avatars.$org'
 import { Route as ApiUploadsIdRouteImport } from './routes/api/uploads.$id'
@@ -40,14 +40,14 @@ const ContentRoute = ContentRouteImport.update({
   path: '/content',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DeenRoute = DeenRouteImport.update({
-  id: '/deen',
-  path: '/deen',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const GithubRoute = GithubRouteImport.update({
   id: '/github',
   path: '/github',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NasrRoute = NasrRouteImport.update({
+  id: '/nasr',
+  path: '/nasr',
   getParentRoute: () => rootRouteImport,
 } as any)
 const NotesRoute = NotesRouteImport.update({
@@ -80,21 +80,6 @@ const ContentTrashRoute = ContentTrashRouteImport.update({
   path: '/trash',
   getParentRoute: () => ContentRoute,
 } as any)
-const DeenIndexRoute = DeenIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => DeenRoute,
-} as any)
-const DeenHistoryRoute = DeenHistoryRouteImport.update({
-  id: '/history',
-  path: '/history',
-  getParentRoute: () => DeenRoute,
-} as any)
-const DeenSettingsRoute = DeenSettingsRouteImport.update({
-  id: '/settings',
-  path: '/settings',
-  getParentRoute: () => DeenRoute,
-} as any)
 const GithubIndexRoute = GithubIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -115,6 +100,21 @@ const GithubWorkRoute = GithubWorkRouteImport.update({
   path: '/work',
   getParentRoute: () => GithubRoute,
 } as any)
+const NasrIndexRoute = NasrIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => NasrRoute,
+} as any)
+const NasrHistoryRoute = NasrHistoryRouteImport.update({
+  id: '/history',
+  path: '/history',
+  getParentRoute: () => NasrRoute,
+} as any)
+const NasrSettingsRoute = NasrSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => NasrRoute,
+} as any)
 const NotesSplatRoute = NotesSplatRouteImport.update({
   id: '/$',
   path: '/$',
@@ -134,22 +134,22 @@ const ApiUploadsIdRoute = ApiUploadsIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/content': typeof ContentRouteWithChildren
-  '/deen': typeof DeenRouteWithChildren
   '/github': typeof GithubRouteWithChildren
+  '/nasr': typeof NasrRouteWithChildren
   '/notes': typeof NotesRouteWithChildren
   '/api/uploads': typeof ApiUploadsRouteWithChildren
   '/content/board': typeof ContentBoardRoute
   '/content/settings': typeof ContentSettingsRoute
   '/content/trash': typeof ContentTrashRoute
-  '/deen/history': typeof DeenHistoryRoute
-  '/deen/settings': typeof DeenSettingsRoute
   '/github/repositories': typeof GithubRepositoriesRoute
   '/github/statistics': typeof GithubStatisticsRoute
   '/github/work': typeof GithubWorkRoute
+  '/nasr/history': typeof NasrHistoryRoute
+  '/nasr/settings': typeof NasrSettingsRoute
   '/notes/$': typeof NotesSplatRoute
   '/content/': typeof ContentIndexRoute
-  '/deen/': typeof DeenIndexRoute
   '/github/': typeof GithubIndexRoute
+  '/nasr/': typeof NasrIndexRoute
   '/api/avatars/$org': typeof ApiAvatarsOrgRoute
   '/api/uploads/$id': typeof ApiUploadsIdRoute
 }
@@ -160,15 +160,15 @@ export interface FileRoutesByTo {
   '/content/board': typeof ContentBoardRoute
   '/content/settings': typeof ContentSettingsRoute
   '/content/trash': typeof ContentTrashRoute
-  '/deen/history': typeof DeenHistoryRoute
-  '/deen/settings': typeof DeenSettingsRoute
   '/github/repositories': typeof GithubRepositoriesRoute
   '/github/statistics': typeof GithubStatisticsRoute
   '/github/work': typeof GithubWorkRoute
+  '/nasr/history': typeof NasrHistoryRoute
+  '/nasr/settings': typeof NasrSettingsRoute
   '/notes/$': typeof NotesSplatRoute
   '/content': typeof ContentIndexRoute
-  '/deen': typeof DeenIndexRoute
   '/github': typeof GithubIndexRoute
+  '/nasr': typeof NasrIndexRoute
   '/api/avatars/$org': typeof ApiAvatarsOrgRoute
   '/api/uploads/$id': typeof ApiUploadsIdRoute
 }
@@ -176,22 +176,22 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/content': typeof ContentRouteWithChildren
-  '/deen': typeof DeenRouteWithChildren
   '/github': typeof GithubRouteWithChildren
+  '/nasr': typeof NasrRouteWithChildren
   '/notes': typeof NotesRouteWithChildren
   '/api/uploads': typeof ApiUploadsRouteWithChildren
   '/content/board': typeof ContentBoardRoute
   '/content/settings': typeof ContentSettingsRoute
   '/content/trash': typeof ContentTrashRoute
-  '/deen/history': typeof DeenHistoryRoute
-  '/deen/settings': typeof DeenSettingsRoute
   '/github/repositories': typeof GithubRepositoriesRoute
   '/github/statistics': typeof GithubStatisticsRoute
   '/github/work': typeof GithubWorkRoute
+  '/nasr/history': typeof NasrHistoryRoute
+  '/nasr/settings': typeof NasrSettingsRoute
   '/notes/$': typeof NotesSplatRoute
   '/content/': typeof ContentIndexRoute
-  '/deen/': typeof DeenIndexRoute
   '/github/': typeof GithubIndexRoute
+  '/nasr/': typeof NasrIndexRoute
   '/api/avatars/$org': typeof ApiAvatarsOrgRoute
   '/api/uploads/$id': typeof ApiUploadsIdRoute
 }
@@ -200,22 +200,22 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/content'
-    | '/deen'
     | '/github'
+    | '/nasr'
     | '/notes'
     | '/api/uploads'
     | '/content/board'
     | '/content/settings'
     | '/content/trash'
-    | '/deen/history'
-    | '/deen/settings'
     | '/github/repositories'
     | '/github/statistics'
     | '/github/work'
+    | '/nasr/history'
+    | '/nasr/settings'
     | '/notes/$'
     | '/content/'
-    | '/deen/'
     | '/github/'
+    | '/nasr/'
     | '/api/avatars/$org'
     | '/api/uploads/$id'
   fileRoutesByTo: FileRoutesByTo
@@ -226,37 +226,37 @@ export interface FileRouteTypes {
     | '/content/board'
     | '/content/settings'
     | '/content/trash'
-    | '/deen/history'
-    | '/deen/settings'
     | '/github/repositories'
     | '/github/statistics'
     | '/github/work'
+    | '/nasr/history'
+    | '/nasr/settings'
     | '/notes/$'
     | '/content'
-    | '/deen'
     | '/github'
+    | '/nasr'
     | '/api/avatars/$org'
     | '/api/uploads/$id'
   id:
     | '__root__'
     | '/'
     | '/content'
-    | '/deen'
     | '/github'
+    | '/nasr'
     | '/notes'
     | '/api/uploads'
     | '/content/board'
     | '/content/settings'
     | '/content/trash'
-    | '/deen/history'
-    | '/deen/settings'
     | '/github/repositories'
     | '/github/statistics'
     | '/github/work'
+    | '/nasr/history'
+    | '/nasr/settings'
     | '/notes/$'
     | '/content/'
-    | '/deen/'
     | '/github/'
+    | '/nasr/'
     | '/api/avatars/$org'
     | '/api/uploads/$id'
   fileRoutesById: FileRoutesById
@@ -264,8 +264,8 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ContentRoute: typeof ContentRouteWithChildren
-  DeenRoute: typeof DeenRouteWithChildren
   GithubRoute: typeof GithubRouteWithChildren
+  NasrRoute: typeof NasrRouteWithChildren
   NotesRoute: typeof NotesRouteWithChildren
   ApiUploadsRoute: typeof ApiUploadsRouteWithChildren
   ApiAvatarsOrgRoute: typeof ApiAvatarsOrgRoute
@@ -287,18 +287,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ContentRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/deen': {
-      id: '/deen'
-      path: '/deen'
-      fullPath: '/deen'
-      preLoaderRoute: typeof DeenRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/github': {
       id: '/github'
       path: '/github'
       fullPath: '/github'
       preLoaderRoute: typeof GithubRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/nasr': {
+      id: '/nasr'
+      path: '/nasr'
+      fullPath: '/nasr'
+      preLoaderRoute: typeof NasrRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/notes': {
@@ -343,27 +343,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ContentTrashRouteImport
       parentRoute: typeof ContentRoute
     }
-    '/deen/': {
-      id: '/deen/'
-      path: '/'
-      fullPath: '/deen/'
-      preLoaderRoute: typeof DeenIndexRouteImport
-      parentRoute: typeof DeenRoute
-    }
-    '/deen/history': {
-      id: '/deen/history'
-      path: '/history'
-      fullPath: '/deen/history'
-      preLoaderRoute: typeof DeenHistoryRouteImport
-      parentRoute: typeof DeenRoute
-    }
-    '/deen/settings': {
-      id: '/deen/settings'
-      path: '/settings'
-      fullPath: '/deen/settings'
-      preLoaderRoute: typeof DeenSettingsRouteImport
-      parentRoute: typeof DeenRoute
-    }
     '/github/': {
       id: '/github/'
       path: '/'
@@ -391,6 +370,27 @@ declare module '@tanstack/react-router' {
       fullPath: '/github/work'
       preLoaderRoute: typeof GithubWorkRouteImport
       parentRoute: typeof GithubRoute
+    }
+    '/nasr/': {
+      id: '/nasr/'
+      path: '/'
+      fullPath: '/nasr/'
+      preLoaderRoute: typeof NasrIndexRouteImport
+      parentRoute: typeof NasrRoute
+    }
+    '/nasr/history': {
+      id: '/nasr/history'
+      path: '/history'
+      fullPath: '/nasr/history'
+      preLoaderRoute: typeof NasrHistoryRouteImport
+      parentRoute: typeof NasrRoute
+    }
+    '/nasr/settings': {
+      id: '/nasr/settings'
+      path: '/settings'
+      fullPath: '/nasr/settings'
+      preLoaderRoute: typeof NasrSettingsRouteImport
+      parentRoute: typeof NasrRoute
     }
     '/notes/$': {
       id: '/notes/$'
@@ -433,20 +433,6 @@ const ContentRouteChildren: ContentRouteChildren = {
 const ContentRouteWithChildren =
   ContentRoute._addFileChildren(ContentRouteChildren)
 
-interface DeenRouteChildren {
-  DeenHistoryRoute: typeof DeenHistoryRoute
-  DeenSettingsRoute: typeof DeenSettingsRoute
-  DeenIndexRoute: typeof DeenIndexRoute
-}
-
-const DeenRouteChildren: DeenRouteChildren = {
-  DeenHistoryRoute: DeenHistoryRoute,
-  DeenSettingsRoute: DeenSettingsRoute,
-  DeenIndexRoute: DeenIndexRoute,
-}
-
-const DeenRouteWithChildren = DeenRoute._addFileChildren(DeenRouteChildren)
-
 interface GithubRouteChildren {
   GithubRepositoriesRoute: typeof GithubRepositoriesRoute
   GithubStatisticsRoute: typeof GithubStatisticsRoute
@@ -463,6 +449,20 @@ const GithubRouteChildren: GithubRouteChildren = {
 
 const GithubRouteWithChildren =
   GithubRoute._addFileChildren(GithubRouteChildren)
+
+interface NasrRouteChildren {
+  NasrHistoryRoute: typeof NasrHistoryRoute
+  NasrSettingsRoute: typeof NasrSettingsRoute
+  NasrIndexRoute: typeof NasrIndexRoute
+}
+
+const NasrRouteChildren: NasrRouteChildren = {
+  NasrHistoryRoute: NasrHistoryRoute,
+  NasrSettingsRoute: NasrSettingsRoute,
+  NasrIndexRoute: NasrIndexRoute,
+}
+
+const NasrRouteWithChildren = NasrRoute._addFileChildren(NasrRouteChildren)
 
 interface NotesRouteChildren {
   NotesSplatRoute: typeof NotesSplatRoute
@@ -489,8 +489,8 @@ const ApiUploadsRouteWithChildren = ApiUploadsRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ContentRoute: ContentRouteWithChildren,
-  DeenRoute: DeenRouteWithChildren,
   GithubRoute: GithubRouteWithChildren,
+  NasrRoute: NasrRouteWithChildren,
   NotesRoute: NotesRouteWithChildren,
   ApiUploadsRoute: ApiUploadsRouteWithChildren,
   ApiAvatarsOrgRoute: ApiAvatarsOrgRoute,

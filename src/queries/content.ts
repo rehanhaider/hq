@@ -1,6 +1,6 @@
 import { queryOptions, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { deenKeys } from "./deen";
+import { nasrKeys } from "./nasr";
 import { createPage, getContentProperties, getPage, getPages } from "@/server/fns";
 
 export const contentKeys = {
@@ -46,7 +46,7 @@ export function invalidateContent(
 ) {
   return Promise.all([
     queryClient.invalidateQueries({ queryKey }),
-    queryClient.invalidateQueries({ queryKey: deenKeys.home }),
+    queryClient.invalidateQueries({ queryKey: nasrKeys.home }),
   ]);
 }
 

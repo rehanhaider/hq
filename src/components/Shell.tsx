@@ -212,7 +212,7 @@ export function Shell() {
         >
           {[
             { to: "/" as const, title: "Home", icon: House },
-            { to: "/deen" as const, title: "Nasr", icon: BookOpen },
+            { to: "/nasr" as const, title: "Nasr", icon: BookOpen },
             { to: "/content" as const, title: "Content", icon: NotebookPen },
             { to: "/github" as const, title: "GitHub", icon: FolderGit2 },
           ].map(({ to, title, icon: Icon }) => (

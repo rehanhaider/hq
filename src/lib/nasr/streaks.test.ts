@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import type { DeenDay } from "./schemas";
+import type { NasrDay } from "./schemas";
 import { computeStreak, fajrOnTimeStreak } from "./streaks";
 import { emptyDay } from "./schemas";
 
 function makeDay(
   date: string,
-  fajr: DeenDay["fajr"] = null,
-): DeenDay {
+  fajr: NasrDay["fajr"] = null,
+): NasrDay {
   return { ...emptyDay(date), fajr };
 }
 

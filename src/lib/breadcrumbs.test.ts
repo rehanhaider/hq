@@ -82,18 +82,18 @@ describe("trailFromMatches", () => {
     const trail = trailFromMatches(
       [
         {
-          fullPath: "/deen",
+          fullPath: "/nasr",
           search: {},
           staticData: {
             views: ({ pathname }) =>
               [
-                { label: "Today", to: "/deen" },
-                { label: "Progress", to: "/deen/history" },
+                { label: "Today", to: "/nasr" },
+                { label: "Progress", to: "/nasr/history" },
               ].map((view) => ({ ...view, active: pathname === view.to })),
           },
         },
       ],
-      "/deen/history",
+      "/nasr/history",
     );
     expect(trail.crumbs).toEqual([]);
     expect(trail.views.find((view) => view.active)?.label).toBe("Progress");

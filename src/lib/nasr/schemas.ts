@@ -13,7 +13,7 @@ export const dateString = z
     );
   }, "Use a valid calendar date");
 
-export const deenDaySchema = z.object({
+export const nasrDaySchema = z.object({
   date: dateString,
   fajr: prayerStatus.default(null),
   dhuhr: prayerStatus.default(null),
@@ -30,7 +30,7 @@ export const deenDaySchema = z.object({
   note: z.string().nullable().default(null),
 });
 
-export const deenDayUpdateSchema = z.object({
+export const nasrDayUpdateSchema = z.object({
   date: dateString,
   fajr: prayerStatus.optional(),
   dhuhr: prayerStatus.optional(),
@@ -57,7 +57,7 @@ export const observationCreateSchema = z.object({
   text: z.string().min(1),
 });
 
-export const deenContentItemKeySchema = z.enum([
+export const nasrContentItemKeySchema = z.enum([
   "morning_adhkar",
   "evening_adhkar",
   "night_ayat",
@@ -67,9 +67,9 @@ export const deenContentItemKeySchema = z.enum([
 
 export const evidenceGradeSchema = z.enum(["sahih", "hasan", "mawquf"]);
 
-export const deenContentSchema = z.object({
+export const nasrContentSchema = z.object({
   id: z.string(),
-  item_key: deenContentItemKeySchema,
+  item_key: nasrContentItemKeySchema,
   title: z.string(),
   arabic: z.string().nullable(),
   transliteration: z.string().nullable(),
@@ -95,13 +95,13 @@ export const resetRequestSchema = z.object({
   confirm: z.literal("RESET"),
 });
 
-export type DeenDay = z.infer<typeof deenDaySchema>;
-export type DeenDayUpdate = z.infer<typeof deenDayUpdateSchema>;
+export type NasrDay = z.infer<typeof nasrDaySchema>;
+export type NasrDayUpdate = z.infer<typeof nasrDayUpdateSchema>;
 export type Observation = z.infer<typeof observationSchema>;
 export type ObservationCreate = z.infer<typeof observationCreateSchema>;
-export type DeenContentItemKey = z.infer<typeof deenContentItemKeySchema>;
+export type NasrContentItemKey = z.infer<typeof nasrContentItemKeySchema>;
 export type EvidenceGrade = z.infer<typeof evidenceGradeSchema>;
-export type DeenContent = z.infer<typeof deenContentSchema>;
+export type NasrContent = z.infer<typeof nasrContentSchema>;
 export type Settings = z.infer<typeof settingsSchema>;
 export type SettingsUpdate = z.infer<typeof settingsUpdateSchema>;
 export type ResetRequest = z.infer<typeof resetRequestSchema>;
@@ -110,7 +110,7 @@ export type ResetResponse = {
   deleted: Record<string, number>;
 };
 
-export function emptyDay(date: string): DeenDay {
+export function emptyDay(date: string): NasrDay {
   return {
     date,
     fajr: null,

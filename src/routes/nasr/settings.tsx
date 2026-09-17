@@ -1,20 +1,20 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { exportDeen, resetDeen, updateDeenSettings } from "@/server/fns";
-import { deenKeys, deenSettingsQuery } from "@/queries/deen";
+import { exportNasr, resetNasr, updateNasrSettings } from "@/server/fns";
+import { nasrKeys, nasrSettingsQuery } from "@/queries/nasr";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-export const Route = createFileRoute("/deen/settings")({
+export const Route = createFileRoute("/nasr/settings")({
   loader: ({ context }) =>
-    context.queryClient.ensureQueryData(deenSettingsQuery),
+    context.queryClient.ensureQueryData(nasrSettingsQuery),
   component: SettingsPage,
 });
 
 function SettingsPage() {
   const queryClient = useQueryClient();
-  const settings = useQuery(deenSettingsQuery);
+  const settings = useQuery(nasrSettingsQuery);
   const [timezone, setTimezone] = useState("");
   const [target, setTarget] = useState("100");
   useEffect(() => {
@@ -23,14 +23,14 @@ function SettingsPage() {
     setTarget(String(settings.data.istighfar_target));
   }, [settings.data]);
   const save = useMutation({
-    mutationFn: updateDeenSettings,
+    mutationFn: updateNasrSettings,
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: deenKeys.all });
-      await queryClient.invalidateQueries({ queryKey: deenKeys.home });
+      await queryClient.invalidateQueries({ queryKey: nasrKeys.all });
+      await queryClient.invalidateQueries({ queryKey: nasrKeys.home });
     },
   });
   const download = useMutation({
-    mutationFn: exportDeen,
+    mutationFn: exportNasr,
     onSuccess: (file) => {
       const blob = new Blob([file.body], {
         type: file.format === "csv" ? "text/csv" : "application/json",
@@ -131,8 +131,8 @@ function SettingsPage() {
           </section>
           <ResetSection
             onDone={async () => {
-              await queryClient.invalidateQueries({ queryKey: deenKeys.all });
-              await queryClient.invalidateQueries({ queryKey: deenKeys.home });
+              await queryClient.invalidateQueries({ queryKey: nasrKeys.all });
+              await queryClient.invalidateQueries({ queryKey: nasrKeys.home });
             }}
           />
         </div>
@@ -143,7 +143,7 @@ function SettingsPage() {
 
 function ResetSection({ onDone }: { onDone: () => Promise<void> }) {
   const reset = useMutation({
-    mutationFn: () => resetDeen({ data: { confirm: "RESET" } }),
+    mutationFn: () => resetNasr({ data: { confirm: "RESET" } }),
     onSuccess: () => {
       void onDone();
     },

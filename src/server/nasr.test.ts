@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { DeenStore } from "./deen";
+import { NasrStore } from "./nasr";
 
-let store: DeenStore;
+let store: NasrStore;
 afterEach(() => store?.close());
 
-describe("deen store", () => {
+describe("nasr store", () => {
   it("leaves untouched fields alone and can clear a prayer", () => {
-    store = new DeenStore(":memory:");
+    store = new NasrStore(":memory:");
     store.upsertDay({ date: "2026-01-01", fajr: "ontime", ruqyah: true });
     const merged = store.upsertDay({ date: "2026-01-01", dhuhr: "qada" });
     expect(merged.fajr).toBe("ontime");

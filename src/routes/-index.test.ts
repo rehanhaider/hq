@@ -13,7 +13,7 @@ const footer = 'className="text-[0.8125rem] font-medium text-primary"';
 
 describe("Home Nasr card footer", () => {
   it("shows Open Nasr tracker at the bottom, matching the GitHub work footer", () => {
-    expect(nasr).toMatch(/to="\/deen"/);
+    expect(nasr).toMatch(/to="\/nasr"/);
     expect(nasr).toMatch(/Open Nasr tracker/);
     expect(nasr).toContain(footer);
     expect(work).toContain(footer);

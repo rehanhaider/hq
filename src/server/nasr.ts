@@ -4,14 +4,14 @@ import { existsSync, mkdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import {
   emptyDay,
-  type DeenDay,
-  type DeenDayUpdate,
+  type NasrDay,
+  type NasrDayUpdate,
   type Observation,
   type ObservationCreate,
   type ResetResponse,
   type Settings,
   type SettingsUpdate,
-} from "../lib/deen";
+} from "../lib/nasr";
 
 const schema = `
 PRAGMA journal_mode=WAL;
@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT
 );
-CREATE TABLE IF NOT EXISTS deen_days (
+CREATE TABLE IF NOT EXISTS nasr_days (
   date TEXT PRIMARY KEY,
   fajr TEXT,
   dhuhr TEXT,
@@ -70,13 +70,13 @@ function asBool(value: unknown): boolean {
   return value === 1 || value === true;
 }
 
-function prayer(value: unknown): DeenDay["fajr"] {
+function prayer(value: unknown): NasrDay["fajr"] {
   return value === "ontime" || value === "qada" || value === "missed"
     ? value
     : null;
 }
 
-function normalizeDay(row: DayRow): DeenDay {
+function normalizeDay(row: DayRow): NasrDay {
   return {
     date: row.date,
     fajr: prayer(row.fajr),
@@ -95,7 +95,7 @@ function normalizeDay(row: DayRow): DeenDay {
   };
 }
 
-export class DeenStore {
+export class NasrStore {
   readonly db: DatabaseSync;
   readonly path: string;
   constructor(path: string) {
@@ -132,23 +132,23 @@ export class DeenStore {
     }
     return this.settings();
   }
-  days(): DeenDay[] {
+  days(): NasrDay[] {
     const rows = this.db
-      .prepare("SELECT * FROM deen_days ORDER BY date")
+      .prepare("SELECT * FROM nasr_days ORDER BY date")
       .all() as DayRow[];
     return rows.map(normalizeDay);
   }
-  day(date: string): DeenDay {
+  day(date: string): NasrDay {
     const row = this.db
-      .prepare("SELECT * FROM deen_days WHERE date = ?")
+      .prepare("SELECT * FROM nasr_days WHERE date = ?")
       .get(date) as DayRow | undefined;
     return row ? normalizeDay(row) : emptyDay(date);
   }
-  upsertDay(data: DeenDayUpdate): DeenDay {
+  upsertDay(data: NasrDayUpdate): NasrDay {
     const existing = this.day(data.date);
     const pick = <T>(next: T | undefined, prev: T): T =>
       next !== undefined ? next : prev;
-    const merged: DeenDay = {
+    const merged: NasrDay = {
       date: data.date,
       fajr: pick(data.fajr, existing.fajr),
       dhuhr: pick(data.dhuhr, existing.dhuhr),
@@ -169,7 +169,7 @@ export class DeenStore {
     };
     this.db
       .prepare(
-        `INSERT INTO deen_days (
+        `INSERT INTO nasr_days (
           date, fajr, dhuhr, asr, maghrib, isha,
           morning_adhkar, evening_adhkar, night_ayat_kursi, night_baqarah,
           night_three_suras, ruqyah, istighfar_count, note
@@ -229,7 +229,7 @@ export class DeenStore {
     return {
       exported_at: new Date().toISOString(),
       settings: this.db.prepare("SELECT * FROM settings").all(),
-      deen_days: this.days(),
+      nasr_days: this.days(),
       observations: this.observations(),
     };
   }
@@ -252,14 +252,14 @@ export class DeenStore {
     ];
     const rows = this.days().map((day) =>
       headers
-        .map((header) => csvEscape(String(day[header as keyof DeenDay] ?? "")))
+        .map((header) => csvEscape(String(day[header as keyof NasrDay] ?? "")))
         .join(","),
     );
     return [headers.join(","), ...rows].join("\n");
   }
   reset(): ResetResponse {
     const dir = join(
-      dirname(this.path === ":memory:" ? "data/deen.sqlite" : this.path),
+      dirname(this.path === ":memory:" ? "data/nasr.sqlite" : this.path),
       "..",
       "backups",
     );
@@ -269,7 +269,7 @@ export class DeenStore {
       this.db.prepare("VACUUM INTO ?").run(backupPath);
     }
     const deleted: Record<string, number> = {};
-    for (const table of ["observations", "deen_days"] as const) {
+    for (const table of ["observations", "nasr_days"] as const) {
       deleted[table] = Number(
         this.db.prepare(`DELETE FROM ${table}`).run().changes,
       );
@@ -305,10 +305,10 @@ function freeBackupPath(dir: string): string {
   }
 }
 
-let store: DeenStore | undefined;
-export function deenPath() {
-  return resolve(process.env.HQ_DEEN_DATABASE ?? "data/deen.sqlite");
+let store: NasrStore | undefined;
+export function nasrPath() {
+  return resolve(process.env.HQ_NASR_DATABASE ?? "data/nasr.sqlite");
 }
-export function getDeenStore() {
-  return (store ??= new DeenStore(deenPath()));
+export function getNasrStore() {
+  return (store ??= new NasrStore(nasrPath()));
 }

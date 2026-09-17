@@ -50,7 +50,7 @@ function run(env = {}) {
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "hq-backup-"));
-  makeDb(join(dataDir(), "deen.sqlite"));
+  makeDb(join(dataDir(), "nasr.sqlite"));
   makeDb(join(dataDir(), "activity.sqlite"));
 });
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
@@ -58,15 +58,15 @@ afterEach(() => rmSync(dir, { recursive: true, force: true }));
 describe("backup", () => {
   it("snapshots each database into its own directory", () => {
     run();
-    expect(listed("deen", "daily")).toHaveLength(1);
+    expect(listed("nasr", "daily")).toHaveLength(1);
     expect(listed("activity", "daily")).toHaveLength(1);
-    expect(listed("deen", "weekly")).toHaveLength(1);
+    expect(listed("nasr", "weekly")).toHaveLength(1);
   });
 
   it("produces a readable copy of the data", () => {
     run();
-    const file = listed("deen", "daily")[0];
-    const db = new DatabaseSync(join(backupDir(), "deen", "daily", file), {
+    const file = listed("nasr", "daily")[0];
+    const db = new DatabaseSync(join(backupDir(), "nasr", "daily", file), {
       readOnly: true,
     });
     expect(db.prepare("SELECT count(*) n FROM t").get().n).toBe(1);
@@ -74,15 +74,15 @@ describe("backup", () => {
   });
 
   it("backs up the configured path, not just the default directory", () => {
-    // Regression: the script scanned data/ while the app read HQ_DEEN_DATABASE,
+    // Regression: the script scanned data/ while the app read HQ_NASR_DATABASE,
     // so a relocated database was never backed up and the run still succeeded.
-    const moved = join(dir, "elsewhere", "deen.sqlite");
+    const moved = join(dir, "elsewhere", "nasr.sqlite");
     makeDb(moved, "moved");
-    rmSync(join(dataDir(), "deen.sqlite"));
-    run({ HQ_DEEN_DATABASE: moved });
-    const file = listed("deen", "daily")[0];
+    rmSync(join(dataDir(), "nasr.sqlite"));
+    run({ HQ_NASR_DATABASE: moved });
+    const file = listed("nasr", "daily")[0];
     expect(file).toBeDefined();
-    const db = new DatabaseSync(join(backupDir(), "deen", "daily", file), {
+    const db = new DatabaseSync(join(backupDir(), "nasr", "daily", file), {
       readOnly: true,
     });
     expect(
@@ -163,25 +163,25 @@ describe("backup", () => {
     }
     expect(threw).toBe(true);
     // The databases are still backed up: one missing mount is not the run.
-    expect(listed("deen", "daily")).toHaveLength(1);
+    expect(listed("nasr", "daily")).toHaveLength(1);
   });
 
   it("keeps 7 daily copies", () => {
     for (let i = 0; i < 9; i++) run();
-    expect(listed("deen", "daily")).toHaveLength(7);
+    expect(listed("nasr", "daily")).toHaveLength(7);
     expect(listed("activity", "daily")).toHaveLength(7);
   });
 
   it("keeps 4 weekly copies", () => {
     for (let i = 0; i < 6; i++) run({ HQ_BACKUP_WEEKLY: "1" });
-    expect(listed("deen", "weekly")).toHaveLength(4);
+    expect(listed("nasr", "weekly")).toHaveLength(4);
   });
 
   it("does not take a second weekly copy within the week", () => {
     run();
     run();
-    expect(listed("deen", "weekly")).toHaveLength(1);
-    expect(listed("deen", "daily")).toHaveLength(2);
+    expect(listed("nasr", "weekly")).toHaveLength(1);
+    expect(listed("nasr", "daily")).toHaveLength(2);
   });
 
   it("does not let one database prune another with a shared prefix", () => {
@@ -200,7 +200,7 @@ describe("backup", () => {
     rmSync(join(backupDir(), "activity", "weekly"), { recursive: true });
     run();
     expect(listed("activity", "weekly")).toHaveLength(1);
-    expect(listed("deen", "weekly")).toHaveLength(1);
+    expect(listed("nasr", "weekly")).toHaveLength(1);
   });
 
   it("deletes a snapshot that fails validation and reports failure", () => {
@@ -220,7 +220,7 @@ describe("backup", () => {
     expect(listed("empty", "daily")).toEqual([]);
     expect(listed("empty", "weekly")).toEqual([]);
     // A failure in one database must not stop the others.
-    expect(listed("deen", "daily")).toHaveLength(1);
+    expect(listed("nasr", "daily")).toHaveLength(1);
   });
 
   it("refuses an ambiguous configuration instead of inventing names", () => {
@@ -229,22 +229,22 @@ describe("backup", () => {
     // distinct name is what previously dropped a database from a run and let
     // one steal another's history, so this is refused before anything is
     // written rather than worked around.
-    const a = join(dir, "one", "deen.sqlite");
-    const b = join(dir, "two", "deen.sqlite");
+    const a = join(dir, "one", "nasr.sqlite");
+    const b = join(dir, "two", "nasr.sqlite");
     makeDb(a, "one");
     makeDb(b, "two");
-    rmSync(join(dataDir(), "deen.sqlite"));
+    rmSync(join(dataDir(), "nasr.sqlite"));
 
     let failure;
     try {
-      run({ HQ_DEEN_DATABASE: a, HQ_BACKUP_DATA: join(dir, "two") });
+      run({ HQ_NASR_DATABASE: a, HQ_BACKUP_DATA: join(dir, "two") });
     } catch (error) {
       failure = error;
     }
     expect(failure).toBeDefined();
     expect(failure.status).toBe(1);
     const stderr = String(failure.stderr);
-    expect(stderr).toContain('Two databases are both named "deen"');
+    expect(stderr).toContain('Two databases are both named "nasr"');
     expect(stderr).toContain(a);
     expect(stderr).toContain(b);
     // The lock file is created first; what matters is that no snapshot was.
@@ -302,7 +302,7 @@ describe("backup", () => {
 
       const out = run();
       expect(out).toContain("Another backup run is in progress");
-      expect(listed("deen", "daily")).toEqual([]);
+      expect(listed("nasr", "daily")).toEqual([]);
     } finally {
       holder.kill();
     }
@@ -314,7 +314,7 @@ describe("backup", () => {
     mkdirSync(backupDir(), { recursive: true });
     writeFileSync(lockPath(), "");
     run();
-    expect(listed("deen", "daily")).toHaveLength(1);
+    expect(listed("nasr", "daily")).toHaveLength(1);
   });
 
   it("clears a partial snapshot left by a run that died mid-write", () => {
@@ -323,21 +323,21 @@ describe("backup", () => {
     // read as a successful weekly snapshot. Snapshots are now staged as .tmp
     // and renamed only after validation.
     run();
-    const weeklyDir = join(backupDir(), "deen", "weekly");
-    const partial = join(weeklyDir, "deen-20260101-000000.sqlite.tmp");
+    const weeklyDir = join(backupDir(), "nasr", "weekly");
+    const partial = join(weeklyDir, "nasr-20260101-000000.sqlite.tmp");
     writeFileSync(partial, "");
-    expect(listed("deen", "weekly")).toHaveLength(1); // .tmp is not counted
+    expect(listed("nasr", "weekly")).toHaveLength(1); // .tmp is not counted
     run({ HQ_BACKUP_WEEKLY: "1" });
     expect(existsSync(partial)).toBe(false); // and it is swept away
-    expect(listed("deen", "weekly")).toHaveLength(2);
+    expect(listed("nasr", "weekly")).toHaveLength(2);
   });
 
   it("takes the weekly copy on the seventh day despite timer jitter", () => {
     // Regression: a strict 168-hour threshold plus RandomizedDelaySec=300 meant
     // a run seven days after a late one fell minutes short, giving 8-day gaps.
     run();
-    expect(listed("deen", "weekly")).toHaveLength(1);
-    const weekly = join(backupDir(), "deen", "weekly", listed("deen", "weekly")[0]);
+    expect(listed("nasr", "weekly")).toHaveLength(1);
+    const weekly = join(backupDir(), "nasr", "weekly", listed("nasr", "weekly")[0]);
     const midnight = new Date();
     midnight.setHours(0, 0, 0, 0);
     // Last minute of the day seven calendar days ago: always under 168 hours.
@@ -345,25 +345,25 @@ describe("backup", () => {
     expect(Date.now() - when.getTime()).toBeLessThan(7 * 86_400_000);
     utimesSync(weekly, when, when);
     run();
-    expect(listed("deen", "weekly")).toHaveLength(2);
+    expect(listed("nasr", "weekly")).toHaveLength(2);
   });
 
   it("fails when an explicitly configured database is missing", () => {
     // Regression: a configured path that did not exist was silently dropped, so
     // the other database was backed up, the run exited 0, and the timer would
     // report healthy runs forever while an absent mount went unsnapshotted.
-    const absent = join(dir, "not-mounted", "deen.sqlite");
-    rmSync(join(dataDir(), "deen.sqlite"));
+    const absent = join(dir, "not-mounted", "nasr.sqlite");
+    rmSync(join(dataDir(), "nasr.sqlite"));
 
     let failure;
     try {
-      run({ HQ_DEEN_DATABASE: absent });
+      run({ HQ_NASR_DATABASE: absent });
     } catch (error) {
       failure = error;
     }
     expect(failure).toBeDefined();
     expect(failure.status).toBe(1);
-    expect(String(failure.stderr)).toContain("HQ_DEEN_DATABASE");
+    expect(String(failure.stderr)).toContain("HQ_NASR_DATABASE");
     expect(String(failure.stderr)).toContain(absent);
     // The database that is present is still backed up.
     expect(listed("activity", "daily")).toHaveLength(1);
@@ -374,7 +374,7 @@ describe("backup", () => {
     // been created yet is ordinary on a fresh install.
     rmSync(join(dataDir(), "activity.sqlite"));
     run();
-    expect(listed("deen", "daily")).toHaveLength(1);
+    expect(listed("nasr", "daily")).toHaveLength(1);
     expect(listed("activity", "daily")).toEqual([]);
   });
 

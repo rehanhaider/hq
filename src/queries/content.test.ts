@@ -1,6 +1,6 @@
 import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
-import { deenKeys } from "./deen";
+import { nasrKeys } from "./nasr";
 import { contentKeys, invalidateContent } from "./content";
 
 describe("invalidateContent", () => {
@@ -9,12 +9,12 @@ describe("invalidateContent", () => {
       defaultOptions: { queries: { retry: false } },
     });
     client.setQueryData(contentKeys.lists, []);
-    client.setQueryData(deenKeys.home, { content: { total: 0 } });
+    client.setQueryData(nasrKeys.home, { content: { total: 0 } });
 
     await invalidateContent(client);
 
     expect(client.getQueryState(contentKeys.lists)?.isInvalidated).toBe(true);
-    expect(client.getQueryState(deenKeys.home)?.isInvalidated).toBe(true);
+    expect(client.getQueryState(nasrKeys.home)?.isInvalidated).toBe(true);
   });
 
   it("forwards a narrower content key without skipping home", async () => {
@@ -23,7 +23,7 @@ describe("invalidateContent", () => {
     });
     client.setQueryData(contentKeys.properties, {});
     client.setQueryData(contentKeys.lists, []);
-    client.setQueryData(deenKeys.home, { content: { total: 0 } });
+    client.setQueryData(nasrKeys.home, { content: { total: 0 } });
 
     await invalidateContent(client, contentKeys.properties);
 
@@ -31,6 +31,6 @@ describe("invalidateContent", () => {
       true,
     );
     expect(client.getQueryState(contentKeys.lists)?.isInvalidated).toBe(false);
-    expect(client.getQueryState(deenKeys.home)?.isInvalidated).toBe(true);
+    expect(client.getQueryState(nasrKeys.home)?.isInvalidated).toBe(true);
   });
 });

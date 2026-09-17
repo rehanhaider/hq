@@ -3,7 +3,7 @@
 A design proposal, not a redesign. Audited on 13 September 2026 against the
 running app at 1440px and 440px, light and dark, with the Content database
 seeded so the populated states could be seen. Screenshots referenced below were
-taken from `/`, `/deen`, `/deen/history`, `/deen/settings`, `/content`,
+taken from `/`, `/nasr`, `/nasr/history`, `/nasr/settings`, `/content`,
 `/content/board`, `/content/trash`, `/content/settings`, and `/github` in its
 three views.
 
@@ -14,10 +14,10 @@ three views.
 | # | Problem | Where | What the screenshot shows |
 | --- | --- | --- | --- |
 | 1 | **The homepage predates most of the app.** Its last commit is `cfd504d feat: better UI` — before Notes (`d9a2e50`), before Notes became Content (`45ed569`), before media (`f550488`). Six feature commits have landed since. | `src/routes/index.tsx` | Two modules only: a copy of Nasr Today and a 3-line GitHub summary. Content — the module the app is now mostly about — does not appear at all. |
-| 2 | **Four different container styles compete inside one app**, often on one screen: bordered panel (`.panel`), hairline-divided section (`.hairline`), bordered card grid, and plain borderless stack. | `app.css` `.panel`/`.hairline`, `Dashboard.tsx`, `deen/settings.tsx`, `ContentSettings.tsx` | Nasr Settings puts a bordered form on the left and a borderless list on the right. GitHub Overview stacks a bordered chart card between two borderless hairline sections. |
+| 2 | **Four different container styles compete inside one app**, often on one screen: bordered panel (`.panel`), hairline-divided section (`.hairline`), bordered card grid, and plain borderless stack. | `app.css` `.panel`/`.hairline`, `Dashboard.tsx`, `nasr/settings.tsx`, `ContentSettings.tsx` | Nasr Settings puts a bordered form on the left and a borderless list on the right. GitHub Overview stacks a bordered chart card between two borderless hairline sections. |
 | 3 | **Every route repeats its own name three times.** The breadcrumb says it, the view dropdown says it, then `.page-title` says it again 60px lower at 32px. | `.page-header`/`.page-title` in `app.css`, used by 8 routes | Board: top bar reads `HQ › Content › Board ⌄`, then a 32px "Board" heading, then a sentence of description, then a filter row — 215px of chrome before the first card at 1440px, 290px of 814px at 440px. |
 | 4 | **The module tab bar specified in the README was never rendered.** `.section-tabs` / `.section-tab` exist in `app.css` and are referenced nowhere in `src/`; module views hide inside a breadcrumb dropdown instead. | `app.css:166-176`, `Breadcrumbs.tsx` `ViewSwitcher` | Switching from Pages to Board needs a click into a chevron menu. Sibling views are invisible until you open it. |
-| 5 | **Pages are ~40% full at 1440px.** Layouts are two fixed columns with a short right rail and nothing below. | `routes/index.tsx`, `deen/index.tsx`, `deen/history.tsx`, `ContentBoard.tsx` | Home: content stops at y≈700 of 914; the right column stops at y≈424. Board: columns end at y≈515, leaving 400px of empty page. Nasr Progress ends at y≈630. |
+| 5 | **Pages are ~40% full at 1440px.** Layouts are two fixed columns with a short right rail and nothing below. | `routes/index.tsx`, `nasr/index.tsx`, `nasr/history.tsx`, `ContentBoard.tsx` | Home: content stops at y≈700 of 914; the right column stops at y≈424. Board: columns end at y≈515, leaving 400px of empty page. Nasr Progress ends at y≈630. |
 | 6 | **Dark mode has almost no surface separation.** `--background: oklch(0.17)` vs `--card: oklch(0.205)` is a 0.035 lightness step, and `--sidebar` is literally `var(--card)`. | `app.css` `[data-theme="dark"]` | Dark board: the columns are visible only by their 1px border; the sidebar does not separate from the content area at all. |
 | 7 | **Property colours are outside the design system.** Nine raw Tailwind hues (`slate blue teal green amber orange red pink violet`) at `-500`/`-600`, unrelated to the oklch tokens. | `src/components/content/properties.tsx` | Content Settings shows eight saturated dots in one column; a board card can carry violet + red + blue chips at once. Colour carries no meaning, only identity. |
 | 8 | **Three date formats inside the GitHub module.** | `ActivityFilters.tsx`, `Dashboard.tsx` `HistoryList`, `Connections.tsx` | Toolbar: `13 Jun 2026 – 13 Sept 2026`. History row: `2026-09-12 18:44 UTC`. Repositories table: `13 Sept 2026, 12:41`. |
@@ -35,7 +35,7 @@ three views.
 | Shows | Problem |
 | --- | --- |
 | Date + "Your day at a glance" + "Today's practices and your week in code." | A 32px title and a subtitle that restate the two sections below them. |
-| **Nasr today** — 5 salah rows, 4 practice checkboxes, istighfar count, Fajr streak | A near-exact copy of `/deen`, one click away, except read-only. Nothing here can be done; every row is a link to do it elsewhere. |
+| **Nasr today** — 5 salah rows, 4 practice checkboxes, istighfar count, Fajr streak | A near-exact copy of `/nasr`, one click away, except read-only. Nothing here can be done; every row is a link to do it elsewhere. |
 | **This week in code** — commits, requests merged, "Repositories imported 92" | "Repositories imported" is a configuration fact, not activity. No trend, no shape, no sparkline — three numbers with no denominator. |
 | *(nothing)* | **Content is absent.** The pipeline the app exists to run — 8 statuses, a board, a trash, an editor — has no presence on the home screen. |
 | *(nothing)* | No cycle position (`cycleDay` is fetched and shown only as an eyebrow), no adherence, no quick action other than "Continue today's practice". |
@@ -93,9 +93,9 @@ At 440px the four cards stack in the same order; the cycle ring sits beside the
 
 | Module | Source | Available today? |
 | --- | --- | --- |
-| Greeting strip | `homeQuery` → `deen.today`, `deen.cycleDay`, `deen.day` | Yes |
-| Today | `homeQuery` → `deen.day` (5 salah, 4 practices, `istighfar_count`), `deen.settings.istighfar_target` | Yes |
-| The cycle | `homeQuery` → `deen.adherence` / `deen.overall`, `deen.days` (the 40 marks), `deen.cycleDay`, `deen.fajrStreak` | Yes — `getHome` already returns all of it and the page throws it away |
+| Greeting strip | `homeQuery` → `nasr.today`, `nasr.cycleDay`, `nasr.day` | Yes |
+| Today | `homeQuery` → `nasr.day` (5 salah, 4 practices, `istighfar_count`), `nasr.settings.istighfar_target` | Yes |
+| The cycle | `homeQuery` → `nasr.adherence` / `nasr.overall`, `nasr.days` (the 40 marks), `nasr.cycleDay`, `nasr.fajrStreak` | Yes — `getHome` already returns all of it and the page throws it away |
 | In flight | `pagesQuery()` + `contentPropertiesQuery` from `src/queries/content.ts`, or better: extend `getHome` with `content: { counts, recent }` from `getContentStore().list()` | **Needs a small server change** (`src/server/fns.ts` `getHome`) |
 | Last 7 days in code | `homeQuery` → `github.week.total` plus `week.daily`, which `summarize()` already computes and `getHome` discards | **Needs one line** — return `week` instead of `week.total` |
 
@@ -253,7 +253,7 @@ the hierarchy: on a dashboard the data is the headline.
 6. **Settings rows:** replace the three 16px icon buttons per row with a drag
    handle and one overflow menu; the dimmed arrows currently read as broken.
 
-### Deen (Nasr) — `src/routes/deen/*`
+### Nasr — `src/routes/nasr/*`
 
 1. **Today:** the Istighfar panel is the only bordered box on the page. Commit:
    three equal cards (Salah, Practices, Istighfar) with identical padding.
@@ -322,6 +322,6 @@ The whole-app win. Nothing here touches Content or GitHub logic.
 | `ActivityChart.tsx` | Axis, gridlines, tooltip, responsive minimum |
 | `Connections.tsx` | Paging, drop the constant column |
 | `LanguageMetrics.tsx` | Chart colours from tokens |
-| `deen/index.tsx`, `deen/history.tsx`, `deen/settings.tsx` | Card discipline, metric tiles, bar treatment |
+| `nasr/index.tsx`, `nasr/history.tsx`, `nasr/settings.tsx` | Card discipline, metric tiles, bar treatment |
 
 Total: roughly three to four days of work, with the visible half of it in Phase 1.

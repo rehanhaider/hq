@@ -1,4 +1,4 @@
-import type { DeenDay } from "./schemas";
+import type { NasrDay } from "./schemas";
 import { windowDates } from "./dates";
 
 export interface AdherenceResult {
@@ -16,16 +16,16 @@ export interface AdherenceResult {
  * reads over 100%.
  */
 export function daysInWindow(
-  days: DeenDay[],
+  days: NasrDay[],
   today: string,
   length = 40,
-): DeenDay[] {
+): NasrDay[] {
   const first = windowDates(today, length)[0]!;
   return days.filter((d) => d.date >= first && d.date <= today);
 }
 
 export function calculateAdherence(
-  days: DeenDay[],
+  days: NasrDay[],
   windowDays: number,
   istighfarTarget: number,
 ): Record<string, AdherenceResult> {
@@ -82,7 +82,7 @@ export function calculateAdherence(
 }
 
 export function overallAdherence(
-  days: DeenDay[],
+  days: NasrDay[],
   windowDays: number,
   istighfarTarget: number,
 ): AdherenceResult {
@@ -110,7 +110,7 @@ export function overallAdherence(
  * The same twelve `calculateAdherence` divides by, so a strip of days and the
  * percentage above it are measuring the same thing.
  */
-export function dayCompletion(day: DeenDay, istighfarTarget: number): number {
+export function dayCompletion(day: NasrDay, istighfarTarget: number): number {
   const prayers = ["fajr", "dhuhr", "asr", "maghrib", "isha"] as const;
   const booleans = [
     "morning_adhkar",
@@ -140,7 +140,7 @@ export type DayMark = {
 };
 
 /** A day is late if any of its five prayers was prayed as qada. */
-export function hasQada(day: DeenDay): boolean {
+export function hasQada(day: NasrDay): boolean {
   return (["fajr", "dhuhr", "asr", "maghrib", "isha"] as const).some(
     (prayer) => day[prayer] === "qada",
   );
@@ -152,7 +152,7 @@ export function hasQada(day: DeenDay): boolean {
  * holds no future day: the window ends today.
  */
 export function windowStrip(
-  days: DeenDay[],
+  days: NasrDay[],
   today: string,
   istighfarTarget: number,
   length = 40,

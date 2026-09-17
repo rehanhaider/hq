@@ -10,9 +10,9 @@ import {
 import { windowDates } from "./dates";
 import { emptyDay } from "./schemas";
 import { fajrOnTimeStreak } from "./streaks";
-import type { DeenDay } from "./schemas";
+import type { NasrDay } from "./schemas";
 
-function makeDay(date: string, overrides: Partial<DeenDay> = {}): DeenDay {
+function makeDay(date: string, overrides: Partial<NasrDay> = {}): NasrDay {
   return { ...emptyDay(date), ...overrides };
 }
 

@@ -1,4 +1,4 @@
-import type { DeenContent, DeenContentItemKey } from "./schemas";
+import type { NasrContent, NasrContentItemKey } from "./schemas";
 
 type Guide = {
   title: string
@@ -7,7 +7,7 @@ type Guide = {
   closingNote?: string
 }
 
-export const DEEN_GUIDES: Record<DeenContentItemKey, Guide> = {
+export const NASR_GUIDES: Record<NasrContentItemKey, Guide> = {
   morning_adhkar: {
     title: 'Morning adhkar',
     window: 'After Fajr until sunrise; continue before midday if missed.',
@@ -71,7 +71,7 @@ const baqarahEnding = {
   meaning: 'The Messenger and the believers believe in what was revealed from their Lord. They hear and obey and ask His forgiveness. Allah does not burden a soul beyond its capacity; the verses close with prayers for pardon, forgiveness, mercy and help.',
 }
 
-const morningCore: Omit<DeenContent, 'id' | 'item_key'>[] = [
+const morningCore: Omit<NasrContent, 'id' | 'item_key'>[] = [
   { ...kursi, repetitions: 'Once', reference: "Ubayy ibn Ka'b — an-Nasa'i, 'Amal al-Yawm wa'l-Laylah 960; Sahih at-Targhib 655.", grade: 'sahih', sort_order: 10, note: 'The transmitted morning count is once, not three times.' },
   ...suras.map(({ slug: _slug, ...sura }, index) => ({ ...sura, repetitions: 'Three times', reference: 'Abdullah ibn Khubayb — Abu Dawud 5082; at-Tirmidhi 3575.', grade: 'sahih' as const, sort_order: 20 + index, note: 'Recite each of the three suras three times.' })),
   {
@@ -110,7 +110,7 @@ const forGuide = (itemKey: 'morning_adhkar' | 'evening_adhkar') => morningCore.m
 
 const nightSuras = suras.map(({ slug, ...sura }, index) => ({ ...sura, id: `night-sura-${slug}`, item_key: 'night_ayat' as const, repetitions: 'Three times', reference: 'Aisha — Sahih al-Bukhari 5017.', grade: 'sahih' as const, sort_order: 30 + index, note: index === 0 ? 'Cup the hands, recite all three suras, blow lightly, then wipe over the head, face and front of the body. Repeat the complete practice three times.' : null }))
 
-export const DEEN_CONTENT: readonly DeenContent[] = [
+export const NASR_CONTENT: readonly NasrContent[] = [
   ...forGuide('morning_adhkar'),
   ...forGuide('evening_adhkar'),
   {

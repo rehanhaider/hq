@@ -2,26 +2,26 @@ import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { deenDayQuery, deenKeys, deenQuery } from "@/queries/deen";
-import { updateDeenDay } from "@/server/fns";
+import { nasrDayQuery, nasrKeys, nasrQuery } from "@/queries/nasr";
+import { updateNasrDay } from "@/server/fns";
 import { Button } from "@/components/ui/button";
 import {
-  DEEN_GUIDES,
+  NASR_GUIDES,
   middayPrayerLabel,
   shiftDate,
-  type DeenContent,
-  type DeenContentItemKey,
-  type DeenDay,
+  type NasrContent,
+  type NasrContentItemKey,
+  type NasrDay,
   type PrayerStatus,
-} from "@/lib/deen";
+} from "@/lib/nasr";
 
-export const Route = createFileRoute("/deen/")({
-  loader: ({ context }) => context.queryClient.ensureQueryData(deenQuery),
+export const Route = createFileRoute("/nasr/")({
+  loader: ({ context }) => context.queryClient.ensureQueryData(nasrQuery),
   component: TodayPage,
 });
 
 const prayers: Array<{
-  key: keyof Pick<DeenDay, "fajr" | "dhuhr" | "asr" | "maghrib" | "isha">;
+  key: keyof Pick<NasrDay, "fajr" | "dhuhr" | "asr" | "maghrib" | "isha">;
   label: string;
 }> = [
   { key: "fajr", label: "Fajr" },
@@ -32,8 +32,8 @@ const prayers: Array<{
 ];
 
 const boolItems: Array<{
-  key: keyof Pick<DeenDay, "morning_adhkar" | "evening_adhkar" | "ruqyah">;
-  itemKey: DeenContentItemKey;
+  key: keyof Pick<NasrDay, "morning_adhkar" | "evening_adhkar" | "ruqyah">;
+  itemKey: NasrContentItemKey;
 }> = [
   { key: "morning_adhkar", itemKey: "morning_adhkar" },
   { key: "evening_adhkar", itemKey: "evening_adhkar" },
@@ -42,17 +42,17 @@ const boolItems: Array<{
 
 function TodayPage() {
   const queryClient = useQueryClient();
-  const summary = useQuery(deenQuery);
+  const summary = useQuery(nasrQuery);
   const [offset, setOffset] = useState(0);
   const today = summary.data?.today ?? "";
   const selected = today ? shiftDate(today, offset) : "";
   const isToday = offset === 0;
-  const dayQuery = useQuery(deenDayQuery(selected));
+  const dayQuery = useQuery(nasrDayQuery(selected));
   const update = useMutation({
-    mutationFn: updateDeenDay,
+    mutationFn: updateNasrDay,
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: deenKeys.all });
-      await queryClient.invalidateQueries({ queryKey: deenKeys.home });
+      await queryClient.invalidateQueries({ queryKey: nasrKeys.all });
+      await queryClient.invalidateQueries({ queryKey: nasrKeys.home });
     },
   });
   if (summary.isPending) {
@@ -75,7 +75,7 @@ function TodayPage() {
         timeZone: "UTC",
       })
     : "";
-  function patch(values: Parameters<typeof updateDeenDay>[0]["data"]) {
+  function patch(values: Parameters<typeof updateNasrDay>[0]["data"]) {
     update.mutate({ data: values });
   }
   function togglePrayer(
@@ -271,13 +271,13 @@ function PracticeDisclosure({
   items,
   onToggle,
 }: {
-  itemKey: DeenContentItemKey;
+  itemKey: NasrContentItemKey;
   complete: boolean;
-  items: DeenContent[];
+  items: NasrContent[];
   onToggle: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const guide = DEEN_GUIDES[itemKey];
+  const guide = NASR_GUIDES[itemKey];
   return (
     <div>
       <div className="list-row items-start">
@@ -326,8 +326,8 @@ function NightDisclosure({
   items,
   onToggle,
 }: {
-  day: DeenDay | undefined;
-  items: DeenContent[];
+  day: NasrDay | undefined;
+  items: NasrContent[];
   onToggle: (
     key: "night_ayat_kursi" | "night_baqarah" | "night_three_suras",
     current: boolean,
@@ -405,8 +405,8 @@ function GuideHeading({
   items,
 }: {
   label: string;
-  itemKey: DeenContentItemKey;
-  items: DeenContent[];
+  itemKey: NasrContentItemKey;
+  items: NasrContent[];
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -432,11 +432,11 @@ function PracticeGuide({
   items,
   nested = false,
 }: {
-  itemKey: DeenContentItemKey;
-  items: DeenContent[];
+  itemKey: NasrContentItemKey;
+  items: NasrContent[];
   nested?: boolean;
 }) {
-  const guide = DEEN_GUIDES[itemKey];
+  const guide = NASR_GUIDES[itemKey];
   return (
     <div className={`rounded-xl bg-muted/30 px-4 pb-5 pt-4 ${nested ? "mt-1" : ""}`}>
       <p className="text-xs font-medium text-primary">{guide.window}</p>
@@ -463,7 +463,7 @@ function PracticeGuide({
   );
 }
 
-function ContentEntry({ item, number }: { item: DeenContent; number: number }) {
+function ContentEntry({ item, number }: { item: NasrContent; number: number }) {
   return (
     <li className="card p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">

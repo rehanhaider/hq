@@ -1,16 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { deenQuery } from "@/queries/deen";
-import type { AdherenceResult } from "@/lib/deen";
-import { windowDates } from "@/lib/deen";
+import { nasrQuery } from "@/queries/nasr";
+import type { AdherenceResult } from "@/lib/nasr";
+import { windowDates } from "@/lib/nasr";
 
-export const Route = createFileRoute("/deen/history")({
-  loader: ({ context }) => context.queryClient.ensureQueryData(deenQuery),
+export const Route = createFileRoute("/nasr/history")({
+  loader: ({ context }) => context.queryClient.ensureQueryData(nasrQuery),
   component: HistoryPage,
 });
 
 function HistoryPage() {
-  const summary = useQuery(deenQuery);
+  const summary = useQuery(nasrQuery);
   if (summary.isPending) {
     return (
       <p className="py-16 text-center text-sm text-muted-foreground">

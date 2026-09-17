@@ -26,7 +26,7 @@ import { connectionSummary } from "@/lib/connections";
 import type { ConnectionRow } from "@/lib/connections";
 import { daysAgo } from "@/lib/model";
 import { utcStamp } from "@/lib/activity";
-import { deenKeys } from "@/queries/deen";
+import { nasrKeys } from "@/queries/nasr";
 
 const number = (n: number) => n.toLocaleString("en-US");
 const emptyRows: ConnectionRow[] = [];
@@ -314,7 +314,7 @@ function RemoveCell({ row, busy }: { row: ConnectionRow; busy: boolean }) {
       await Promise.all([
         client.invalidateQueries({ queryKey: ["connections"] }),
         client.invalidateQueries({ queryKey: ["dashboard"] }),
-        client.invalidateQueries({ queryKey: deenKeys.home }),
+        client.invalidateQueries({ queryKey: nasrKeys.home }),
       ]);
     },
   });

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, Check, Circle, FilePlus2 } from "lucide-react";
-import { homeQuery } from "@/queries/deen";
+import { homeQuery } from "@/queries/nasr";
 import { openWorkQuery } from "@/queries/dashboard";
 import { age, countKinds } from "@/lib/openWork";
 import { useNewPage } from "@/queries/content";
@@ -14,7 +14,7 @@ import {
   windowStrip,
   type DayMark,
   type PrayerStatus,
-} from "@/lib/deen";
+} from "@/lib/nasr";
 import { defaultFilters } from "@/lib/model";
 import { cn } from "@/lib/utils";
 
@@ -51,11 +51,11 @@ function HomePage() {
         <Button onClick={() => void home.refetch()}>Reload</Button>
       </div>
     );
-  const { deen, github, content } = home.data;
-  const day = deen.day;
+  const { nasr, github, content } = home.data;
+  const day = nasr.day;
   const prayers = [
     ["Fajr", day.fajr],
-    [middayPrayerLabel(deen.today), day.dhuhr],
+    [middayPrayerLabel(nasr.today), day.dhuhr],
     ["Asr", day.asr],
     ["Maghrib", day.maghrib],
     ["Isha", day.isha],
@@ -72,7 +72,7 @@ function HomePage() {
     ],
     ["Self-ruqyah", day.ruqyah],
   ] as const;
-  const date = new Date(`${deen.today}T12:00:00Z`).toLocaleDateString("en-GB", {
+  const date = new Date(`${nasr.today}T12:00:00Z`).toLocaleDateString("en-GB", {
     weekday: "long",
     day: "numeric",
     month: "long",
@@ -87,9 +87,9 @@ function HomePage() {
       : logged === 0
         ? "Nothing logged yet today."
         : `${WORDS[logged]} ${logged === 1 ? "prayer" : "prayers"} logged, ${WORDS[5 - logged]?.toLowerCase()} to go.`;
-  const target = deen.settings.istighfar_target;
+  const target = nasr.settings.istighfar_target;
   const istighfar = target > 0 ? Math.min(100, (day.istighfar_count / target) * 100) : 0;
-  const marks = windowStrip(deen.days, deen.today, target);
+  const marks = windowStrip(nasr.days, nasr.today, target);
   const week = github.week;
   // The bars count requests merged, not commits: the headline figures already
   // carry the commits, and a merged request is the unit of finished work.
@@ -188,7 +188,7 @@ function HomePage() {
           <div className="flex items-center justify-between gap-3">
             <p className="section-label">The last 40 days</p>
             <span className="text-[0.8125rem] text-muted-foreground">
-              {deen.windowDays} of 40 days logged
+              {nasr.windowDays} of 40 days logged
             </span>
           </div>
 
@@ -196,15 +196,15 @@ function HomePage() {
             <div
               className="grid size-24 shrink-0 place-items-center rounded-full sm:size-[8.25rem]"
               style={{
-                background: `conic-gradient(var(--primary) 0 ${deen.overall.percentage}%, var(--track) ${deen.overall.percentage}% 100%)`,
+                background: `conic-gradient(var(--primary) 0 ${nasr.overall.percentage}%, var(--track) ${nasr.overall.percentage}% 100%)`,
               }}
               role="img"
-              aria-label={`${deen.overall.percentage}% adherence over ${deen.windowDays} logged days`}
+              aria-label={`${nasr.overall.percentage}% adherence over ${nasr.windowDays} logged days`}
             >
               <div className="grid size-[4.75rem] place-items-center rounded-full bg-card text-center sm:size-26">
                 <div>
                   <p className="display text-xl sm:text-[1.75rem]">
-                    {deen.overall.percentage}%
+                    {nasr.overall.percentage}%
                   </p>
                   <p className="section-label mt-1">adherence</p>
                 </div>
@@ -244,21 +244,21 @@ function HomePage() {
               Fajr streak, all time
             </span>
             <span className="font-mono text-[0.8125rem] tabular-nums">
-              {deen.fajrStreak.current}{" "}
-              {deen.fajrStreak.current === 1 ? "day" : "days"}
+              {nasr.fajrStreak.current}{" "}
+              {nasr.fajrStreak.current === 1 ? "day" : "days"}
             </span>
           </div>
           <div className="mt-2 flex items-center justify-between gap-3">
             <span className="text-[0.8125rem] text-muted-foreground">Best</span>
             <span className="font-mono text-[0.8125rem] tabular-nums">
-              {deen.fajrStreak.longest}{" "}
-              {deen.fajrStreak.longest === 1 ? "day" : "days"}
+              {nasr.fajrStreak.longest}{" "}
+              {nasr.fajrStreak.longest === 1 ? "day" : "days"}
             </span>
           </div>
 
           <div className="mt-5 flex-1" />
           <Link
-            to="/deen"
+            to="/nasr"
             className="text-[0.8125rem] font-medium text-primary"
           >
             Open Nasr tracker <ArrowRight className="inline size-3.5" />

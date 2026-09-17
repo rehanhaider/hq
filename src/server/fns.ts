@@ -7,21 +7,21 @@ import type { ImportStatus } from "../lib/model";
 import { github } from "./github";
 import { openWork } from "./openWork";
 import { ensureRefreshLoop, startImport } from "./import";
-import { getDeenStore } from "./deen";
+import { getNasrStore } from "./nasr";
 import { getContentStore } from "./content";
 import { getUploadStore } from "./uploads";
 import {
-  DEEN_CONTENT,
+  NASR_CONTENT,
   calculateAdherence,
   dateString,
   daysInWindow,
-  deenDayUpdateSchema,
+  nasrDayUpdateSchema,
   fajrOnTimeStreak,
   getToday,
   overallAdherence,
   resetRequestSchema,
   settingsUpdateSchema,
-} from "../lib/deen";
+} from "../lib/nasr";
 import { z } from "zod";
 import { fetchTweetData, type TweetEmbedData } from "../lib/tweetEmbed";
 import { fetchLinkPreview } from "./linkPreview";
@@ -43,11 +43,11 @@ import {
   contentSummary,
 } from "../lib/content";
 
-function deenSummary() {
-  const deen = getDeenStore();
-  const settings = deen.settings();
+function nasrSummary() {
+  const nasr = getNasrStore();
+  const settings = nasr.settings();
   const today = getToday(settings.timezone);
-  const days = deen.days();
+  const days = nasr.days();
   // Everything with a denominator is measured over the rolling window: the
   // last 40 days, ending today. `days` stays whole for the calendar and the
   // day pager.
@@ -58,7 +58,7 @@ function deenSummary() {
   return {
     settings,
     today,
-    day: deen.day(today),
+    day: nasr.day(today),
     days,
     // How much of the window is actually logged, so the pages can tell an
     // empty window apart from an empty history rather than inferring it from
@@ -73,7 +73,7 @@ function deenSummary() {
       settings.istighfar_target,
     ),
     overall: overallAdherence(windowed, windowDays, settings.istighfar_target),
-    content: DEEN_CONTENT,
+    content: NASR_CONTENT,
   };
 }
 
@@ -94,7 +94,7 @@ export const getHome = createServerFn({ method: "GET" }).handler(() => {
   });
   const content = getContentStore();
   return {
-    deen: deenSummary(),
+    nasr: nasrSummary(),
     github: {
       login: dataset.login,
       repositories: dataset.snapshots.length,
@@ -106,32 +106,32 @@ export const getHome = createServerFn({ method: "GET" }).handler(() => {
     content: contentSummary(content.list(), content.properties()),
   };
 });
-export const getDeen = createServerFn({ method: "GET" }).handler(deenSummary);
-export const getDeenDay = createServerFn({ method: "GET" })
+export const getNasr = createServerFn({ method: "GET" }).handler(nasrSummary);
+export const getNasrDay = createServerFn({ method: "GET" })
   .validator(z.object({ date: dateString }))
-  .handler(({ data }) => getDeenStore().day(data.date));
-export const updateDeenDay = createServerFn({ method: "POST" })
-  .validator(deenDayUpdateSchema)
-  .handler(({ data }) => getDeenStore().upsertDay(data));
-export const getDeenSettings = createServerFn({ method: "GET" }).handler(() =>
-  getDeenStore().settings(),
+  .handler(({ data }) => getNasrStore().day(data.date));
+export const updateNasrDay = createServerFn({ method: "POST" })
+  .validator(nasrDayUpdateSchema)
+  .handler(({ data }) => getNasrStore().upsertDay(data));
+export const getNasrSettings = createServerFn({ method: "GET" }).handler(() =>
+  getNasrStore().settings(),
 );
-export const updateDeenSettings = createServerFn({ method: "POST" })
+export const updateNasrSettings = createServerFn({ method: "POST" })
   .validator(settingsUpdateSchema)
-  .handler(({ data }) => getDeenStore().updateSettings(data));
-export const exportDeen = createServerFn({ method: "GET" })
+  .handler(({ data }) => getNasrStore().updateSettings(data));
+export const exportNasr = createServerFn({ method: "GET" })
   .validator(z.object({ format: z.enum(["json", "csv"]).catch("json") }))
   .handler(({ data }) =>
     data.format === "csv"
-      ? { format: "csv" as const, body: getDeenStore().exportCsv() }
+      ? { format: "csv" as const, body: getNasrStore().exportCsv() }
       : {
           format: "json" as const,
-          body: JSON.stringify(getDeenStore().exportJson(), null, 2),
+          body: JSON.stringify(getNasrStore().exportJson(), null, 2),
         },
   );
-export const resetDeen = createServerFn({ method: "POST" })
+export const resetNasr = createServerFn({ method: "POST" })
   .validator(resetRequestSchema)
-  .handler(() => getDeenStore().reset());
+  .handler(() => getNasrStore().reset());
 
 export const getPages = createServerFn({ method: "GET" })
   .validator(listPagesSchema)

@@ -1,4 +1,4 @@
-import type { DeenDay, PrayerStatus } from "./schemas";
+import type { NasrDay, PrayerStatus } from "./schemas";
 
 export interface StreakResult {
   current: number;
@@ -7,7 +7,7 @@ export interface StreakResult {
 
 type Prayer = "fajr" | "dhuhr" | "asr" | "maghrib" | "isha";
 
-export function computeStreak<TDay extends Pick<DeenDay, "date">>(
+export function computeStreak<TDay extends Pick<NasrDay, "date">>(
   days: TDay[],
   predicate: (day: TDay) => boolean,
   today: string,
@@ -51,14 +51,14 @@ function dayDiff(a: string, b: string): number {
 }
 
 export function fajrOnTimeStreak(
-  days: Pick<DeenDay, "date" | "fajr">[],
+  days: Pick<NasrDay, "date" | "fajr">[],
   today: string,
 ): StreakResult {
   return computeStreak(days, (d) => d.fajr === "ontime", today);
 }
 
 export function prayerStreak(
-  days: Pick<DeenDay, "date" | Prayer>[],
+  days: Pick<NasrDay, "date" | Prayer>[],
   prayer: Prayer,
   statusFilter: PrayerStatus[],
   today: string,

@@ -8,9 +8,9 @@ User=rehan
 Group=rehan
 WorkingDirectory=/home/rehan/Apps/hq
 Environment=NODE_ENV=production
-# Databases resolve relative to WorkingDirectory: data/deen.sqlite,
+# Databases resolve relative to WorkingDirectory: data/nasr.sqlite,
 # data/activity.sqlite, and data/content.sqlite, with Content's uploaded files
-# in data/uploads. Optional overrides (HQ_DEEN_DATABASE, HQ_DATABASE,
+# in data/uploads. Optional overrides (HQ_NASR_DATABASE, HQ_DATABASE,
 # HQ_CONTENT_DATABASE, HQ_UPLOADS_DIR) and GITHUB_TOKEN go in the env file; HQ_NOTES_DATABASE is the deprecated name for the Content path
 # and is still read. Leading "-" so a missing file is not a startup failure.
 EnvironmentFile=-/home/rehan/Apps/hq/.env
