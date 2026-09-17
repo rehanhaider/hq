@@ -73,6 +73,7 @@ type PageRow = {
   deletion_group: string | null;
   status_id: string | null;
   position: number;
+  pinned: number;
   type_ids: string | null;
   tag_ids: string | null;
 };
@@ -159,12 +160,13 @@ function pageFromRow(row: Omit<PageListRow, "preview"> & { preview: string }): C
     typeIds: tagIdsFrom(row.type_ids),
     tagIds: tagIdsFrom(row.tag_ids),
     position: row.position,
+    pinned: Boolean(row.pinned),
   };
 }
 
 const LIST_COLUMNS = `pages.id, pages.title, substr(pages.search_text, 1, 180) AS preview,
         pages.parent_id, pages.display_order, pages.created_at, pages.updated_at,
-        pages.deleted_at, pages.revision, pages.status_id, pages.position,
+        pages.deleted_at, pages.revision, pages.status_id, pages.position, pages.pinned,
         (SELECT group_concat(type_id ORDER BY rowid) FROM page_types WHERE page_id = pages.id) AS type_ids,
         (SELECT group_concat(tag_id) FROM page_tags WHERE page_id = pages.id) AS tag_ids`;
 
@@ -219,7 +221,8 @@ export class ContentStore {
         updated_at TEXT NOT NULL,
         deleted_at TEXT,
         revision INTEGER NOT NULL DEFAULT 0,
-        deletion_group TEXT
+        deletion_group TEXT,
+        pinned INTEGER NOT NULL DEFAULT 0
       );
       CREATE INDEX IF NOT EXISTS pages_parent_order ON pages(parent_id, display_order);
       CREATE INDEX IF NOT EXISTS pages_deleted_at ON pages(deleted_at);
@@ -302,6 +305,8 @@ export class ContentStore {
         WHERE pages.id = ordered.id
       `);
     }
+    if (!columns.has("pinned"))
+      this.db.exec("ALTER TABLE pages ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0");
     this.db.exec(
       "CREATE INDEX IF NOT EXISTS pages_status_position ON pages(status_id, position)",
     );
@@ -413,7 +418,7 @@ export class ContentStore {
          FROM pages
          WHERE deleted_at IS ${trashed ? "NOT NULL" : "NULL"}
            AND (? = '' OR instr(normalize_text(title || ' ' || search_text), ?) > 0)
-         ORDER BY display_order, created_at, id`,
+         ORDER BY pinned DESC, display_order, created_at, id`,
       )
       .all(search, search) as unknown as PageListRow[];
     return rows.map(pageFromRow);
@@ -531,6 +536,22 @@ export class ContentStore {
           : { ok: false as const, code: "stale" as const, current };
       }
       this.adoptUploads(input.id, input.document);
+      return { ok: true as const, page: this.get(input.id)! };
+    });
+  }
+
+  /**
+   * Pin only: no document, no revision, no updated_at. The index can restack
+   * the page without turning an open editor's next save into a conflict, and
+   * without looking like a content edit on the board.
+   */
+  setPinned(input: { id: string; pinned: boolean }) {
+    return this.transaction(() => {
+      const page = this.get(input.id);
+      if (!page) return { ok: false as const, code: "missing" as const };
+      this.db
+        .prepare("UPDATE pages SET pinned = ? WHERE id = ?")
+        .run(input.pinned ? 1 : 0, input.id);
       return { ok: true as const, page: this.get(input.id)! };
     });
   }

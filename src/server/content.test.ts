@@ -625,9 +625,9 @@ describe("content migration", () => {
     const pages = store.list();
     const first = store.properties().statuses[0]!;
     expect(first.name).toBe("Idea");
-    expect(pages.map((page) => [page.title, page.statusId, page.typeIds, page.tagIds])).toEqual([
-      ["Older page", first.id, [], []],
-      ["Newer page", first.id, [], []],
+    expect(pages.map((page) => [page.title, page.statusId, page.typeIds, page.tagIds, page.pinned])).toEqual([
+      ["Older page", first.id, [], [], false],
+      ["Newer page", first.id, [], [], false],
     ]);
     // Oldest first, and distinct, so manual ordering starts from real order.
     expect(pages[0]!.position).toBeLessThan(pages[1]!.position);
@@ -661,6 +661,18 @@ describe("content migration", () => {
     store.close();
     store = new ContentStore(path);
     expect(store.get(page.id)?.typeIds).toEqual([type.id]);
+  });
+
+  it("keeps a pin after the database is reopened", () => {
+    directory = mkdtempSync(join(tmpdir(), "hq-content-"));
+    const path = join(directory, "content.sqlite");
+    store = new ContentStore(path);
+    const page = store.create("Keep this");
+    expect(store.setPinned({ id: page.id, pinned: true }).ok).toBe(true);
+    store.close();
+    store = new ContentStore(path);
+    expect(store.get(page.id)?.pinned).toBe(true);
+    expect(store.list().find((item) => item.id === page.id)?.pinned).toBe(true);
   });
 
   it("renames a Notes database, and its write-ahead log, on start", () => {
@@ -1064,5 +1076,45 @@ describe("page index moves", () => {
     expect(
       store.movePage({ id: randomUUID(), orderedIds: [only.id] }),
     ).toMatchObject({ ok: false, code: "missing" });
+  });
+});
+
+describe("page pins", () => {
+  it("pins and unpins a page without touching revision or updated_at", () => {
+    store = new ContentStore(":memory:");
+    const page = store.create("Keep this");
+    const before = store.get(page.id)!;
+    expect(before.pinned).toBe(false);
+    expect(store.setPinned({ id: page.id, pinned: true })).toMatchObject({
+      ok: true,
+      page: expect.objectContaining({ pinned: true, revision: before.revision }),
+    });
+    const pinned = store.get(page.id)!;
+    expect(pinned.pinned).toBe(true);
+    expect(pinned.updatedAt).toBe(before.updatedAt);
+    expect(store.list().find((item) => item.id === page.id)?.pinned).toBe(true);
+    expect(store.setPinned({ id: page.id, pinned: false }).ok).toBe(true);
+    expect(store.get(page.id)?.pinned).toBe(false);
+  });
+
+  it("keeps display order so unpinning returns the page to its sibling slot", () => {
+    store = new ContentStore(":memory:");
+    const first = store.create("First");
+    const second = store.create("Second");
+    const third = store.create("Third");
+    const before = [first, second, third].map((page) => store.get(page.id)!.order);
+    expect(store.setPinned({ id: third.id, pinned: true }).ok).toBe(true);
+    expect([first, second, third].map((page) => store.get(page.id)!.order)).toEqual(before);
+    expect(store.list().map((page) => page.title)).toEqual(["Third", "First", "Second"]);
+    expect(store.setPinned({ id: third.id, pinned: false }).ok).toBe(true);
+    expect(store.list().map((page) => page.title)).toEqual(["First", "Second", "Third"]);
+  });
+
+  it("reports a missing page instead of pinning", () => {
+    store = new ContentStore(":memory:");
+    expect(store.setPinned({ id: randomUUID(), pinned: true })).toMatchObject({
+      ok: false,
+      code: "missing",
+    });
   });
 });

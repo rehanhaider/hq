@@ -12,6 +12,7 @@ import {
   pageTypeIcons,
   persistedPageTitle,
   relativeTime,
+  compareIndexPages,
   sortPages,
   type ContentPage,
   type ContentProperties,
@@ -35,6 +36,7 @@ const page = (
   typeIds: [],
   tagIds: [],
   position: 0,
+  pinned: false,
   ...overrides,
 });
 
@@ -134,6 +136,26 @@ describe("filterPages", () => {
     const untitled = page("", { id: "blank" });
     expect(filterPages([untitled], { q: "untitled" }).map((item) => item.id)).toEqual([
       "blank",
+    ]);
+  });
+});
+
+describe("compareIndexPages", () => {
+  it("keeps pinned pages above unpinned siblings without rewriting their order", () => {
+    const laterPinned = page("Later", { order: 2, pinned: true });
+    const earlier = page("Earlier", { order: 0 });
+    const middle = page("Middle", { order: 1 });
+    expect(
+      [laterPinned, earlier, middle].sort(compareIndexPages).map((item) => item.title),
+    ).toEqual(["Later", "Earlier", "Middle"]);
+  });
+
+  it("orders pinned pages among themselves by display order", () => {
+    const second = page("Second", { order: 2, pinned: true });
+    const first = page("First", { order: 0, pinned: true });
+    expect([second, first].sort(compareIndexPages).map((item) => item.title)).toEqual([
+      "First",
+      "Second",
     ]);
   });
 });

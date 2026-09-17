@@ -16,6 +16,7 @@ const page = (id: string, title: string, parentId: string | null): ContentPage =
   typeIds: [],
   tagIds: [],
   position: 0,
+  pinned: false,
 });
 
 describe("trailFromMatches", () => {

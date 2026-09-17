@@ -19,6 +19,8 @@ describe("Content page index context menu", () => {
     expect(menu).toMatch(/page\.parentId === null/);
     expect(menu).toMatch(/onClick=\{\(\) => onFilterTree\(page\.id\)\}/);
     expect(menu).toMatch(/<ListFilter className="size-4" \/> Filter to this page/);
+    expect(menu).toMatch(/onClick=\{\(\) => onSetPinned\(page\.id, !page\.pinned\)\}/);
+    expect(menu).toMatch(/\{page\.pinned \? "Unpin" : "Pin"\}/);
   });
 
   it("creates a subpage under the right-clicked page", () => {
@@ -26,6 +28,15 @@ describe("Content page index context menu", () => {
     expect(source).toMatch(
       /onCreateSubpage=\{\(id\) => void addPage\(id\)\}/,
     );
+  });
+
+  it("pins and unpins from the same menu", () => {
+    expect(source).toMatch(/onSetPinned=\{setPinned\}/);
+    expect(source).toMatch(/setPagePinned\(\{ data: \{ id, pinned \} \}\)/);
+    expect(source).toMatch(
+      /<Pin className="ml-auto size-3.5 shrink-0 text-muted-foreground" aria-hidden \/>/,
+    );
+    expect(source).toMatch(/<span className="sr-only">Pinned<\/span>/);
   });
 
   it("keeps the menu on both the flat list and the sortable tree", () => {
@@ -39,6 +50,18 @@ describe("Content page index context menu", () => {
     expect(sortableReturn.indexOf("<PageContextMenu")).toBeLessThan(
       sortableReturn.indexOf("setActivatorNodeRef"),
     );
+  });
+});
+
+describe("Content page index pins", () => {
+  it("keeps pinned siblings above unpinned ones and refuses a drag across that line", () => {
+    expect(source).toMatch(/siblings\.sort\(compareIndexPages\)/);
+    expect(source).toMatch(/data: \{ parentId: page\.parentId, pinned: page\.pinned \}/);
+    expect(source).toMatch(
+      /data\?\.parentId === current\?\.parentId && data\?\.pinned === current\?\.pinned/,
+    );
+    expect(source).toMatch(/pages\.filter\(\(page\) => page\.pinned\)/);
+    expect(source).toMatch(/pages\.filter\(\(page\) => !page\.pinned\)/);
   });
 });
 

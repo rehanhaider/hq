@@ -30,7 +30,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ArrowLeft, FilePlus2, FileText, ListFilter, Trash2 } from "lucide-react";
+import { ArrowLeft, FilePlus2, FileText, ListFilter, Pin, PinOff, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   ContextMenu,
@@ -47,6 +47,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  compareIndexPages,
   DEFAULT_PAGE_TITLE,
   displayPageTitle,
   filterPageSearchResults,
@@ -76,6 +77,7 @@ import {
   createPage,
   movePage,
   savePage,
+  setPagePinned,
   setPageProperties,
   trashPage,
 } from "@/server/fns";
@@ -119,8 +121,7 @@ function pageTree(pages: ContentPage[]): PageTree {
     siblings.push(page);
     byParent.set(page.parentId, siblings);
   }
-  for (const siblings of byParent.values())
-    siblings.sort((a, b) => a.order - b.order || a.title.localeCompare(b.title));
+  for (const siblings of byParent.values()) siblings.sort(compareIndexPages);
   // Only groups reachable from the root are kept, so a cycle can never recurse.
   const children = new Map<string | null, ContentPage[]>();
   const seen = new Set<string>();
@@ -153,13 +154,17 @@ function pageRows(pages: ContentPage[], searching: boolean) {
 // here, so a nested row must not steal the drop: with siblings in their own
 // SortableContext, the preview and the saved order are then the same list.
 const sameLevelCollision: CollisionDetection = (args) => {
-  const parentId = (args.active.data.current as { parentId?: string | null } | undefined)?.parentId;
+  const current = args.active.data.current as
+    | { parentId?: string | null; pinned?: boolean }
+    | undefined;
   return closestCenter({
     ...args,
-    droppableContainers: args.droppableContainers.filter(
-      (container) =>
-        (container.data.current as { parentId?: string | null } | undefined)?.parentId === parentId,
-    ),
+    droppableContainers: args.droppableContainers.filter((container) => {
+      const data = container.data.current as
+        | { parentId?: string | null; pinned?: boolean }
+        | undefined;
+      return data?.parentId === current?.parentId && data?.pinned === current?.pinned;
+    }),
   });
 };
 
@@ -398,7 +403,10 @@ export function ContentWorkspace() {
     !searching &&
     !search.tree &&
     !list.isPending &&
-    [...tree.children.values()].some((group) => group.length > 1);
+    [...tree.children.values()].some((group) => {
+      const pinned = group.filter((page) => page.pinned).length;
+      return pinned > 1 || group.length - pinned > 1;
+    });
   const draggedPage = draggedId
     ? indexPages.find((page) => page.id === draggedId)
     : undefined;
@@ -452,10 +460,13 @@ export function ContentWorkspace() {
     const source = localPages ?? list.data ?? [];
     const activePage = source.find((page) => page.id === activeId);
     if (!activePage) return;
-    // `over` is always a sibling (see sameLevelCollision), so the drop takes
-    // the hovered sibling's slot, downward moves landing past it, exactly as
-    // the drag preview shows. Nesting never changes here.
-    const siblings = tree.children.get(activePage.parentId) ?? [];
+    // `over` is always a sibling with the same pin state (see
+    // sameLevelCollision), so the drop takes the hovered sibling's slot,
+    // downward moves landing past it, exactly as the drag preview shows.
+    // Nesting never changes here, and a drop cannot cross the pin line.
+    const siblings = (tree.children.get(activePage.parentId) ?? []).filter(
+      (page) => page.pinned === activePage.pinned,
+    );
     const from = siblings.findIndex((page) => page.id === activeId);
     const to = siblings.findIndex((page) => page.id === overId);
     if (from < 0 || to < 0 || from === to) return;
@@ -483,6 +494,29 @@ export function ContentWorkspace() {
       search: { ...search, tree },
       replace: true,
     });
+
+  const setPinned = async (id: string, pinned: boolean) => {
+    const failed = pinned
+      ? "The page could not be pinned."
+      : "The page could not be unpinned.";
+    try {
+      const result = await setPagePinned({ data: { id, pinned } });
+      if (!result.ok) {
+        setActionError(failed);
+        return;
+      }
+      setActionError("");
+      setLocalPages(null);
+      if (draftRef.current?.id === id) {
+        const next = { ...draftRef.current, pinned };
+        draftRef.current = next;
+        setDraft(next);
+      }
+      await invalidateContent(queryClient);
+    } catch {
+      setActionError(failed);
+    }
+  };
 
   const applyProperties = async (patch: PropertyPatch) => {
     const current = draftRef.current;
@@ -702,6 +736,7 @@ export function ContentWorkspace() {
                       onSelect={(id) => void selectPage(id)}
                       onCreateSubpage={(id) => void addPage(id)}
                       onFilterTree={filterToTree}
+                      onSetPinned={setPinned}
                     />
                   }
                 >
@@ -722,6 +757,7 @@ export function ContentWorkspace() {
                       onSelect={(id) => void selectPage(id)}
                       onCreateSubpage={(id) => void addPage(id)}
                       onFilterTree={filterToTree}
+                      onSetPinned={setPinned}
                     />
                     {tree.orphans.map((page) => (
                       <PageIndexRow
@@ -734,6 +770,7 @@ export function ContentWorkspace() {
                         onSelect={(id) => void selectPage(id)}
                         onCreateSubpage={(id) => void addPage(id)}
                         onFilterTree={filterToTree}
+                        onSetPinned={setPinned}
                       />
                     ))}
                     <DragOverlay>
@@ -746,6 +783,9 @@ export function ContentWorkspace() {
                           <span className="truncate">
                             {displayPageTitle(draggedPage.title)}
                           </span>
+                          {draggedPage.pinned ? (
+                            <Pin className="ml-auto size-3.5 shrink-0" aria-hidden />
+                          ) : null}
                         </div>
                       ) : null}
                     </DragOverlay>
@@ -760,6 +800,7 @@ export function ContentWorkspace() {
                   onSelect={(id) => void selectPage(id)}
                   onCreateSubpage={(id) => void addPage(id)}
                   onFilterTree={filterToTree}
+                  onSetPinned={setPinned}
                 />
               )
             ) : (
@@ -986,6 +1027,12 @@ function PageIndexButton({
     >
       <PageTypeIcon typeIds={page.typeIds} types={types} />
       <span className="truncate">{displayPageTitle(page.title)}</span>
+      {page.pinned ? (
+        <>
+          <span className="sr-only">Pinned</span>
+          <Pin className="ml-auto size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+        </>
+      ) : null}
     </button>
   );
 }
@@ -999,18 +1046,27 @@ function PageContextMenu({
   disabled,
   onCreateSubpage,
   onFilterTree,
+  onSetPinned,
   children,
 }: {
   page: ContentPage;
   disabled: boolean;
   onCreateSubpage: (id: string) => void;
   onFilterTree: (id: string) => void;
+  onSetPinned: (id: string, pinned: boolean) => void;
   children: ReactNode;
 }) {
   return (
     <ContextMenu disabled={disabled}>
       <ContextMenuTrigger className="block w-full">{children}</ContextMenuTrigger>
       <ContextMenuContent>
+        <ContextMenuItem
+          disabled={disabled}
+          onClick={() => onSetPinned(page.id, !page.pinned)}
+        >
+          {page.pinned ? <PinOff className="size-4" /> : <Pin className="size-4" />}
+          {page.pinned ? "Unpin" : "Pin"}
+        </ContextMenuItem>
         {page.parentId === null && (
           <ContextMenuItem disabled={disabled} onClick={() => onFilterTree(page.id)}>
             <ListFilter className="size-4" /> Filter to this page
@@ -1036,6 +1092,7 @@ function PageIndexRow({
   onSelect,
   onCreateSubpage,
   onFilterTree,
+  onSetPinned,
 }: {
   page: ContentPage;
   types: Property[];
@@ -1045,6 +1102,7 @@ function PageIndexRow({
   onSelect: (id: string) => void;
   onCreateSubpage: (id: string) => void;
   onFilterTree: (id: string) => void;
+  onSetPinned: (id: string, pinned: boolean) => void;
 }) {
   return (
     <PageContextMenu
@@ -1052,6 +1110,7 @@ function PageIndexRow({
       disabled={disabled}
       onCreateSubpage={onCreateSubpage}
       onFilterTree={onFilterTree}
+      onSetPinned={onSetPinned}
     >
       <PageIndexButton
         page={page}
@@ -1073,6 +1132,7 @@ function PageIndexList({
   onSelect,
   onCreateSubpage,
   onFilterTree,
+  onSetPinned,
 }: {
   rows: { page: ContentPage; depth: number }[];
   types: Property[];
@@ -1081,6 +1141,7 @@ function PageIndexList({
   onSelect: (id: string) => void;
   onCreateSubpage: (id: string) => void;
   onFilterTree: (id: string) => void;
+  onSetPinned: (id: string, pinned: boolean) => void;
 }) {
   return (
     <>
@@ -1095,6 +1156,7 @@ function PageIndexList({
           onSelect={onSelect}
           onCreateSubpage={onCreateSubpage}
           onFilterTree={onFilterTree}
+          onSetPinned={onSetPinned}
         />
       ))}
     </>
@@ -1102,9 +1164,11 @@ function PageIndexList({
 }
 
 /**
- * One sibling group as its own sortable list. Each row's sortable node wraps
- * its subtree, so the group's items are contiguous, a subtree moves as one
- * piece, and the preview shows exactly the sibling order that gets saved.
+ * One sibling group as its own sortable list. Pinned and unpinned pages are
+ * separate lists so a drag cannot cross the pin line. Each row's sortable
+ * node wraps its subtree, so the group's items are contiguous, a subtree
+ * moves as one piece, and the preview shows exactly the sibling order that
+ * gets saved.
  */
 function SortableGroup({
   parentId,
@@ -1116,6 +1180,7 @@ function SortableGroup({
   onSelect,
   onCreateSubpage,
   onFilterTree,
+  onSetPinned,
 }: {
   parentId: string | null;
   depth: number;
@@ -1126,8 +1191,65 @@ function SortableGroup({
   onSelect: (id: string) => void;
   onCreateSubpage: (id: string) => void;
   onFilterTree: (id: string) => void;
+  onSetPinned: (id: string, pinned: boolean) => void;
 }) {
   const pages = tree.children.get(parentId) ?? [];
+  if (!pages.length) return null;
+  const pinned = pages.filter((page) => page.pinned);
+  const unpinned = pages.filter((page) => !page.pinned);
+  return (
+    <>
+      <SortableSiblingList
+        pages={pinned}
+        depth={depth}
+        tree={tree}
+        types={types}
+        selectedId={selectedId}
+        disabled={disabled}
+        onSelect={onSelect}
+        onCreateSubpage={onCreateSubpage}
+        onFilterTree={onFilterTree}
+        onSetPinned={onSetPinned}
+      />
+      <SortableSiblingList
+        pages={unpinned}
+        depth={depth}
+        tree={tree}
+        types={types}
+        selectedId={selectedId}
+        disabled={disabled}
+        onSelect={onSelect}
+        onCreateSubpage={onCreateSubpage}
+        onFilterTree={onFilterTree}
+        onSetPinned={onSetPinned}
+      />
+    </>
+  );
+}
+
+function SortableSiblingList({
+  pages,
+  depth,
+  tree,
+  types,
+  selectedId,
+  disabled,
+  onSelect,
+  onCreateSubpage,
+  onFilterTree,
+  onSetPinned,
+}: {
+  pages: ContentPage[];
+  depth: number;
+  tree: PageTree;
+  types: Property[];
+  selectedId: string | undefined;
+  disabled: boolean;
+  onSelect: (id: string) => void;
+  onCreateSubpage: (id: string) => void;
+  onFilterTree: (id: string) => void;
+  onSetPinned: (id: string, pinned: boolean) => void;
+}) {
   if (!pages.length) return null;
   return (
     <SortableContext items={pages.map((page) => page.id)} strategy={verticalListSortingStrategy}>
@@ -1143,6 +1265,7 @@ function SortableGroup({
           onSelect={onSelect}
           onCreateSubpage={onCreateSubpage}
           onFilterTree={onFilterTree}
+          onSetPinned={onSetPinned}
         >
           <SortableGroup
             parentId={page.id}
@@ -1154,6 +1277,7 @@ function SortableGroup({
             onSelect={onSelect}
             onCreateSubpage={onCreateSubpage}
             onFilterTree={onFilterTree}
+            onSetPinned={onSetPinned}
           />
         </SortablePageRow>
       ))}
@@ -1171,6 +1295,7 @@ function SortablePageRow({
   onSelect,
   onCreateSubpage,
   onFilterTree,
+  onSetPinned,
   children,
 }: {
   page: ContentPage;
@@ -1183,6 +1308,7 @@ function SortablePageRow({
   onSelect: (id: string) => void;
   onCreateSubpage: (id: string) => void;
   onFilterTree: (id: string) => void;
+  onSetPinned: (id: string, pinned: boolean) => void;
   /** The page's own subtree, carried along when the row moves. */
   children?: ReactNode;
 }) {
@@ -1196,7 +1322,7 @@ function SortablePageRow({
     isDragging,
   } = useSortable({
     id: page.id,
-    data: { parentId: page.parentId },
+    data: { parentId: page.parentId, pinned: page.pinned },
     disabled: disabled || !sortable,
   });
   // Only the row itself is the handle; the subtree below it is outside the
@@ -1213,6 +1339,7 @@ function SortablePageRow({
         disabled={disabled}
         onCreateSubpage={onCreateSubpage}
         onFilterTree={onFilterTree}
+        onSetPinned={onSetPinned}
       >
         <div ref={setActivatorNodeRef} {...attributes} {...listeners}>
           <PageIndexButton
