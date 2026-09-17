@@ -71,9 +71,9 @@ const PHOTO_LIMIT = 4;
 /** localStorage entries outlive the session; a month matches X's cache age. */
 export const TWEET_EMBED_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
-/** v2 is syndication data. v1 held oEmbed HTML and is pruned on sight. */
+/** v3 adds the quoted post's photos. v2 held the same shape without them. */
 const CACHE_NAMESPACE = "hq:tweet-embed:";
-const CACHE_PREFIX = `${CACHE_NAMESPACE}v2`;
+const CACHE_PREFIX = `${CACHE_NAMESPACE}v3`;
 
 /** Only X's own media hosts may reach an `img`, `video`, or `poster`. */
 const MEDIA_HOSTS = new Set(["pbs.twimg.com", "video.twimg.com"]);

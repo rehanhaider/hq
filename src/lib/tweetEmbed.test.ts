@@ -277,14 +277,18 @@ describe("tweet cache", () => {
     );
   });
 
-  it("ignores the v1 oEmbed entries this replaced", () => {
+  it("ignores the v1 oEmbed and v2 photo-less entries this replaced", () => {
     const legacy = memoryStorage({
       [`hq:tweet-embed:v1:dark:${ID}`]: JSON.stringify({
         html: '<blockquote class="twitter-tweet"><p>old</p></blockquote>',
         savedAt: Date.now(),
       }),
+      [`hq:tweet-embed:v2:dark:${ID}`]: JSON.stringify({
+        savedAt: Date.now(),
+        data: { ...DATA, quote: { ...DATA.quote, photos: undefined } },
+      }),
     });
-    expect(tweetEmbedCacheKey(ID, "dark")).toContain("v2");
+    expect(tweetEmbedCacheKey(ID, "dark")).toContain("v3");
     expect(readTweetEmbedCache(legacy, ID, "dark")).toBeUndefined();
   });
 
