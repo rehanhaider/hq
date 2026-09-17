@@ -2,6 +2,7 @@ import { promises as dns } from "node:dns";
 import { request as httpRequest, type IncomingMessage } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { isIP } from "node:net";
+import { networkInterfaces } from "node:os";
 import { Readable } from "node:stream";
 import { createBrotliDecompress, createGunzip, createInflate } from "node:zlib";
 import {
@@ -35,6 +36,19 @@ const USER_AGENT =
   "Mozilla/5.0 (compatible; hq-link-preview/1.0; +https://github.com/rehanhaider/hq)";
 
 export type HostLookup = (hostname: string) => Promise<string[]>;
+
+/**
+ * Every address on this machine's interfaces. A public address here is
+ * still this box, and a fetch to it would reach whatever else listens on
+ * 0.0.0.0 beside the app.
+ */
+export function localInterfaceAddresses(): Set<string> {
+  const addresses = new Set<string>();
+  for (const entries of Object.values(networkInterfaces())) {
+    for (const entry of entries ?? []) addresses.add(entry.address.replace(/%.*$/, ""));
+  }
+  return addresses;
+}
 
 const defaultLookup: HostLookup = async (hostname) => {
   const records = await dns.lookup(hostname, { all: true, verbatim: true });
@@ -126,21 +140,32 @@ export function isPublicHostname(hostname: string): boolean {
 
 /**
  * The address the connection must use: the literal itself, or the first
- * resolved address once every resolved address has passed.
+ * resolved address once every resolved address has passed. An address
+ * that belongs to one of this machine's own interfaces is refused whatever
+ * its range.
  */
-async function checkedAddress(url: URL, lookup: HostLookup): Promise<string> {
+async function checkedAddress(
+  url: URL,
+  lookup: HostLookup,
+  local: Set<string>,
+): Promise<string> {
   const hostname = url.hostname;
   if (!isPublicHostname(hostname)) throw new Error("Refused to fetch a local address.");
   const literal = hostname.replace(/^\[|\]$/g, "");
-  if (isIP(literal)) return literal;
   let addresses: string[];
-  try {
-    addresses = await lookup(hostname);
-  } catch {
-    throw new Error("Could not resolve the link's host.");
+  if (isIP(literal)) addresses = [literal];
+  else {
+    try {
+      addresses = await lookup(hostname);
+    } catch {
+      throw new Error("Could not resolve the link's host.");
+    }
   }
   const first = addresses[0];
-  if (!first || !addresses.every(isPublicAddress))
+  if (
+    !first ||
+    !addresses.every((address) => isPublicAddress(address) && !local.has(address.toLowerCase()))
+  )
     throw new Error("Refused to fetch a local address.");
   return first;
 }
@@ -284,6 +309,14 @@ function decode(bytes: Uint8Array, contentType: string): string {
 export interface FetchLinkOptions {
   transport?: LinkTransport;
   lookup?: HostLookup;
+  /** This machine's own addresses; defaults to its interfaces. */
+  localAddresses?: Iterable<string>;
+}
+
+interface ResolvedOptions {
+  transport: LinkTransport;
+  lookup: HostLookup;
+  local: Set<string>;
 }
 
 /**
@@ -294,11 +327,11 @@ export interface FetchLinkOptions {
 async function fetchPublic(
   start: URL,
   accept: string,
-  options: Required<FetchLinkOptions>,
+  options: ResolvedOptions,
 ): Promise<{ response: Response; url: URL }> {
   let url = start;
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-    const address = await checkedAddress(url, options.lookup);
+    const address = await checkedAddress(url, options.lookup, options.local);
     let response: Response;
     try {
       response = await options.transport(url.toString(), {
@@ -335,7 +368,7 @@ async function fetchPublic(
 
 async function fetchOEmbed(
   endpoint: string,
-  options: Required<FetchLinkOptions>,
+  options: ResolvedOptions,
 ): Promise<ReturnType<typeof normalizeOEmbed>> {
   try {
     const { response } = await fetchPublic(
@@ -358,9 +391,14 @@ export async function fetchLinkPreview(
 ): Promise<LinkPreviewData> {
   const url = linkPreviewUrl(value);
   if (!url) throw new Error("Not a link that can be previewed.");
-  const resolved: Required<FetchLinkOptions> = {
+  const resolved: ResolvedOptions = {
     transport: options.transport ?? nodeTransport,
     lookup: options.lookup ?? defaultLookup,
+    local: new Set(
+      [...(options.localAddresses ?? localInterfaceAddresses())].map((address) =>
+        address.toLowerCase(),
+      ),
+    ),
   };
   const { response, url: finalUrl } = await fetchPublic(
     new URL(url),

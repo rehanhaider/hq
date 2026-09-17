@@ -5,6 +5,7 @@ import {
   fetchLinkPreview,
   isPublicAddress,
   isPublicHostname,
+  localInterfaceAddresses,
   nodeTransport,
   type TransportInit,
 } from "./linkPreview";
@@ -257,6 +258,28 @@ describe("fetchLinkPreview", () => {
       fetchLinkPreview("https://example.com/hop", { transport, lookup: publicLookup }),
     ).rejects.toThrow(/local/);
     expect(calls.map((call) => call.url)).toEqual(["https://example.com/hop"]);
+  });
+
+  it("refuses this machine's own addresses, public or not, as a literal or a resolved name", async () => {
+    const calls: Call[] = [];
+    const transport = fakeFetch({ "http://203.0.113.5:8080/": () => html(PAGE), "https://self.example/": () => html(PAGE) }, calls);
+    const localAddresses = ["203.0.113.5", "2001:DB8::1"];
+    await expect(
+      fetchLinkPreview("http://203.0.113.5:8080/", { transport, lookup: publicLookup, localAddresses }),
+    ).rejects.toThrow(/local/);
+    await expect(
+      fetchLinkPreview("https://self.example/", {
+        transport,
+        lookup: async () => ["93.184.216.34", "2001:db8::1"],
+        localAddresses,
+      }),
+    ).rejects.toThrow(/local/);
+    expect(calls).toEqual([]);
+    await fetchLinkPreview("http://203.0.113.5:8080/", { transport, lookup: publicLookup, localAddresses: [] });
+    expect(calls).toHaveLength(1);
+    const own = localInterfaceAddresses();
+    expect(own.has("127.0.0.1")).toBe(true);
+    for (const address of own) expect(address).not.toMatch(/%/);
   });
 
   it("refuses a host with no addresses or a failed lookup", async () => {
