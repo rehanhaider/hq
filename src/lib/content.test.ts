@@ -4,9 +4,11 @@ import {
   contentSummary,
   DEFAULT_PAGE_TITLE,
   displayPageTitle,
+  filterPageSearchResults,
   filterPages,
   groupPages,
   hasFilters,
+  pageTreeIds,
   pageTypeIcons,
   persistedPageTitle,
   relativeTime,
@@ -86,7 +88,46 @@ describe("filterPages", () => {
     expect(filterPages(pages, {})).toHaveLength(2);
     expect(hasFilters({})).toBe(false);
     expect(hasFilters({ tag: ["sqlite"] })).toBe(true);
+    expect(hasFilters({ tree: "root" })).toBe(true);
     expect(hasFilters({ q: "  " })).toBe(false);
+  });
+
+  it("keeps a selected page and all of its descendants", () => {
+    const pages = [
+      page("Root", { id: "root" }),
+      page("Child", { id: "child", parentId: "root" }),
+      page("Grandchild", { id: "grandchild", parentId: "child" }),
+      page("Other", { id: "other" }),
+    ];
+
+    expect(filterPages(pages, { tree: "root" }).map((item) => item.id)).toEqual([
+      "root",
+      "child",
+      "grandchild",
+    ]);
+    expect([...pageTreeIds(pages, "missing")]).toEqual([]);
+  });
+
+  it("stops when malformed parent links form a cycle", () => {
+    const pages = [
+      page("Root", { id: "root", parentId: "child" }),
+      page("Child", { id: "child", parentId: "root" }),
+    ];
+
+    expect([...pageTreeIds(pages, "root")].sort()).toEqual(["child", "root"]);
+  });
+
+  it("keeps a body-search match inside the selected tree when its parent did not match", () => {
+    const root = page("Root", { id: "root" });
+    const child = page("Different title", { id: "child", parentId: "root" });
+    const outside = page("Outside match", { id: "outside" });
+
+    expect(
+      filterPageSearchResults([child, outside], [root, child, outside], {
+        q: "body phrase",
+        tree: "root",
+      }).map((item) => item.id),
+    ).toEqual(["child"]);
   });
 
   it("treats a blank stored title as Untitled when searching", () => {
@@ -189,6 +230,7 @@ describe("contentSearchSchema", () => {
     expect(
       contentSearchSchema.parse({
         q: " stream ",
+        tree: "4f1b0a2e-1c4d-4b8e-9f6a-2d5c7e8f9a0b",
         status: ["3f1b0a2e-1c4d-4b8e-9f6a-2d5c7e8f9a0b"],
         group: "type",
         sort: "updated",
@@ -196,6 +238,7 @@ describe("contentSearchSchema", () => {
       }),
     ).toMatchObject({
       q: "stream",
+      tree: "4f1b0a2e-1c4d-4b8e-9f6a-2d5c7e8f9a0b",
       status: ["3f1b0a2e-1c4d-4b8e-9f6a-2d5c7e8f9a0b"],
       group: "type",
       sort: "updated",

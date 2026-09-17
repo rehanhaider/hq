@@ -30,7 +30,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ArrowLeft, FilePlus2, FileText, Trash2 } from "lucide-react";
+import { ArrowLeft, FilePlus2, FileText, ListFilter, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   ContextMenu,
@@ -49,7 +49,7 @@ import {
 import {
   DEFAULT_PAGE_TITLE,
   displayPageTitle,
-  filterPages,
+  filterPageSearchResults,
   hasFilters,
   persistedPageTitle,
   splitTagNames,
@@ -168,6 +168,7 @@ export function ContentWorkspace() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const list = useQuery(pagesQuery(search.q));
+  const hierarchy = useQuery(pagesQuery());
   const propertyQuery = useQuery(contentPropertiesQuery);
   const properties: ContentProperties = propertyQuery.data ?? {
     statuses: [],
@@ -363,7 +364,9 @@ export function ContentWorkspace() {
   // The server already searched titles and body text, so only the property
   // filters are applied here. Filtering flattens the tree: a match whose parent
   // was filtered out still has to be reachable.
-  const searching = Boolean(search.q) || hasFilters({ ...search, q: undefined });
+  const searching =
+    Boolean(search.q) ||
+    hasFilters({ ...search, q: undefined, tree: undefined });
   const [localPages, setLocalPages] = useState<ContentPage[] | null>(null);
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const indexPages = useMemo(() => {
@@ -377,19 +380,20 @@ export function ContentWorkspace() {
   // otherwise race and the earlier drag's order could land last in SQLite.
   const orderChain = useRef<Promise<void>>(Promise.resolve());
   const rows = useMemo(() => {
-    const pages = filterPages(indexPages, {
-      status: search.status,
-      type: search.type,
-      tag: search.tag,
-    });
+    const pages = filterPageSearchResults(
+      indexPages,
+      hierarchy.data ?? [],
+      search,
+    );
     return pageRows(pages, searching);
-  }, [indexPages, search, searching]);
+  }, [hierarchy.data, indexPages, search, searching]);
   // Dragging a filtered or searched list would persist an order the user never
   // saw whole, so the index is only sortable when the full tree is on screen
   // and some sibling group actually has more than one page.
   const tree = useMemo(() => pageTree(indexPages), [indexPages]);
   const canReorder =
     !searching &&
+    !search.tree &&
     !list.isPending &&
     [...tree.children.values()].some((group) => group.length > 1);
   const draggedPage = draggedId
@@ -467,6 +471,13 @@ export function ContentWorkspace() {
     void navigate({
       to: "/content",
       search: { ...search, ...patch },
+      replace: true,
+    });
+
+  const filterToTree = (tree: string) =>
+    void navigate({
+      to: "/content",
+      search: { ...search, tree },
       replace: true,
     });
 
@@ -660,7 +671,7 @@ export function ContentWorkspace() {
       <div className="content-workspace mt-4">
         <aside className={`${selectedId ? "hidden lg:flex" : "flex"} min-h-136 flex-col border-r bg-card`} aria-label="Content pages">
           <div className="min-h-0 flex-1 overflow-y-auto px-2 py-3">
-            {list.isPending ? (
+            {list.isPending || (search.tree && hierarchy.isPending) ? (
               <p className="p-3 text-muted-foreground">Loading pages…</p>
             ) : rows.length ? (
               canReorder ? (
@@ -673,6 +684,7 @@ export function ContentWorkspace() {
                       disabled={recovering}
                       onSelect={(id) => void selectPage(id)}
                       onCreateSubpage={(id) => void addPage(id)}
+                      onFilterTree={filterToTree}
                     />
                   }
                 >
@@ -692,6 +704,7 @@ export function ContentWorkspace() {
                       disabled={recovering}
                       onSelect={(id) => void selectPage(id)}
                       onCreateSubpage={(id) => void addPage(id)}
+                      onFilterTree={filterToTree}
                     />
                     {tree.orphans.map((page) => (
                       <PageIndexRow
@@ -703,6 +716,7 @@ export function ContentWorkspace() {
                         disabled={recovering}
                         onSelect={(id) => void selectPage(id)}
                         onCreateSubpage={(id) => void addPage(id)}
+                        onFilterTree={filterToTree}
                       />
                     ))}
                     <DragOverlay>
@@ -728,6 +742,7 @@ export function ContentWorkspace() {
                   disabled={recovering}
                   onSelect={(id) => void selectPage(id)}
                   onCreateSubpage={(id) => void addPage(id)}
+                  onFilterTree={filterToTree}
                 />
               )
             ) : (
@@ -966,17 +981,24 @@ function PageContextMenu({
   page,
   disabled,
   onCreateSubpage,
+  onFilterTree,
   children,
 }: {
   page: ContentPage;
   disabled: boolean;
   onCreateSubpage: (id: string) => void;
+  onFilterTree: (id: string) => void;
   children: ReactNode;
 }) {
   return (
     <ContextMenu disabled={disabled}>
       <ContextMenuTrigger className="block w-full">{children}</ContextMenuTrigger>
       <ContextMenuContent>
+        {page.parentId === null && (
+          <ContextMenuItem disabled={disabled} onClick={() => onFilterTree(page.id)}>
+            <ListFilter className="size-4" /> Filter to this page
+          </ContextMenuItem>
+        )}
         <ContextMenuItem
           disabled={disabled}
           onClick={() => onCreateSubpage(page.id)}
@@ -996,6 +1018,7 @@ function PageIndexRow({
   disabled,
   onSelect,
   onCreateSubpage,
+  onFilterTree,
 }: {
   page: ContentPage;
   types: Property[];
@@ -1004,12 +1027,14 @@ function PageIndexRow({
   disabled: boolean;
   onSelect: (id: string) => void;
   onCreateSubpage: (id: string) => void;
+  onFilterTree: (id: string) => void;
 }) {
   return (
     <PageContextMenu
       page={page}
       disabled={disabled}
       onCreateSubpage={onCreateSubpage}
+      onFilterTree={onFilterTree}
     >
       <PageIndexButton
         page={page}
@@ -1030,6 +1055,7 @@ function PageIndexList({
   disabled,
   onSelect,
   onCreateSubpage,
+  onFilterTree,
 }: {
   rows: { page: ContentPage; depth: number }[];
   types: Property[];
@@ -1037,6 +1063,7 @@ function PageIndexList({
   disabled: boolean;
   onSelect: (id: string) => void;
   onCreateSubpage: (id: string) => void;
+  onFilterTree: (id: string) => void;
 }) {
   return (
     <>
@@ -1050,6 +1077,7 @@ function PageIndexList({
           disabled={disabled}
           onSelect={onSelect}
           onCreateSubpage={onCreateSubpage}
+          onFilterTree={onFilterTree}
         />
       ))}
     </>
@@ -1070,6 +1098,7 @@ function SortableGroup({
   disabled,
   onSelect,
   onCreateSubpage,
+  onFilterTree,
 }: {
   parentId: string | null;
   depth: number;
@@ -1079,6 +1108,7 @@ function SortableGroup({
   disabled: boolean;
   onSelect: (id: string) => void;
   onCreateSubpage: (id: string) => void;
+  onFilterTree: (id: string) => void;
 }) {
   const pages = tree.children.get(parentId) ?? [];
   if (!pages.length) return null;
@@ -1095,6 +1125,7 @@ function SortableGroup({
           sortable={pages.length > 1}
           onSelect={onSelect}
           onCreateSubpage={onCreateSubpage}
+          onFilterTree={onFilterTree}
         >
           <SortableGroup
             parentId={page.id}
@@ -1105,6 +1136,7 @@ function SortableGroup({
             disabled={disabled}
             onSelect={onSelect}
             onCreateSubpage={onCreateSubpage}
+            onFilterTree={onFilterTree}
           />
         </SortablePageRow>
       ))}
@@ -1121,6 +1153,7 @@ function SortablePageRow({
   sortable,
   onSelect,
   onCreateSubpage,
+  onFilterTree,
   children,
 }: {
   page: ContentPage;
@@ -1132,6 +1165,7 @@ function SortablePageRow({
   sortable: boolean;
   onSelect: (id: string) => void;
   onCreateSubpage: (id: string) => void;
+  onFilterTree: (id: string) => void;
   /** The page's own subtree, carried along when the row moves. */
   children?: ReactNode;
 }) {
@@ -1161,6 +1195,7 @@ function SortablePageRow({
         page={page}
         disabled={disabled}
         onCreateSubpage={onCreateSubpage}
+        onFilterTree={onFilterTree}
       >
         <div ref={setActivatorNodeRef} {...attributes} {...listeners}>
           <PageIndexButton

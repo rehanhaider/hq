@@ -124,6 +124,7 @@ const idListSchema = z.array(idSchema).max(60).optional().catch(undefined);
 export const contentSearchSchema = z.object({
   q: z.string().trim().max(200).optional().catch(undefined),
   page: idSchema.optional().catch(undefined),
+  tree: idSchema.optional().catch(undefined),
   status: idListSchema,
   type: idListSchema,
   tag: idListSchema,
@@ -524,30 +525,79 @@ function matchesEvery(selected: string[] | undefined, has: (id: string) => boole
 /** True when anything narrows the view, so the UI can offer to clear it. */
 export function hasFilters(search: {
   q?: string;
+  tree?: string;
   status?: string[];
   type?: string[];
   tag?: string[];
 }) {
   return Boolean(
     search.q?.trim() ||
+      search.tree ||
       search.status?.length ||
       search.type?.length ||
       search.tag?.length,
   );
 }
 
+/** The selected page and every page reachable below it. */
+export function pageTreeIds(pages: ContentPage[], rootId: string) {
+  if (!pages.some((page) => page.id === rootId)) return new Set<string>();
+  const children = new Map<string, string[]>();
+  for (const page of pages) {
+    if (page.parentId === null) continue;
+    const group = children.get(page.parentId) ?? [];
+    group.push(page.id);
+    children.set(page.parentId, group);
+  }
+  const ids = new Set<string>();
+  const pending = [rootId];
+  while (pending.length) {
+    const id = pending.pop()!;
+    if (ids.has(id)) continue;
+    ids.add(id);
+    pending.push(...(children.get(id) ?? []));
+  }
+  return ids;
+}
+
 export function filterPages(
   pages: ContentPage[],
-  search: { q?: string; status?: string[]; type?: string[]; tag?: string[] },
+  search: {
+    q?: string;
+    tree?: string;
+    status?: string[];
+    type?: string[];
+    tag?: string[];
+  },
 ) {
   const q = search.q?.trim().toLowerCase() ?? "";
+  const treeIds = search.tree ? pageTreeIds(pages, search.tree) : null;
   return pages.filter(
     (page) =>
+      (!treeIds || treeIds.has(page.id)) &&
       (!q || displayPageTitle(page.title).toLowerCase().includes(q)) &&
       matchesEvery(search.status, (id) => page.statusId === id) &&
       matchesEvery(search.type, (id) => page.typeIds.includes(id)) &&
       matchesEvery(search.tag, (id) => page.tagIds.includes(id)),
   );
+}
+
+/**
+ * Narrows server search results without repeating its full-text search in the
+ * browser. The complete hierarchy supplies ancestors that the search result
+ * may omit.
+ */
+export function filterPageSearchResults(
+  matches: ContentPage[],
+  hierarchy: ContentPage[],
+  search: ContentSearch,
+) {
+  const treeIds = search.tree ? pageTreeIds(hierarchy, search.tree) : null;
+  return filterPages(matches, {
+    status: search.status,
+    type: search.type,
+    tag: search.tag,
+  }).filter((page) => !treeIds || treeIds.has(page.id));
 }
 
 export function sortPages(pages: ContentPage[], sort: ContentSort = "manual") {
