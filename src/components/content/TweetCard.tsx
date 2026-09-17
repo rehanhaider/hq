@@ -212,6 +212,9 @@ export function TweetCard({ tweet }: { tweet: TweetEmbedData }) {
           <span className="mt-1 block whitespace-pre-wrap break-words text-sm text-card-foreground">
             {tweet.quote.text}
           </span>
+          {tweet.quote.photos.length > 0 ? (
+            <TweetPhotos photos={tweet.quote.photos} />
+          ) : null}
         </a>
       ) : null}
 

@@ -174,7 +174,38 @@ describe("normalizeTweet", () => {
       handle: "jack",
       text: "just setting up my twttr",
       permalink: "https://x.com/jack/status/20",
+      photos: [],
     });
+  });
+
+  it("keeps a quoted tweet's photo so the card shows the whole quote", () => {
+    const quoting = normalizeTweet(
+      {
+        ...PAYLOAD,
+        quoted_tweet: {
+          id_str: "21",
+          text: "chart",
+          display_text_range: [0, 5],
+          user: { name: "ed", screen_name: "ed" },
+          photos: [
+            {
+              url: "https://pbs.twimg.com/media/HSGIOvubwAAhS4-.jpg",
+              width: 800,
+              height: 668,
+            },
+          ],
+        },
+      },
+      ID,
+    );
+    expect(quoting?.quote?.photos).toEqual([
+      {
+        url: "https://pbs.twimg.com/media/HSGIOvubwAAhS4-.jpg",
+        width: 800,
+        height: 668,
+        alt: "",
+      },
+    ]);
   });
 
   it("refuses media and links from anywhere but X", () => {
