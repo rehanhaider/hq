@@ -468,6 +468,51 @@ describe("page document validation", () => {
     expect(validateContentDocument(linked)).toBe(true);
   });
 
+  it("accepts a bookmark block with an http(s) url and nothing else", () => {
+    const url = "https://example.com/post?id=7";
+    const bookmark = [
+      { id: randomUUID(), type: "bookmark", props: { url }, children: [] },
+    ];
+    expect(validateContentDocument(bookmark)).toBe(true);
+    expect(validateContentDocument(JSON.parse(JSON.stringify(bookmark)))).toBe(true);
+    expect(
+      validateContentDocument([
+        {
+          id: randomUUID(),
+          type: "bookmark",
+          props: { url, textAlignment: "center" },
+          content: [],
+          children: [],
+        },
+      ]),
+    ).toBe(true);
+    for (const props of [
+      { url: "javascript:alert(1)" },
+      { url: "mailto:someone@example.com" },
+      { url: "https://user:pw@example.com/" },
+      { url, caption: "no" },
+      { url, textAlignment: "wide" },
+      {},
+    ])
+      expect(
+        validateContentDocument([
+          { id: randomUUID(), type: "bookmark", props, children: [] },
+        ]),
+        JSON.stringify(props),
+      ).toBe(false);
+    expect(
+      validateContentDocument([
+        {
+          id: randomUUID(),
+          type: "bookmark",
+          props: { url },
+          content: [{ type: "text", text: "no", styles: {} }],
+          children: [],
+        },
+      ]),
+    ).toBe(false);
+  });
+
   it("rejects malformed media blocks, unsafe links, and unknown fields", () => {
     expect(
       validateContentDocument([

@@ -59,6 +59,7 @@ import {
   type PageDetail,
   type Property,
 } from "@/lib/content";
+import { bookmarkUrlsFromDocument } from "@/lib/linkPreview";
 import { tweetIdsFromDocument } from "@/lib/tweet";
 import { createUploadGate } from "@/lib/uploads";
 import {
@@ -68,6 +69,7 @@ import {
   pageQuery,
   pagesQuery,
 } from "@/queries/content";
+import { linkPreviewQuery } from "@/queries/linkPreview";
 import { tweetEmbedQuery } from "@/queries/tweet";
 import {
   createContentProperty,
@@ -577,12 +579,15 @@ export function ContentWorkspace() {
     return () => setPageCreator(null);
   }, [setPageCreator]);
 
-  // The editor is lazy and client-only. Start the embed fetch while that
-  // chunk loads so a first visit can paint tweet HTML instead of a skeleton.
+  // The editor is lazy and client-only. Start the embed fetches while that
+  // chunk loads so a first visit can paint the cards instead of skeletons.
   useEffect(() => {
     if (!draft) return;
     for (const id of tweetIdsFromDocument(draft.document)) {
       void queryClient.prefetchQuery(tweetEmbedQuery(id, theme));
+    }
+    for (const url of bookmarkUrlsFromDocument(draft.document)) {
+      void queryClient.prefetchQuery(linkPreviewQuery(url));
     }
   }, [draft, queryClient, theme]);
 
@@ -653,7 +658,7 @@ export function ContentWorkspace() {
         />
       </div>
       <div className="content-workspace mt-4">
-        <aside className={`${selectedId ? "hidden lg:flex" : "flex"} min-h-[34rem] flex-col border-r bg-card`} aria-label="Content pages">
+        <aside className={`${selectedId ? "hidden lg:flex" : "flex"} min-h-136 flex-col border-r bg-card`} aria-label="Content pages">
           <div className="min-h-0 flex-1 overflow-y-auto px-2 py-3">
             {list.isPending ? (
               <p className="p-3 text-muted-foreground">Loading pages…</p>
@@ -732,19 +737,19 @@ export function ContentWorkspace() {
         </aside>
         <div className={`${selectedId ? "block" : "hidden lg:block"} min-w-0 bg-card`}>
           {!selectedId ? (
-            <div className="flex min-h-[34rem] items-center justify-center p-6 text-center text-muted-foreground">
+            <div className="flex min-h-136 items-center justify-center p-6 text-center text-muted-foreground">
               <div><FileText className="mx-auto mb-3 size-8" /><p>Choose a page or create one.</p></div>
             </div>
           ) : detail.isError ? (
-            <div className="flex min-h-[34rem] items-center justify-center p-6 text-center"><div><p role="alert">The page could not load.</p><Button className="mt-3" variant="outline" onClick={() => void detail.refetch()}>Reload page</Button></div></div>
+            <div className="flex min-h-136 items-center justify-center p-6 text-center"><div><p role="alert">The page could not load.</p><Button className="mt-3" variant="outline" onClick={() => void detail.refetch()}>Reload page</Button></div></div>
           ) : !detail.isPending &&
             detail.data === null &&
             (draft?.id !== selectedId || !hasUnsaved) ? (
-            <div className="flex min-h-[34rem] items-center justify-center p-6 text-center">
+            <div className="flex min-h-136 items-center justify-center p-6 text-center">
               <div><p>This page is no longer available.</p><Button className="mt-3" variant="outline" onClick={() => void selectPage(undefined)}>Back to page list</Button></div>
             </div>
           ) : detail.isPending || !draft ? (
-            <div className="min-h-[34rem] animate-pulse bg-muted" aria-label="Loading page" />
+            <div className="min-h-136 animate-pulse bg-muted" aria-label="Loading page" />
           ) : (
             <div>
               <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2 sm:px-4">
@@ -870,8 +875,8 @@ export function ContentWorkspace() {
                 />
               </div>
               {saveError && <div className="border-b bg-destructive/10 px-4 py-2 text-xs text-destructive" role="alert">{saveError}</div>}
-              <ClientOnly fallback={<div className="min-h-[30rem] animate-pulse bg-muted" aria-label="Loading editor" />}>
-                <Suspense fallback={<div className="min-h-[30rem] animate-pulse bg-muted" aria-label="Loading editor" />}>
+              <ClientOnly fallback={<div className="min-h-120 animate-pulse bg-muted" aria-label="Loading editor" />}>
+                <Suspense fallback={<div className="min-h-120 animate-pulse bg-muted" aria-label="Loading editor" />}>
                   <ContentEditor
                     key={`${draft.id}:${editorGeneration}`}
                     page={draft}

@@ -256,7 +256,7 @@
     /* Two columns only once there is room for both. Below `lg` the sidebar
        has already taken 16rem, and an 18rem page list beside it would leave
        the editor about 11rem wide. */
-    @apply grid min-h-[34rem] overflow-hidden rounded-xl border bg-card lg:grid-cols-[18rem_minmax(0,1fr)];
+    @apply grid min-h-136 overflow-hidden rounded-xl border bg-card lg:grid-cols-[18rem_minmax(0,1fr)];
   }
   .content-editor-shell {
     @apply min-w-0;
@@ -281,7 +281,7 @@
     --bn-colors-side-menu: var(--muted-foreground);
   }
   .content-editor-shell .bn-editor {
-    @apply min-h-[28rem] rounded-none bg-card py-5 text-card-foreground;
+    @apply min-h-112 rounded-none bg-card py-5 text-card-foreground;
     font-family: var(--font-sans);
   }
 }
@@ -326,6 +326,20 @@
 .content-editor-shell .tweet-embed iframe {
   width: 100% !important;
   max-width: 100% !important;
+}
+
+/* A bookmark card shares the tweet card's column and the same anchor
+   reset: the card is one anchor, and the editor's blue underline would
+   colour every line of it. The fallback link, shown when there is no
+   preview, keeps the editor's own link styling via its own classes. */
+.content-editor-shell .bookmark-embed {
+  width: 550px;
+  max-width: 100%;
+  min-width: 0;
+}
+.content-editor-shell .bookmark-embed a.bookmark-card {
+  color: inherit;
+  text-decoration: none;
 }
 
 /* Image and video resize handles. BlockNote ships its 8x30px hover-only

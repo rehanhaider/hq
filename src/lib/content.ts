@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { tweetStatusUrl } from "./tweet";
+import { linkPreviewUrl } from "./linkPreview";
 
 export type JsonValue =
   | string
@@ -238,10 +239,12 @@ const supportedBlockTypes = new Set([
   "video",
   "file",
   "tweet",
+  "bookmark",
 ]);
 /** Blocks that hold a file rather than text: no inline content, a url instead. */
 const fileBlockTypes = new Set(["image", "video", "file"]);
-const tweetBlockTypes = new Set(["tweet"]);
+/** Blocks that hold a URL drawn as a card: no inline content either. */
+const embedBlockTypes = new Set(["tweet", "bookmark"]);
 const alignments = new Set(["left", "center", "right", "justify"]);
 const allowedProtocols = new Set(["http:", "https:", "mailto:", "tel:"]);
 
@@ -342,9 +345,11 @@ function validateFileProps(type: string, value: Record<string, unknown>) {
   return true;
 }
 
-function validateTweetProps(value: Record<string, unknown>) {
+function validateEmbedProps(type: string, value: Record<string, unknown>) {
   if (!hasOnlyKeys(value, ["url", "textAlignment"])) return false;
-  if (typeof value.url !== "string" || tweetStatusUrl(value.url) === null) return false;
+  if (typeof value.url !== "string") return false;
+  if (type === "tweet" && tweetStatusUrl(value.url) === null) return false;
+  if (type === "bookmark" && linkPreviewUrl(value.url) === null) return false;
   if (
     "textAlignment" in value &&
     (typeof value.textAlignment !== "string" || !alignments.has(value.textAlignment))
@@ -356,7 +361,7 @@ function validateTweetProps(value: Record<string, unknown>) {
 function validateProps(type: string, value: unknown) {
   if (!isObject(value)) return false;
   const base = ["backgroundColor", "textColor", "textAlignment"];
-  if (tweetBlockTypes.has(type)) return validateTweetProps(value);
+  if (embedBlockTypes.has(type)) return validateEmbedProps(type, value);
   if (fileBlockTypes.has(type)) return validateFileProps(type, value);
   const keys =
     type === "heading"
@@ -469,8 +474,8 @@ export function validateContentDocument(value: unknown): value is ContentBlock[]
         !visit(item.children, depth + 1)
       )
         return false;
-      // A file or tweet block carries its target in props and has no inline content.
-      if (fileBlockTypes.has(item.type) || tweetBlockTypes.has(item.type))
+      // A file or embed block carries its target in props and has no inline content.
+      if (fileBlockTypes.has(item.type) || embedBlockTypes.has(item.type))
         return item.content === undefined || (Array.isArray(item.content) && !item.content.length);
       if (item.type === "table") return validateTable(item.content, totals);
       if (item.type === "codeBlock") {

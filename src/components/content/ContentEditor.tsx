@@ -19,8 +19,9 @@ import { useCreateBlockNote } from "@blocknote/react";
 import { BlockNoteView, ShadCNDefaultComponents } from "@blocknote/shadcn";
 import { Link as LinkIcon } from "lucide-react";
 import type { ContentBlock, PageDetail } from "@/lib/content";
-import { isEmptyParagraphContent, planTweetPaste } from "@/lib/tweet";
+import { pasteTarget, planEmbedPaste } from "@/lib/embedPaste";
 import { MAX_UPLOAD_BYTES, formatBytes, uploadRejection } from "@/lib/uploads";
+import { bookmarkBlock } from "./BookmarkBlock";
 import { tweetBlock } from "./TweetBlock";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,6 +47,7 @@ const noteSchema = BlockNoteSchema.create({
   blockSpecs: {
     ...noteBlockSpecs,
     tweet: tweetBlock(),
+    bookmark: bookmarkBlock(),
   },
   inlineContentSpecs: defaultInlineContentSpecs,
   styleSpecs: { bold, italic, underline },
@@ -196,23 +198,22 @@ export function ContentEditor({
     },
     uploadFile,
     defaultStyles: true,
-    // A clipboard that is only a tweet URL becomes a tweet block. Mixed
+    // A clipboard that is only a URL becomes an embed: a tweet block for a
+    // tweet, a bookmark card on an empty paragraph for anything else. Mixed
     // content and code blocks fall through so ordinary paste is unchanged.
-    // A non-empty selection is deleted first, matching ordinary paste.
+    // A non-empty selection is deleted first, matching ordinary paste, and
+    // the plan is made again on what is left: a paragraph emptied by that
+    // deletion is replaced, a paragraph with text around the selection is
+    // handed back to ordinary paste.
     pasteHandler: ({ event, editor: current, defaultPasteHandler }) => {
       let cursor: { type: string; empty: boolean } | null = null;
       try {
         const { block } = current.getTextCursorPosition();
-        cursor = {
-          type: block.type,
-          empty:
-            block.type === "paragraph" &&
-            isEmptyParagraphContent(block.content),
-        };
+        cursor = pasteTarget(block, current.prosemirrorState.selection.empty);
       } catch {
         cursor = null;
       }
-      const plan = planTweetPaste(
+      const plan = planEmbedPaste(
         event.clipboardData?.getData("text/plain") ||
           event.clipboardData?.getData("text/uri-list") ||
           "",
@@ -224,25 +225,20 @@ export function ContentEditor({
           if (!tr.selection.empty) tr.deleteSelection();
         });
         const { block } = current.getTextCursorPosition();
-        const after = planTweetPaste(plan.url, {
-          type: block.type,
-          empty:
-            block.type === "paragraph" &&
-            isEmptyParagraphContent(block.content),
-        });
+        const after = planEmbedPaste(plan.url, pasteTarget(block, true));
         if (after.kind === "ignore") return defaultPasteHandler();
         if (after.kind === "replace") {
-          // replaceBlocks would drop indented children unless they travel with the tweet.
+          // replaceBlocks would drop indented children unless they travel with the embed.
           current.replaceBlocks([block], [
             {
-              type: "tweet" as const,
-              props: { url: plan.url },
+              type: after.type,
+              props: { url: after.url },
               children: block.children,
             },
           ]);
         } else {
           current.insertBlocks(
-            [{ type: "tweet" as const, props: { url: plan.url } }],
+            [{ type: after.type, props: { url: after.url } }],
             block,
             "after",
           );
@@ -311,7 +307,7 @@ export function ContentEditor({
         onChange={(current) =>
           onDocumentChange(current.document as unknown as ContentBlock[])
         }
-        className="min-h-[28rem]"
+        className="min-h-112"
         data-testid="content-editor"
       />
       <div className="flex flex-wrap items-center gap-2 border-t px-3 py-2 text-xs text-muted-foreground sm:px-4">
