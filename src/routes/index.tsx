@@ -25,6 +25,7 @@ export const Route = createFileRoute("/")({
 });
 
 const WORDS = ["No", "One", "Two", "Three", "Four", "Five"] as const;
+type PrayerKey = "fajr" | "dhuhr" | "asr" | "maghrib" | "isha";
 
 function number(value: number) {
   return value.toLocaleString("en-GB");
@@ -40,10 +41,32 @@ function HomePage() {
   const newPage = useNewPage();
   const [creating, setCreating] = useState(false);
   const logPrayer = useMutation({
-    mutationFn: updateNasrDay,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: nasrKeys.all });
-      await queryClient.invalidateQueries({ queryKey: nasrKeys.home });
+    mutationFn: ({ date, key }: { date: string; key: PrayerKey }) =>
+      updateNasrDay({ data: { date, [key]: "ontime" } }),
+    onMutate: async ({ key }) => {
+      await queryClient.cancelQueries({ queryKey: nasrKeys.home });
+      const previous = queryClient.getQueryData(homeQuery.queryKey);
+      queryClient.setQueryData(homeQuery.queryKey, (current) =>
+        current
+          ? {
+              ...current,
+              nasr: {
+                ...current.nasr,
+                day: { ...current.nasr.day, [key]: "ontime" },
+              },
+            }
+          : current,
+      );
+      return { previous };
+    },
+    onError: (_error, _variables, context) => {
+      if (context) {
+        queryClient.setQueryData(homeQuery.queryKey, context.previous);
+      }
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: nasrKeys.all });
+      void queryClient.invalidateQueries({ queryKey: nasrKeys.home });
     },
   });
   if (home.isPending)
@@ -164,7 +187,7 @@ function HomePage() {
             </div>
             <Button
               type="button"
-              size="sm"
+              className="w-16"
               disabled={!nextPrayer || logPrayer.isPending}
               aria-label={
                 nextPrayer ? `Log ${nextPrayer[1]} as on time` : undefined
@@ -172,15 +195,12 @@ function HomePage() {
               onClick={() => {
                 if (!nextPrayer) return;
                 logPrayer.mutate({
-                  data: { date: nasr.today, [nextPrayer[0]]: "ontime" },
+                  date: nasr.today,
+                  key: nextPrayer[0],
                 });
               }}
             >
-              {logPrayer.isPending
-                ? "Logging…"
-                : nextPrayer
-                  ? "Log"
-                  : "Done"}
+              {nextPrayer ? "Log" : "Done"}
             </Button>
           </div>
           {logPrayer.isError && (
