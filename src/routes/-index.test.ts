@@ -20,8 +20,11 @@ describe("Home Nasr card footer", () => {
     expect(work).toMatch(/Open GitHub work/);
   });
 
-  it("is a text footer link, not a button", () => {
-    expect(nasr).not.toMatch(/Log today/);
-    expect(nasr).not.toMatch(/buttonVariants/);
+  it("logs the next unlogged prayer as on time from the card", () => {
+    expect(source).toMatch(/const nextPrayer = prayers\.find/);
+    expect(nasr).toMatch(/`Log \$\{nextPrayer\[1\]\}`/);
+    expect(nasr).toMatch(/date: nasr\.today, \[nextPrayer\[0\]\]: "ontime"/);
+    expect(nasr).toMatch(/!nextPrayer \|\| logPrayer\.isPending/);
+    expect(nasr).toMatch(/The prayer could not be saved/);
   });
 });

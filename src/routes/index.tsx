@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Check, Circle, FilePlus2 } from "lucide-react";
-import { homeQuery } from "@/queries/nasr";
+import { homeQuery, nasrKeys } from "@/queries/nasr";
 import { openWorkQuery } from "@/queries/dashboard";
 import { age, countKinds } from "@/lib/openWork";
 import { useNewPage } from "@/queries/content";
+import { updateNasrDay } from "@/server/fns";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Dot } from "@/components/content/properties";
 import { relativeTime } from "@/lib/content";
@@ -34,9 +35,17 @@ function Rule() {
 }
 
 function HomePage() {
+  const queryClient = useQueryClient();
   const home = useQuery(homeQuery);
   const newPage = useNewPage();
   const [creating, setCreating] = useState(false);
+  const logPrayer = useMutation({
+    mutationFn: updateNasrDay,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: nasrKeys.all });
+      await queryClient.invalidateQueries({ queryKey: nasrKeys.home });
+    },
+  });
   if (home.isPending)
     return (
       <div
@@ -54,13 +63,14 @@ function HomePage() {
   const { nasr, github, content } = home.data;
   const day = nasr.day;
   const prayers = [
-    ["Fajr", day.fajr],
-    [middayPrayerLabel(nasr.today), day.dhuhr],
-    ["Asr", day.asr],
-    ["Maghrib", day.maghrib],
-    ["Isha", day.isha],
+    ["fajr", "Fajr", day.fajr],
+    ["dhuhr", middayPrayerLabel(nasr.today), day.dhuhr],
+    ["asr", "Asr", day.asr],
+    ["maghrib", "Maghrib", day.maghrib],
+    ["isha", "Isha", day.isha],
   ] as const;
-  const logged = prayers.filter(([, status]) => status !== null).length;
+  const logged = prayers.filter(([, , status]) => status !== null).length;
+  const nextPrayer = prayers.find(([, , status]) => status === null);
   const practices = [
     ["Morning adhkar", day.morning_adhkar],
     ["Evening adhkar", day.evening_adhkar],
@@ -117,7 +127,7 @@ function HomePage() {
           </div>
 
           <ul className="mt-4 grid grid-cols-5 gap-2" aria-label="Today's prayers">
-            {prayers.map(([label, status]) => (
+            {prayers.map(([, label, status]) => (
               <li key={label} className="text-center">
                 <span
                   aria-hidden
@@ -140,6 +150,44 @@ function HomePage() {
               </li>
             ))}
           </ul>
+
+          <div className="mt-4 flex min-h-11 items-center justify-between gap-3 rounded-lg bg-muted/70 px-3 py-2">
+            <div className="min-w-0">
+              <p className="text-xs font-medium">
+                {nextPrayer ? `Log ${nextPrayer[1]}` : "All prayers logged"}
+              </p>
+              <p className="mt-0.5 text-[0.6875rem] text-muted-foreground">
+                {nextPrayer
+                  ? "Mark today's next prayer on time"
+                  : "Today's salah is complete"}
+              </p>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              disabled={!nextPrayer || logPrayer.isPending}
+              aria-label={
+                nextPrayer ? `Log ${nextPrayer[1]} as on time` : undefined
+              }
+              onClick={() => {
+                if (!nextPrayer) return;
+                logPrayer.mutate({
+                  data: { date: nasr.today, [nextPrayer[0]]: "ontime" },
+                });
+              }}
+            >
+              {logPrayer.isPending
+                ? "Logging…"
+                : nextPrayer
+                  ? "Log"
+                  : "Done"}
+            </Button>
+          </div>
+          {logPrayer.isError && (
+            <p role="alert" className="mt-2 text-xs text-negative">
+              The prayer could not be saved. {logPrayer.error.message}
+            </p>
+          )}
 
           <Rule />
 
