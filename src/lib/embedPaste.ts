@@ -77,3 +77,22 @@ export function planEmbedPaste(
   if (!link || !empty) return { kind: "ignore" };
   return { kind: "replace", type: "bookmark", url: link };
 }
+
+/**
+ * The same plan for text that arrived without a paste event. Mobile
+ * keyboards hand a clipboard URL to the editor as an insertion — Gboard's
+ * clipboard chip, the iOS suggestion bar, and a share-sheet insert all go
+ * through `beforeinput` rather than `paste` — so the clipboard is never
+ * read and a tweet stays a bare link.
+ *
+ * Only tweets convert here. A whole tweet URL in one insertion is a
+ * clipboard or share-sheet insert, never typing; every other URL keeps the
+ * behaviour it has today, where the card comes from a real paste.
+ */
+export function planEmbedTextInput(
+  text: string,
+  current: { type: string; empty: boolean } | null,
+): EmbedPastePlan {
+  if (!tweetUrlFromPaste(text)) return { kind: "ignore" };
+  return planEmbedPaste(text, current);
+}
