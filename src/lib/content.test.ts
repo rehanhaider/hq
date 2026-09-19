@@ -4,6 +4,7 @@ import {
   contentSummary,
   DEFAULT_PAGE_TITLE,
   displayPageTitle,
+  editorPageTitle,
   filterPageSearchResults,
   filterPages,
   groupPages,
@@ -244,6 +245,14 @@ describe("page title placeholder", () => {
     expect(displayPageTitle("  ")).toBe(DEFAULT_PAGE_TITLE);
     expect(displayPageTitle("Stream plan")).toBe("Stream plan");
     expect(displayPageTitle(DEFAULT_PAGE_TITLE)).toBe(DEFAULT_PAGE_TITLE);
+  });
+
+  it("keeps typed spaces in the editor until the stored title actually changes", () => {
+    expect(editorPageTitle("Stream plan ", "Stream plan")).toBe("Stream plan ");
+    expect(editorPageTitle("  Stream plan", "Stream plan")).toBe("  Stream plan");
+    expect(editorPageTitle("Stream plan", "Stream plan")).toBe("Stream plan");
+    expect(editorPageTitle("Other name", "Stream plan")).toBe("Stream plan");
+    expect(editorPageTitle("   ", "")).toBe("   ");
   });
 });
 
