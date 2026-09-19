@@ -1,4 +1,15 @@
 import { describe, expect, it } from "vitest";
+import {
+  canSortIndex,
+  pageRows,
+  pageTree,
+  reorderedSiblings,
+} from "./ContentWorkspace";
+import {
+  contentSearchSchema,
+  filterPageSearchResults,
+  type ContentPage,
+} from "@/lib/content";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
@@ -98,5 +109,114 @@ describe("Content page tree loading", () => {
     expect(source).toMatch(/The page tree could not load\./);
     expect(source).toMatch(/onClick=\{\(\) => void hierarchy\.refetch\(\)\}/);
     expect(source).toMatch(/Reload pages/);
+  });
+});
+
+describe("Content page index reorder under a tree filter", () => {
+  // The tree filter only survives the search schema as a real id.
+  const id = (name: string) =>
+    `00000000-0000-4000-8000-${name.padStart(12, "0")}`;
+  const page = (name: string, overrides: Partial<ContentPage> = {}): ContentPage => ({
+    id: id(name),
+    title: name,
+    parentId: null,
+    order: 0,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    deletedAt: null,
+    revision: 0,
+    preview: "",
+    statusId: null,
+    typeIds: [],
+    tagIds: [],
+    position: 0,
+    pinned: false,
+    ...overrides,
+  });
+  // One filtered top-level page with three subpages, plus a page the filter
+  // hides, so a drag that leaked outside the filtered tree would show up.
+  const root = page("1");
+  const first = page("11", { parentId: id("1"), order: 0 });
+  const second = page("12", { parentId: id("1"), order: 1 });
+  const third = page("13", { parentId: id("1"), order: 2 });
+  const elsewhere = page("2", { order: 1 });
+  const pages = [root, first, second, third, elsewhere];
+  const filtered = (tree: string, rest: Record<string, unknown> = {}) =>
+    filterPageSearchResults(
+      pages,
+      pages,
+      contentSearchSchema.parse({ tree, ...rest }),
+    );
+
+  it("keeps the filtered index sortable", () => {
+    expect(canSortIndex(pageTree(filtered(root.id), root.id), false)).toBe(true);
+    // The gate is the siblings a search or a property filter hides, not the
+    // tree filter.
+    expect(canSortIndex(pageTree(filtered(root.id), root.id), true)).toBe(false);
+  });
+
+  it("saves the whole sibling group when a subpage is dragged", () => {
+    const move = reorderedSiblings(
+      pageTree(filtered(root.id), root.id),
+      third,
+      first.id,
+    );
+    expect(move?.orderedIds).toEqual([third.id, first.id, second.id]);
+    // The group is dealt the display orders it already held, so the page the
+    // filter hides keeps an order nothing collides with.
+    expect([...(move?.orderOf ?? [])]).toEqual([
+      [third.id, 0],
+      [first.id, 1],
+      [second.id, 2],
+    ]);
+  });
+
+  it("indents the filtered tree and refuses a drop beside the filtered page", () => {
+    expect(
+      pageRows(filtered(root.id), false, root.id).map((row) => [row.page.id, row.depth]),
+    ).toEqual([
+      [root.id, 0],
+      [first.id, 1],
+      [second.id, 1],
+      [third.id, 1],
+    ]);
+    // The filtered page's own siblings are off screen, so it has nowhere to go.
+    expect(
+      reorderedSiblings(pageTree(filtered(root.id), root.id), root, elsewhere.id),
+    ).toBeNull();
+  });
+
+  it("re-roots a filter on a subpage so its children still sort", () => {
+    const grandchild = page("111", { parentId: first.id, order: 0 });
+    const sibling = page("112", { parentId: first.id, order: 1 });
+    const all = [...pages, grandchild, sibling];
+    const nested = filterPageSearchResults(
+      all,
+      all,
+      contentSearchSchema.parse({ tree: first.id }),
+    );
+    const tree = pageTree(nested, first.id);
+    expect(tree.orphans).toEqual([]);
+    expect(
+      pageRows(nested, false, first.id).map((row) => [row.page.id, row.depth]),
+    ).toEqual([
+      [first.id, 0],
+      [grandchild.id, 1],
+      [sibling.id, 1],
+    ]);
+    expect(canSortIndex(tree, false)).toBe(true);
+    expect(reorderedSiblings(tree, sibling, grandchild.id)?.orderedIds).toEqual([
+      sibling.id,
+      grandchild.id,
+    ]);
+  });
+
+  it("does not gate the sortable index on the tree filter", () => {
+    const gate = source.slice(
+      source.indexOf("const canReorder ="),
+      source.indexOf("const draggedPage"),
+    );
+    expect(gate).not.toMatch(/search\.tree/);
+    expect(source).toMatch(/pageTree\(visiblePages, treeRootId\)/);
   });
 });

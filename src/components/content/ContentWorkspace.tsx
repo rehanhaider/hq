@@ -115,12 +115,19 @@ type PageTree = {
   orphans: ContentPage[];
 };
 
-function pageTree(pages: ContentPage[]): PageTree {
+/**
+ * Groups the pages on screen by parent. When the index is filtered to one
+ * page's tree, `rootId` stands in for the root: the filtered page's own
+ * siblings are off screen, so it heads the top group alone and every group
+ * below it is whole.
+ */
+export function pageTree(pages: ContentPage[], rootId: string | null = null): PageTree {
   const byParent = new Map<string | null, ContentPage[]>();
   for (const page of pages) {
-    const siblings = byParent.get(page.parentId) ?? [];
+    const parentId = page.id === rootId ? null : page.parentId;
+    const siblings = byParent.get(parentId) ?? [];
     siblings.push(page);
-    byParent.set(page.parentId, siblings);
+    byParent.set(parentId, siblings);
   }
   for (const siblings of byParent.values()) siblings.sort(compareIndexPages);
   // Only groups reachable from the root are kept, so a cycle can never recurse.
@@ -136,9 +143,13 @@ function pageTree(pages: ContentPage[]): PageTree {
   return { children, orphans: pages.filter((page) => !seen.has(page.id)) };
 }
 
-function pageRows(pages: ContentPage[], searching: boolean) {
+export function pageRows(
+  pages: ContentPage[],
+  searching: boolean,
+  rootId: string | null = null,
+) {
   if (searching) return pages.map((page) => ({ page, depth: 0 }));
-  const { children, orphans } = pageTree(pages);
+  const { children, orphans } = pageTree(pages, rootId);
   const rows: { page: ContentPage; depth: number }[] = [];
   const visit = (parentId: string | null, depth: number) => {
     for (const page of children.get(parentId) ?? []) {
@@ -149,6 +160,46 @@ function pageRows(pages: ContentPage[], searching: boolean) {
   visit(null, 0);
   for (const page of orphans) rows.push({ page, depth: 0 });
   return rows;
+}
+
+/**
+ * True when every sibling group on screen is whole, so a drag saves an order
+ * the user could see: a search or a property filter hides siblings, while a
+ * tree filter keeps each group below the filtered page complete. Sortable
+ * needs at least one group with something to swap.
+ */
+export function canSortIndex(tree: PageTree, searching: boolean) {
+  if (searching) return false;
+  return [...tree.children.values()].some((group) => {
+    const pinned = group.filter((page) => page.pinned).length;
+    return pinned > 1 || group.length - pinned > 1;
+  });
+}
+
+/**
+ * The sibling order a drop produces, or null when it changes nothing. The
+ * dragged page takes the hovered sibling's slot, downward moves landing past
+ * it, exactly as the drag preview shows. Nesting never changes, and the group
+ * keeps the display orders it already holds, so a sibling this drag did not
+ * name cannot collide with it.
+ */
+export function reorderedSiblings(
+  tree: PageTree,
+  activePage: ContentPage,
+  overId: string,
+) {
+  const siblings = (tree.children.get(activePage.parentId) ?? []).filter(
+    (page) => page.pinned === activePage.pinned,
+  );
+  const from = siblings.findIndex((page) => page.id === activePage.id);
+  const to = siblings.findIndex((page) => page.id === overId);
+  if (from < 0 || to < 0 || from === to) return null;
+  const orderedIds = arrayMove(siblings, from, to).map((page) => page.id);
+  const slots = siblings.map((page) => page.order).sort((a, b) => a - b);
+  return {
+    orderedIds,
+    orderOf: new Map(orderedIds.map((id, index) => [id, slots[index]!])),
+  };
 }
 
 // Only the dragged page's siblings can be dropped on. Nesting never changes
@@ -404,26 +455,25 @@ export function ContentWorkspace() {
   // Reorder commits run one at a time, in drag order: two quick drags would
   // otherwise race and the earlier drag's order could land last in SQLite.
   const orderChain = useRef<Promise<void>>(Promise.resolve());
-  const rows = useMemo(() => {
-    const pages = filterPageSearchResults(
-      indexPages,
-      hierarchy.data ?? [],
-      search,
-    );
-    return pageRows(pages, searching);
-  }, [hierarchy.data, indexPages, search, searching]);
-  // Dragging a filtered or searched list would persist an order the user never
-  // saw whole, so the index is only sortable when the full tree is on screen
-  // and some sibling group actually has more than one page.
-  const tree = useMemo(() => pageTree(indexPages), [indexPages]);
-  const canReorder =
-    !searching &&
-    !search.tree &&
-    !list.isPending &&
-    [...tree.children.values()].some((group) => {
-      const pinned = group.filter((page) => page.pinned).length;
-      return pinned > 1 || group.length - pinned > 1;
-    });
+  const visiblePages = useMemo(
+    () => filterPageSearchResults(indexPages, hierarchy.data ?? [], search),
+    [hierarchy.data, indexPages, search],
+  );
+  const treeRootId = search.tree ?? null;
+  const rows = useMemo(
+    () => pageRows(visiblePages, searching, treeRootId),
+    [visiblePages, searching, treeRootId],
+  );
+  // Dragging a searched or property-filtered list would persist an order the
+  // user never saw whole, so those stay read-only. Filtering to one page's
+  // tree keeps every sibling group below it complete, so that view sorts like
+  // the full index; the index is sortable once some group on screen actually
+  // has more than one page.
+  const tree = useMemo(
+    () => pageTree(visiblePages, treeRootId),
+    [visiblePages, treeRootId],
+  );
+  const canReorder = !list.isPending && canSortIndex(tree, searching);
   const draggedPage = draggedId
     ? indexPages.find((page) => page.id === draggedId)
     : undefined;
@@ -478,21 +528,12 @@ export function ContentWorkspace() {
     const activePage = source.find((page) => page.id === activeId);
     if (!activePage) return;
     // `over` is always a sibling with the same pin state (see
-    // sameLevelCollision), so the drop takes the hovered sibling's slot,
-    // downward moves landing past it, exactly as the drag preview shows.
-    // Nesting never changes here, and a drop cannot cross the pin line.
-    const siblings = (tree.children.get(activePage.parentId) ?? []).filter(
-      (page) => page.pinned === activePage.pinned,
-    );
-    const from = siblings.findIndex((page) => page.id === activeId);
-    const to = siblings.findIndex((page) => page.id === overId);
-    if (from < 0 || to < 0 || from === to) return;
-    const moved = arrayMove(siblings, from, to);
-    const orderedIds = moved.map((page) => page.id);
-    // Deal out the orders the siblings already hold, so a sibling this drag
-    // did not name keeps an order nothing else collides with.
-    const slots = siblings.map((page) => page.order).sort((a, b) => a - b);
-    const orderOf = new Map(orderedIds.map((id, index) => [id, slots[index]!]));
+    // sameLevelCollision), and a drop cannot cross the pin line. Under a tree
+    // filter the group comes from the filtered tree, which still holds every
+    // sibling below the filtered page, so the saved order is complete.
+    const move = reorderedSiblings(tree, activePage, overId);
+    if (!move) return;
+    const { orderedIds, orderOf } = move;
     setLocalPages(source.map((page) => (orderOf.has(page.id) ? { ...page, order: orderOf.get(page.id)! } : page)));
     setActionError("");
     orderChain.current = orderChain.current.then(() => commitOrder(activeId, orderedIds));
