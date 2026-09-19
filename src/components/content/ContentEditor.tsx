@@ -13,13 +13,19 @@ import {
   defaultBlockSpecs,
   defaultInlineContentSpecs,
   defaultStyleSpecs,
+  type BlockNoteEditor,
   type PartialBlock,
 } from "@blocknote/core";
 import { useCreateBlockNote } from "@blocknote/react";
 import { BlockNoteView, ShadCNDefaultComponents } from "@blocknote/shadcn";
 import { Link as LinkIcon } from "lucide-react";
 import type { ContentBlock, PageDetail } from "@/lib/content";
-import { pasteTarget, planEmbedPaste } from "@/lib/embedPaste";
+import {
+  pasteTarget,
+  planEmbedPaste,
+  planEmbedTextInput,
+  type EmbedPastePlan,
+} from "@/lib/embedPaste";
 import { MAX_UPLOAD_BYTES, formatBytes, uploadRejection } from "@/lib/uploads";
 import { bookmarkBlock } from "./BookmarkBlock";
 import { tweetBlock } from "./TweetBlock";
@@ -52,6 +58,67 @@ const noteSchema = BlockNoteSchema.create({
   inlineContentSpecs: defaultInlineContentSpecs,
   styleSpecs: { bold, italic, underline },
 });
+
+type NoteEditor = BlockNoteEditor<
+  typeof noteSchema.blockSchema,
+  typeof noteSchema.inlineContentSchema,
+  typeof noteSchema.styleSchema
+>;
+
+/**
+ * Puts a planned embed into the document, or reports that there was nothing
+ * to plan so the caller can let the editor handle the text itself.
+ *
+ * A non-empty selection is deleted first, matching ordinary paste, and the
+ * plan is made again on what is left: a paragraph emptied by that deletion
+ * is replaced, a paragraph with text around the selection keeps its text
+ * and takes the embed after it.
+ */
+function applyEmbedPlan(
+  editor: NoteEditor,
+  text: string,
+  plan: (
+    text: string,
+    current: { type: string; empty: boolean } | null,
+  ) => EmbedPastePlan,
+): boolean {
+  let cursor: { type: string; empty: boolean } | null = null;
+  try {
+    const { block } = editor.getTextCursorPosition();
+    cursor = pasteTarget(block, editor.prosemirrorState.selection.empty);
+  } catch {
+    cursor = null;
+  }
+  const planned = plan(text, cursor);
+  if (planned.kind === "ignore") return false;
+  try {
+    editor.transact((tr) => {
+      if (!tr.selection.empty) tr.deleteSelection();
+    });
+    const { block } = editor.getTextCursorPosition();
+    const after = plan(planned.url, pasteTarget(block, true));
+    if (after.kind === "ignore") return false;
+    if (after.kind === "replace") {
+      // replaceBlocks would drop indented children unless they travel with the embed.
+      editor.replaceBlocks([block], [
+        {
+          type: after.type,
+          props: { url: after.url },
+          children: block.children,
+        },
+      ]);
+    } else {
+      editor.insertBlocks(
+        [{ type: after.type, props: { url: after.url } }],
+        block,
+        "after",
+      );
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 const DefaultDropdownMenuTrigger =
   ShadCNDefaultComponents.DropdownMenu.DropdownMenuTrigger;
@@ -135,7 +202,7 @@ export function ContentEditor({
   onUploadStartRef.current = onUploadStart;
   onUploadEndRef.current = onUploadEnd;
   onDocumentChangeRef.current = onDocumentChange;
-  const editorRef = useRef<ReturnType<typeof useCreateBlockNote> | null>(null);
+  const editorRef = useRef<NoteEditor | null>(null);
 
   /**
    * Where a pasted, dropped, or chosen file goes. The editor only learns that
@@ -201,52 +268,27 @@ export function ContentEditor({
     // A clipboard that is only a URL becomes an embed: a tweet block for a
     // tweet, a bookmark card on an empty paragraph for anything else. Mixed
     // content and code blocks fall through so ordinary paste is unchanged.
-    // A non-empty selection is deleted first, matching ordinary paste, and
-    // the plan is made again on what is left: a paragraph emptied by that
-    // deletion is replaced, a paragraph with text around the selection is
-    // handed back to ordinary paste.
-    pasteHandler: ({ event, editor: current, defaultPasteHandler }) => {
-      let cursor: { type: string; empty: boolean } | null = null;
-      try {
-        const { block } = current.getTextCursorPosition();
-        cursor = pasteTarget(block, current.prosemirrorState.selection.empty);
-      } catch {
-        cursor = null;
-      }
-      const plan = planEmbedPaste(
+    pasteHandler: ({ event, editor: current, defaultPasteHandler }) =>
+      applyEmbedPlan(
+        current,
         event.clipboardData?.getData("text/plain") ||
           event.clipboardData?.getData("text/uri-list") ||
           "",
-        cursor,
-      );
-      if (plan.kind === "ignore") return defaultPasteHandler();
-      try {
-        current.transact((tr) => {
-          if (!tr.selection.empty) tr.deleteSelection();
-        });
-        const { block } = current.getTextCursorPosition();
-        const after = planEmbedPaste(plan.url, pasteTarget(block, true));
-        if (after.kind === "ignore") return defaultPasteHandler();
-        if (after.kind === "replace") {
-          // replaceBlocks would drop indented children unless they travel with the embed.
-          current.replaceBlocks([block], [
-            {
-              type: after.type,
-              props: { url: after.url },
-              children: block.children,
-            },
-          ]);
-        } else {
-          current.insertBlocks(
-            [{ type: after.type, props: { url: after.url } }],
-            block,
-            "after",
-          );
-        }
-        return true;
-      } catch {
-        return defaultPasteHandler();
-      }
+        planEmbedPaste,
+      ) || defaultPasteHandler(),
+    _tiptapOptions: {
+      editorProps: {
+        // Mobile keyboards deliver a clipboard URL as an insertion rather
+        // than a paste event, so `pasteHandler` above never runs and the
+        // tweet stays a bare link. ProseMirror reads such an insertion —
+        // whether it reaches it as `beforeinput` or as a DOM change — here.
+        handleTextInput: (_view, _from, _to, text) => {
+          const current = editorRef.current;
+          return current
+            ? applyEmbedPlan(current, text, planEmbedTextInput)
+            : false;
+        },
+      },
     },
   });
   editorRef.current = editor;

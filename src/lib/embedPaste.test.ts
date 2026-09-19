@@ -4,6 +4,7 @@ import {
   loneUrlFromPaste,
   pasteTarget,
   planEmbedPaste,
+  planEmbedTextInput,
 } from "./embedPaste";
 
 const ID = "1234567890123456789";
@@ -72,6 +73,53 @@ describe("planEmbedPaste", () => {
     expect(planEmbedPaste("hello world", { type: "paragraph", empty: true })).toEqual({
       kind: "ignore",
     });
+  });
+});
+
+describe("planEmbedTextInput", () => {
+  const empty = { type: "paragraph", empty: true };
+
+  it("converts a tweet URL inserted without a paste event", () => {
+    expect(planEmbedTextInput(TWEET, empty)).toEqual({
+      kind: "replace",
+      type: "tweet",
+      url: CANONICAL,
+    });
+    expect(planEmbedTextInput(TWEET, { type: "paragraph", empty: false })).toEqual({
+      kind: "insert",
+      type: "tweet",
+      url: CANONICAL,
+    });
+  });
+
+  it("converts the URL forms a phone hands over", () => {
+    for (const inserted of [
+      `https://x.com/alice/status/${ID}?s=20&t=Kf9_1bQ`,
+      `https://twitter.com/alice/status/${ID}?s=46`,
+      `https://mobile.twitter.com/alice/status/${ID}`,
+      `https://mobile.x.com/alice/status/${ID}`,
+      `https://www.x.com/alice/status/${ID}/photo/1`,
+      `https://x.com/alice/status/${ID}\n`,
+      `  https://x.com/alice/status/${ID} `,
+    ])
+      expect(planEmbedTextInput(inserted, empty)).toEqual({
+        kind: "replace",
+        type: "tweet",
+        url: CANONICAL,
+      });
+  });
+
+  it("leaves typing, prose, and code blocks alone", () => {
+    expect(planEmbedTextInput("h", empty)).toEqual({ kind: "ignore" });
+    expect(planEmbedTextInput(`Look at ${TWEET}`, empty)).toEqual({ kind: "ignore" });
+    expect(planEmbedTextInput(TWEET, { type: "codeBlock", empty: true })).toEqual({
+      kind: "ignore",
+    });
+  });
+
+  it("leaves every other URL to the paste path", () => {
+    expect(planEmbedTextInput(LINK, empty)).toEqual({ kind: "ignore" });
+    expect(planEmbedTextInput("https://x.com/alice", empty)).toEqual({ kind: "ignore" });
   });
 });
 

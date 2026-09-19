@@ -18,6 +18,8 @@ describe("tweetStatusUrl", () => {
       `http://mobile.twitter.com/alice/statuses/${ID}/photo/1`,
       `https://x.com/i/web/status/${ID}`,
       `https://x.com/i/status/${ID}`,
+      `https://mobile.x.com/alice/status/${ID}?s=20&t=Kf9_1bQ`,
+      `https://x.com/alice/status/${ID}?t=Kf9_1bQ&s=46&ref_src=twsrc%5Etfw`,
     ]) {
       expect(tweetStatusUrl(href)).toBe(CANONICAL);
       expect(tweetStatusId(href)).toBe(ID);
