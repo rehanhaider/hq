@@ -91,6 +91,14 @@ export function persistedPageTitle(title: string) {
   return title.trim();
 }
 
+/**
+ * Title to keep in the editor after a save. Storage trims; the field waits
+ * until the cursor leaves before matching.
+ */
+export function editorPageTitle(typed: string, persisted: string) {
+  return persistedPageTitle(typed) === persisted ? typed : persisted;
+}
+
 /** Label for lists, crumbs, and cards when the stored title is empty. */
 export function displayPageTitle(title: string) {
   return title.trim() || DEFAULT_PAGE_TITLE;

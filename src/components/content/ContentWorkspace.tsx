@@ -50,6 +50,7 @@ import {
   compareIndexPages,
   DEFAULT_PAGE_TITLE,
   displayPageTitle,
+  editorPageTitle,
   filterPageSearchResults,
   hasFilters,
   persistedPageTitle,
@@ -291,9 +292,13 @@ export function ContentWorkspace() {
             return false;
           }
           if (draftRef.current?.id === snapshot.id) {
+            const title =
+              sequence === changed.current
+                ? editorPageTitle(draftRef.current.title, result.page.title)
+                : draftRef.current.title;
             draftRef.current = {
               ...draftRef.current,
-              title: sequence === changed.current ? result.page.title : draftRef.current.title,
+              title,
               revision: result.page.revision,
               updatedAt: result.page.updatedAt,
             };
@@ -301,7 +306,7 @@ export function ContentWorkspace() {
               current?.id === snapshot.id
                 ? {
                     ...current,
-                    title: sequence === changed.current ? result.page.title : current.title,
+                    title,
                     revision: result.page.revision,
                     updatedAt: result.page.updatedAt,
                   }
@@ -348,6 +353,20 @@ export function ContentWorkspace() {
     },
     [drain],
   );
+
+  const commitPageTitle = useCallback(() => {
+    const current = draftRef.current;
+    if (!current || recoveringRef.current) return;
+    const title = persistedPageTitle(current.title);
+    if (title === current.title) return;
+    const next = { ...current, title };
+    if (saved.current >= changed.current) {
+      draftRef.current = next;
+      setDraft(next);
+      return;
+    }
+    scheduleSave(next);
+  }, [scheduleSave]);
 
   useEffect(
     () => () => {
@@ -937,6 +956,7 @@ export function ContentWorkspace() {
                     placeholder={DEFAULT_PAGE_TITLE}
                     className="min-w-0 flex-1 border-none bg-transparent p-0 text-3xl font-semibold tracking-tight outline-none placeholder:text-muted-foreground/40 sm:text-[2rem]"
                     onChange={(event) => scheduleSave({ ...draftRef.current!, title: event.target.value })}
+                    onBlur={commitPageTitle}
                   />
                 </div>
                 <PropertyPanel

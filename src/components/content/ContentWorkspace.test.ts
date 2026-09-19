@@ -65,6 +65,24 @@ describe("Content page index pins", () => {
   });
 });
 
+describe("Content page title save", () => {
+  it("does not put the trimmed stored title back into the editor after a save", () => {
+    expect(source).toMatch(
+      /sequence === changed\.current\s+\? editorPageTitle\(draftRef\.current\.title, result\.page\.title\)/,
+    );
+    expect(source).not.toMatch(
+      /title: sequence === changed\.current \? result\.page\.title/,
+    );
+  });
+
+  it("trims the page title when the field loses focus", () => {
+    expect(source).toMatch(/onBlur=\{commitPageTitle\}/);
+    expect(source).toMatch(
+      /const commitPageTitle = useCallback\(\(\) => \{[\s\S]*?persistedPageTitle\(current\.title\)/,
+    );
+  });
+});
+
 describe("Content page tree loading", () => {
   it("only fetches the complete hierarchy for an active tree filter", () => {
     expect(source).toMatch(
