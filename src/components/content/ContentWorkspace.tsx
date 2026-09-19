@@ -359,14 +359,12 @@ export function ContentWorkspace() {
     if (!current || recoveringRef.current) return;
     const title = persistedPageTitle(current.title);
     if (title === current.title) return;
-    const next = { ...current, title };
-    if (saved.current >= changed.current) {
-      draftRef.current = next;
-      setDraft(next);
-      return;
-    }
-    scheduleSave(next);
-  }, [scheduleSave]);
+    // Local only: scheduling a save here would mark the page dirty and
+    // unmount the failed-save recovery button on the blur that precedes
+    // the click.
+    draftRef.current = { ...current, title };
+    setDraft(draftRef.current);
+  }, []);
 
   useEffect(
     () => () => {

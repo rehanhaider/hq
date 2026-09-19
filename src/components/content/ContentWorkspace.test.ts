@@ -75,11 +75,14 @@ describe("Content page title save", () => {
     );
   });
 
-  it("trims the page title when the field loses focus", () => {
-    expect(source).toMatch(/onBlur=\{commitPageTitle\}/);
-    expect(source).toMatch(
-      /const commitPageTitle = useCallback\(\(\) => \{[\s\S]*?persistedPageTitle\(current\.title\)/,
+  it("trims the page title when the field loses focus without scheduling a save", () => {
+    const commit = source.slice(
+      source.indexOf("const commitPageTitle"),
+      source.indexOf("useEffect", source.indexOf("const commitPageTitle")),
     );
+    expect(source).toMatch(/onBlur=\{commitPageTitle\}/);
+    expect(commit).toMatch(/persistedPageTitle\(current\.title\)/);
+    expect(commit).not.toMatch(/scheduleSave/);
   });
 });
 
