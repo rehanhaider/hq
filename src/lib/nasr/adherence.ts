@@ -130,45 +130,47 @@ export function dayCompletion(day: NasrDay, istighfarTarget: number): number {
 
 export type DayMark = {
   date: string;
-  /**
-   * `late` is a day holding a prayer prayed outside its window; it outranks
-   * `hit` because lateness is the thing worth seeing. `empty` is a day with
-   * nothing kept, whether it was logged that way or never logged.
-   */
-  state: "hit" | "late" | "partial" | "empty";
+  /** Counts of the five prayers by status; unlogged prayers make up the remainder of 5. */
+  ontime: number;
+  qada: number;
+  missed: number;
   today: boolean;
 };
-
-/** A day is late if any of its five prayers was prayed as qada. */
-export function hasQada(day: NasrDay): boolean {
-  return (["fajr", "dhuhr", "asr", "maghrib", "isha"] as const).some(
-    (prayer) => day[prayer] === "qada",
-  );
-}
 
 /**
  * One mark per day of the rolling window, today last. It is the window
  * adherence draws from, though adherence scores only the logged days, and it
  * holds no future day: the window ends today.
+ *
+ * A mark carries the day's five prayers counted by status rather than one
+ * verdict for the day, so a day of three on time and two qada can be drawn as
+ * the mix it was instead of collapsing to a single colour.
  */
 export function windowStrip(
   days: NasrDay[],
   today: string,
-  istighfarTarget: number,
   length = 40,
 ): DayMark[] {
+  const prayers = ["fajr", "dhuhr", "asr", "maghrib", "isha"] as const;
   const byDate = new Map(days.map((day) => [day.date, day]));
   return windowDates(today, length).map((date) => {
     const day = byDate.get(date);
-    const completion = day ? dayCompletion(day, istighfarTarget) : 0;
-    const state =
-      day && hasQada(day)
-        ? ("late" as const)
-        : completion >= 0.5
-          ? ("hit" as const)
-          : completion > 0
-            ? ("partial" as const)
-            : ("empty" as const);
-    return { date, state, today: date === today };
+    const statuses = day ? prayers.map((prayer) => day[prayer]) : [];
+    return {
+      date,
+      ontime: statuses.filter((status) => status === "ontime").length,
+      qada: statuses.filter((status) => status === "qada").length,
+      missed: statuses.filter((status) => status === "missed").length,
+      today: date === today,
+    };
   });
+}
+
+/** What a mark says when read aloud, or hovered: the counts behind its mix. */
+export function markLabel(mark: DayMark): string {
+  const parts: string[] = [];
+  if (mark.ontime > 0) parts.push(`${mark.ontime} on time`);
+  if (mark.qada > 0) parts.push(`${mark.qada} qada`);
+  if (mark.missed > 0) parts.push(`${mark.missed} missed`);
+  return `${mark.date} — ${parts.length > 0 ? parts.join(", ") : "not logged"}`;
 }

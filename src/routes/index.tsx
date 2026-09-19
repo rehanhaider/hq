@@ -11,9 +11,9 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Dot } from "@/components/content/properties";
 import { relativeTime } from "@/lib/content";
 import {
+  markLabel,
   middayPrayerLabel,
   windowStrip,
-  type DayMark,
   type PrayerStatus,
 } from "@/lib/nasr";
 import { defaultFilters } from "@/lib/model";
@@ -122,7 +122,7 @@ function HomePage() {
         : `${WORDS[logged]} ${logged === 1 ? "prayer" : "prayers"} logged, ${WORDS[5 - logged]?.toLowerCase()} to go.`;
   const target = nasr.settings.istighfar_target;
   const istighfar = target > 0 ? Math.min(100, (day.istighfar_count / target) * 100) : 0;
-  const marks = windowStrip(nasr.days, nasr.today, target);
+  const marks = windowStrip(nasr.days, nasr.today);
   const week = github.week;
   // The bars count requests merged, not commits: the headline figures already
   // carry the commits, and a merged request is the unit of finished work.
@@ -287,19 +287,33 @@ function HomePage() {
               {marks.map((mark) => (
                 <span
                   key={mark.date}
-                  title={`${mark.date} — ${markLabel(mark.state)}`}
+                  title={markLabel(mark)}
                   className={cn(
-                    "block aspect-square rounded-[3px]",
-                    mark.state === "hit"
-                      ? "bg-positive"
-                      : mark.state === "late"
-                        ? "bg-warning"
-                        : mark.state === "partial"
-                          ? "bg-positive/35"
-                          : "bg-track",
+                    "flex aspect-square flex-col-reverse overflow-hidden rounded-[3px] bg-track",
                     mark.today && "outline-2 outline-offset-1 outline-primary",
                   )}
-                />
+                >
+                  {/* Bottom-up: on time, then late, then missed. The track
+                      showing through is what was never logged. */}
+                  {mark.ontime > 0 && (
+                    <span
+                      className="block w-full bg-positive"
+                      style={{ height: `${(mark.ontime / 5) * 100}%` }}
+                    />
+                  )}
+                  {mark.qada > 0 && (
+                    <span
+                      className="block w-full bg-warning"
+                      style={{ height: `${(mark.qada / 5) * 100}%` }}
+                    />
+                  )}
+                  {mark.missed > 0 && (
+                    <span
+                      className="block w-full bg-negative"
+                      style={{ height: `${(mark.missed / 5) * 100}%` }}
+                    />
+                  )}
+                </span>
               ))}
             </div>
           </div>
@@ -656,16 +670,6 @@ function statusLabel(status: PrayerStatus) {
       : status === "missed"
         ? "missed"
         : "not logged";
-}
-
-function markLabel(state: DayMark["state"]) {
-  return state === "hit"
-    ? "most of the day kept"
-    : state === "late"
-      ? "a prayer made up late"
-      : state === "partial"
-        ? "partly kept"
-        : "nothing kept";
 }
 
 function weekday(day: string) {
