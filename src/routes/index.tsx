@@ -282,33 +282,38 @@ function HomePage() {
             <div
               className="grid flex-1 grid-cols-10 gap-1 sm:grid-cols-[repeat(20,minmax(0,1fr))]"
               aria-label="One mark per day of the last 40 days"
-              role="img"
+              role="list"
             >
               {marks.map((mark) => (
                 <span
                   key={mark.date}
+                  role="listitem"
+                  aria-label={markLabel(mark)}
                   title={markLabel(mark)}
                   className={cn(
-                    "flex aspect-square flex-col-reverse overflow-hidden rounded-[3px] bg-track",
+                    "flex h-5 flex-col-reverse overflow-hidden rounded-[3px] bg-track",
                     mark.today && "outline-2 outline-offset-1 outline-primary",
                   )}
                 >
-                  {/* Bottom-up: on time, then late, then missed. The track
+                  {/* Bottom-up: on time, then qada, then missed. The track
                       showing through is what was never logged. */}
                   {mark.ontime > 0 && (
                     <span
+                      aria-hidden
                       className="block w-full bg-positive"
                       style={{ height: `${(mark.ontime / 5) * 100}%` }}
                     />
                   )}
                   {mark.qada > 0 && (
                     <span
+                      aria-hidden
                       className="block w-full bg-warning"
                       style={{ height: `${(mark.qada / 5) * 100}%` }}
                     />
                   )}
                   {mark.missed > 0 && (
                     <span
+                      aria-hidden
                       className="block w-full bg-negative"
                       style={{ height: `${(mark.missed / 5) * 100}%` }}
                     />

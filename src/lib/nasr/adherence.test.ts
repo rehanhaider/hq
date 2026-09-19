@@ -234,20 +234,20 @@ describe("windowStrip", () => {
 });
 
 describe("markLabel", () => {
-  it("names each status it holds, in count order", () => {
+  it("names each status it holds, in a fixed status order", () => {
     const mark = windowStrip(
       [
         makeDay("2026-09-01", {
           fajr: "ontime",
-          dhuhr: "ontime",
-          asr: "ontime",
+          dhuhr: "qada",
+          asr: "qada",
           maghrib: "qada",
           isha: "missed",
         }),
       ],
       "2026-09-01",
     ).at(-1)!;
-    expect(markLabel(mark)).toBe("2026-09-01 — 3 on time, 1 qada, 1 missed");
+    expect(markLabel(mark)).toBe("2026-09-01 — 1 on time, 3 qada, 1 missed");
   });
 
   it("drops a status the day does not hold", () => {
