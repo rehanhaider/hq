@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Check, Circle, FilePlus2 } from "lucide-react";
+import { ArrowRight, Check, ChevronDown, Circle, FilePlus2 } from "lucide-react";
 import { homeQuery, nasrKeys } from "@/queries/nasr";
 import { openWorkQuery } from "@/queries/dashboard";
 import { age, countKinds } from "@/lib/openWork";
 import { useNewPage } from "@/queries/content";
 import { updateNasrDay } from "@/server/fns";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/ui/menu";
 import { Dot } from "@/components/content/properties";
 import { relativeTime } from "@/lib/content";
 import {
@@ -182,13 +183,14 @@ function HomePage() {
               </p>
               <p className="mt-0.5 text-[0.6875rem] text-muted-foreground">
                 {nextPrayer
-                  ? "Mark today's next prayer as on time or qada"
+                  ? "One click logs on time. Open the menu for qada."
                   : "Today's salah is complete"}
               </p>
             </div>
-            <div className="flex shrink-0 gap-2">
+            <div className="flex shrink-0" role="group" aria-label="Log prayer">
               <Button
                 type="button"
+                className="w-16 rounded-r-none"
                 disabled={!nextPrayer || logPrayer.isPending}
                 aria-label={
                   nextPrayer ? `Log ${nextPrayer[1]} as on time` : undefined
@@ -202,26 +204,53 @@ function HomePage() {
                   });
                 }}
               >
-                On time
+                {nextPrayer ? "Log" : "Done"}
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={!nextPrayer || logPrayer.isPending}
-                aria-label={
-                  nextPrayer ? `Log ${nextPrayer[1]} as qada` : undefined
-                }
-                onClick={() => {
-                  if (!nextPrayer) return;
-                  logPrayer.mutate({
-                    date: nasr.today,
-                    key: nextPrayer[0],
-                    status: "qada",
-                  });
-                }}
-              >
-                Qada
-              </Button>
+              <Menu>
+                <MenuTrigger
+                  render={
+                    <Button
+                      type="button"
+                      size="icon"
+                      className="rounded-l-none border-l border-primary-foreground/20"
+                      disabled={!nextPrayer || logPrayer.isPending}
+                      aria-label={
+                        nextPrayer
+                          ? `Choose how to log ${nextPrayer[1]}`
+                          : "Choose how to log"
+                      }
+                    >
+                      <ChevronDown />
+                    </Button>
+                  }
+                />
+                <MenuContent align="end" className="min-w-36">
+                  <MenuItem
+                    onClick={() => {
+                      if (!nextPrayer) return;
+                      logPrayer.mutate({
+                        date: nasr.today,
+                        key: nextPrayer[0],
+                        status: "ontime",
+                      });
+                    }}
+                  >
+                    On time
+                  </MenuItem>
+                  <MenuItem
+                    onClick={() => {
+                      if (!nextPrayer) return;
+                      logPrayer.mutate({
+                        date: nasr.today,
+                        key: nextPrayer[0],
+                        status: "qada",
+                      });
+                    }}
+                  >
+                    Qada
+                  </MenuItem>
+                </MenuContent>
+              </Menu>
             </div>
           </div>
           {logPrayer.isError && (
