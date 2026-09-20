@@ -158,6 +158,11 @@ describe("Content page index delete", () => {
     // rows on screen only when that fetch fails.
     expect(source).toMatch(/let scope = deleteScope;/);
     expect(source).toMatch(/isInSubtree\(\[\.\.\.known\.values\(\)\], selectedId, target\.id\)/);
+    // The scope is snapshotted before trashing: afterwards the trashed rows
+    // are excluded from list results and the walk could no longer reach them.
+    expect(
+      source.indexOf("scope = await queryClient.fetchQuery(pagesQuery())"),
+    ).toBeLessThan(source.indexOf("await trashPage({ data: { id: target.id"));
     expect(source).toMatch(
       /This page changed before it could be deleted\. The list has been refreshed\./,
     );

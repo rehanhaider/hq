@@ -653,6 +653,17 @@ export function ContentWorkspace() {
     const target = deletingPage;
     if (!target || recoveringRef.current || deleteBusy) return;
     if (!(await drain())) return;
+    // Snapshot the unfiltered tree before trashing: afterwards the trashed
+    // rows are excluded from list results, so the redirect check could no
+    // longer walk from an open descendant up to the removed page.
+    let scope = deleteScope;
+    if (!scope) {
+      try {
+        scope = await queryClient.fetchQuery(pagesQuery());
+      } catch {
+        scope = null;
+      }
+    }
     setDeleteBusy(true);
     try {
       const freshRevision =
@@ -671,14 +682,6 @@ export function ContentWorkspace() {
       setDeletingPage(null);
       await invalidateContent(queryClient, contentKeys.all);
       if (selectedId) {
-        let scope = deleteScope;
-        if (!scope) {
-          try {
-            scope = await queryClient.fetchQuery(pagesQuery());
-          } catch {
-            scope = null;
-          }
-        }
         const known = new Map(
           (scope ?? [...indexPages, ...(hierarchy.data ?? [])]).map((page) => [
             page.id,
