@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   canSortIndex,
+  countDescendants,
+  isInSubtree,
   pageRows,
   pageTree,
   reorderedSiblings,
@@ -32,6 +34,8 @@ describe("Content page index context menu", () => {
     expect(menu).toMatch(/<ListFilter className="size-4" \/> Filter to this page/);
     expect(menu).toMatch(/onClick=\{\(\) => onSetPinned\(page\.id, !page\.pinned\)\}/);
     expect(menu).toMatch(/\{page\.pinned \? "Unpin" : "Pin"\}/);
+    expect(menu).toMatch(/<Trash2 className="size-4" \/> Delete/);
+    expect(menu).toMatch(/onClick=\{\(\) => onDelete\(page\)\}/);
   });
 
   it("creates a subpage under the right-clicked page", () => {
@@ -61,6 +65,85 @@ describe("Content page index context menu", () => {
     expect(sortableReturn.indexOf("<PageContextMenu")).toBeLessThan(
       sortableReturn.indexOf("setActivatorNodeRef"),
     );
+  });
+
+  it("offers Delete on both the flat list and the sortable tree", () => {
+    expect(source).toMatch(/onDelete=\{\(page\) => setDeletingPage\(page\)\}/);
+    expect(source.slice(source.indexOf("function PageIndexRow"))).toMatch(
+      /onDelete=\{onDelete\}/,
+    );
+    expect(sortable).toMatch(/onDelete=\{onDelete\}/);
+  });
+});
+
+describe("Content page index delete", () => {
+  const id = (name: string) =>
+    `00000000-0000-4000-8000-${name.padStart(12, "0")}`;
+  const page = (name: string, overrides: Partial<ContentPage> = {}): ContentPage => ({
+    id: id(name),
+    title: name,
+    parentId: null,
+    order: 0,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    deletedAt: null,
+    revision: 0,
+    preview: "",
+    statusId: null,
+    typeIds: [],
+    tagIds: [],
+    subpageTypeId: null,
+    position: 0,
+    pinned: false,
+    ...overrides,
+  });
+
+  it("counts the whole subtree for the confirmation", () => {
+    const root = page("1");
+    const child = page("11", { parentId: id("1") });
+    const grandchild = page("111", { parentId: id("11") });
+    const sibling = page("2");
+    const pages = [root, child, grandchild, sibling];
+    expect(countDescendants(pages, root.id)).toBe(2);
+    expect(countDescendants(pages, child.id)).toBe(1);
+    expect(countDescendants(pages, sibling.id)).toBe(0);
+  });
+
+  it("treats the open editor inside the trashed subtree as affected", () => {
+    const root = page("1");
+    const child = page("11", { parentId: id("1") });
+    const grandchild = page("111", { parentId: id("11") });
+    const elsewhere = page("2");
+    const pages = [root, child, grandchild, elsewhere];
+    expect(isInSubtree(pages, root.id, root.id)).toBe(true);
+    expect(isInSubtree(pages, child.id, root.id)).toBe(true);
+    expect(isInSubtree(pages, grandchild.id, root.id)).toBe(true);
+    expect(isInSubtree(pages, elsewhere.id, root.id)).toBe(false);
+    expect(isInSubtree(pages, root.id, child.id)).toBe(false);
+  });
+
+  it("asks for confirmation before anything is removed", () => {
+    expect(source).toMatch(/const \[deletingPage, setDeletingPage\] = useState<ContentPage \| null>\(null\)/);
+    expect(source).toMatch(/open=\{deletingPage !== null\}/);
+    expect(source).toMatch(/displayPageTitle\(deletingPage\.title\)/);
+    expect(source).toMatch(/You can restore it from Trash\./);
+    expect(source).toMatch(/You can restore them from Trash\./);
+    // Cancel leaves the item intact: closing the dialog or pressing Cancel
+    // only clears the pending page, never calls the server.
+    expect(source).toMatch(/onClick=\{\(\) => setDeletingPage\(null\)\}/);
+    expect(source).toMatch(/if \(!open && !deleteBusy\) setDeletingPage\(null\)/);
+  });
+
+  it("moves the confirmed page to trash and refreshes the index", () => {
+    expect(source).toMatch(
+      /await trashPage\(\{ data: \{ id: target\.id, revision: freshRevision \} \}\)/,
+    );
+    expect(source).toMatch(/await invalidateContent\(queryClient, contentKeys\.all\)/);
+    expect(source).toMatch(/setLocalPages\(null\)/);
+    expect(source).toMatch(
+      /This page changed before it could be deleted\. The list has been refreshed\./,
+    );
+    expect(source).toMatch(/The page could not be deleted\./);
   });
 });
 
