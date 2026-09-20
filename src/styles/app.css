@@ -255,8 +255,10 @@
   .content-workspace {
     /* Two columns only once there is room for both. Below `lg` the sidebar
        has already taken 16rem, and an 18rem page list beside it would leave
-       the editor about 11rem wide. */
-    @apply grid min-h-136 overflow-hidden rounded-xl border bg-card lg:grid-cols-[18rem_minmax(0,1fr)];
+       the editor about 11rem wide. Clip rather than hidden: clip keeps the
+       rounded corners but does not create a scroll container, so the page
+       list can stick to the viewport. */
+    @apply grid min-h-136 overflow-clip rounded-xl border bg-card lg:grid-cols-[18rem_minmax(0,1fr)];
   }
   .content-editor-shell {
     @apply min-w-0;
