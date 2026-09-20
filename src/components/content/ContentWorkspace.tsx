@@ -294,6 +294,7 @@ export function ContentWorkspace() {
   const [actionError, setActionError] = useState("");
   const [deletingPage, setDeletingPage] = useState<ContentPage | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteScope, setDeleteScope] = useState<ContentPage[] | null>(null);
   const staleRevision = useRef<number | null>(null);
   const recoveringRef = useRef(false);
   const uploads = useRef(createUploadGate()).current;
@@ -625,6 +626,29 @@ export function ContentWorkspace() {
   // restored. The server moves the whole subtree, so the confirmation names
   // the subpages going with it and the open editor returns to the list when
   // it was inside that subtree.
+  // The rows on screen can be filtered by search or tree, hiding the very
+  // subpages a delete would take with it. The unfiltered list loads while
+  // the confirmation is open so the count and the editor redirect see the
+  // whole subtree; until it lands the dialog uses copy that never undercounts.
+  useEffect(() => {
+    if (!deletingPage) {
+      setDeleteScope(null);
+      return;
+    }
+    let cancelled = false;
+    void queryClient
+      .fetchQuery(pagesQuery())
+      .then((pages) => {
+        if (!cancelled) setDeleteScope(pages);
+      })
+      .catch(() => {
+        if (!cancelled) setDeleteScope(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [deletingPage, queryClient]);
+
   const confirmIndexDelete = async () => {
     const target = deletingPage;
     if (!target || recoveringRef.current || deleteBusy) return;
@@ -647,8 +671,20 @@ export function ContentWorkspace() {
       setDeletingPage(null);
       await invalidateContent(queryClient, contentKeys.all);
       if (selectedId) {
-        const source = localPages ?? list.data ?? [];
-        const known = new Map(source.map((page) => [page.id, page]));
+        let scope = deleteScope;
+        if (!scope) {
+          try {
+            scope = await queryClient.fetchQuery(pagesQuery());
+          } catch {
+            scope = null;
+          }
+        }
+        const known = new Map(
+          (scope ?? [...indexPages, ...(hierarchy.data ?? [])]).map((page) => [
+            page.id,
+            page,
+          ]),
+        );
         if (draftRef.current && !known.has(draftRef.current.id))
           known.set(draftRef.current.id, draftRef.current);
         if (isInSubtree([...known.values()], selectedId, target.id)) {
@@ -666,14 +702,8 @@ export function ContentWorkspace() {
     }
   };
 
-  const deleteChildCount = deletingPage
-    ? countDescendants(
-        [...indexPages, ...(hierarchy.data ?? [])].filter(
-          (page, index, all) => all.findIndex((entry) => entry.id === page.id) === index,
-        ),
-        deletingPage.id,
-      )
-    : 0;
+  const deleteChildCount =
+    deletingPage && deleteScope ? countDescendants(deleteScope, deletingPage.id) : null;
 
   const applyProperties = async (patch: PropertyPatch) => {
     const current = draftRef.current;
@@ -1153,9 +1183,11 @@ export function ContentWorkspace() {
                 : "Move this page to trash?"}
             </DialogTitle>
             <DialogDescription>
-              {deleteChildCount > 0
-                ? `This page and its ${deleteChildCount} subpage${deleteChildCount === 1 ? "" : "s"} will be moved to trash. You can restore them from Trash.`
-                : "This page will be moved to trash. You can restore it from Trash."}
+              {deleteChildCount === null
+                ? "This page and its subpages will be moved to trash. You can restore them from Trash."
+                : deleteChildCount > 0
+                  ? `This page and its ${deleteChildCount} subpage${deleteChildCount === 1 ? "" : "s"} will be moved to trash. You can restore them from Trash.`
+                  : "This page will be moved to trash. You can restore it from Trash."}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

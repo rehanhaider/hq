@@ -134,12 +134,30 @@ describe("Content page index delete", () => {
     expect(source).toMatch(/if \(!open && !deleteBusy\) setDeletingPage\(null\)/);
   });
 
+  it("counts the cascade from the unfiltered list, never the filtered rows", () => {
+    // A search hides the subpages a delete still takes with it, so the count
+    // loads the unfiltered list while the dialog is open.
+    expect(source).toMatch(
+      /queryClient\s*\n?\s*\.fetchQuery\(pagesQuery\(\)\)/,
+    );
+    expect(source).toMatch(/\[deletingPage, queryClient\]/);
+    // Until that list lands the dialog uses copy that never undercounts.
+    expect(source).toMatch(
+      /This page and its subpages will be moved to trash\. You can restore them from Trash\./,
+    );
+    expect(source).toMatch(/deleteChildCount === null/);
+  });
+
   it("moves the confirmed page to trash and refreshes the index", () => {
     expect(source).toMatch(
       /await trashPage\(\{ data: \{ id: target\.id, revision: freshRevision \} \}\)/,
     );
     expect(source).toMatch(/await invalidateContent\(queryClient, contentKeys\.all\)/);
     expect(source).toMatch(/setLocalPages\(null\)/);
+    // The editor redirect walks the unfiltered scope, falling back to the
+    // rows on screen only when that fetch fails.
+    expect(source).toMatch(/let scope = deleteScope;/);
+    expect(source).toMatch(/isInSubtree\(\[\.\.\.known\.values\(\)\], selectedId, target\.id\)/);
     expect(source).toMatch(
       /This page changed before it could be deleted\. The list has been refreshed\./,
     );
