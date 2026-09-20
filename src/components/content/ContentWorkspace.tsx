@@ -774,7 +774,7 @@ export function ContentWorkspace() {
       </div>
       <div className="content-workspace mt-4">
         <aside className={`${selectedId ? "hidden lg:flex" : "flex"} min-h-136 flex-col border-r bg-card`} aria-label="Content pages">
-          <div className="min-h-0 flex-1 overflow-y-auto px-2 py-3">
+          <div className="min-h-0 flex-1 overflow-y-auto px-2 py-3 lg:sticky lg:top-12 lg:max-h-[calc(100dvh-3rem)] lg:flex-none">
             {list.isPending || (search.tree && hierarchy.isPending) ? (
               <p className="p-3 text-muted-foreground">Loading pages…</p>
             ) : search.tree && hierarchy.isError ? (
