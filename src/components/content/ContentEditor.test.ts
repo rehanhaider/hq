@@ -29,7 +29,7 @@ describe("side menu + button", () => {
 
   it("keeps the side menu open when Alt is pressed so Alt+click can reach the button", () => {
     expect(source).toMatch(
-      /const keepSideMenuOnAlt = \(event: KeyboardEvent\) => \{\s*if \(!editable\) return;\s*if \(event\.key !== "Alt" \|\| event\.repeat\) return;\s*if \(!host\.querySelector\("\.bn-side-menu"\)\) return;\s*event\.stopPropagation\(\);\s*\};[\s\S]*?window\.addEventListener\("keydown", keepSideMenuOnAlt, true\)/,
+      /const keepSideMenuOnAlt = \(event: KeyboardEvent\) => \{\s*if \(!editable\) return;\s*if \(event\.key !== "Alt"\) return;\s*if \(!host\.querySelector\("\.bn-side-menu"\)\) return;\s*event\.stopPropagation\(\);\s*\};[\s\S]*?window\.addEventListener\("keydown", keepSideMenuOnAlt, true\)/,
     );
   });
 

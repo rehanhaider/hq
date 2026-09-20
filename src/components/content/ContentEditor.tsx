@@ -391,7 +391,7 @@ export function ContentEditor({
     // survives an Alt+click.
     const keepSideMenuOnAlt = (event: KeyboardEvent) => {
       if (!editable) return;
-      if (event.key !== "Alt" || event.repeat) return;
+      if (event.key !== "Alt") return;
       if (!host.querySelector(".bn-side-menu")) return;
       event.stopPropagation();
     };
