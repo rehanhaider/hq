@@ -663,6 +663,35 @@ describe("content migration", () => {
     expect(store.get(page.id)?.typeIds).toEqual([type.id]);
   });
 
+  it("carries a database written before subpage types forward, leaving its subpages untyped", () => {
+    directory = mkdtempSync(join(tmpdir(), "hq-content-"));
+    const path = join(directory, "content.sqlite");
+    store = new ContentStore(path);
+    const parent = store.create("Research");
+    const child = store.create("The repo", parent.id);
+    // Simulate a database written before a subpage had a type of its own.
+    store.db.exec("PRAGMA foreign_keys=OFF");
+    store.db.exec("ALTER TABLE pages DROP COLUMN subpage_type_id");
+    store.db.exec("DROP TABLE subpage_types");
+    store.db.prepare("DELETE FROM meta WHERE key = ?").run("subpage_types_seeded");
+    store.close();
+
+    store = new ContentStore(path);
+    expect(store.properties().subpageTypes.map((type) => type.name)).toEqual([
+      "Website",
+      "GitHub",
+      "Tweet",
+      "Image",
+      "Video",
+    ]);
+    // The pages are all still there, and the subpage simply has no type yet.
+    expect(store.list().map((page) => page.title)).toEqual(["Research", "The repo"]);
+    expect(store.get(child.id)?.subpageTypeId).toBeNull();
+    const tweet = store.properties().subpageTypes[2]!;
+    expect(store.setProperties({ id: child.id, subpageTypeId: tweet.id }).ok).toBe(true);
+    expect(store.get(child.id)?.subpageTypeId).toBe(tweet.id);
+  });
+
   it("keeps a pin after the database is reopened", () => {
     directory = mkdtempSync(join(tmpdir(), "hq-content-"));
     const path = join(directory, "content.sqlite");
@@ -861,6 +890,105 @@ describe("content properties", () => {
       types[1]!.id,
       types[0]!.id,
     ]);
+  });
+});
+
+describe("subpage types", () => {
+  it("seeds the media types a subpage can be, kept apart from the page types", () => {
+    store = new ContentStore(":memory:");
+    const properties = store.properties();
+    expect(properties.subpageTypes.map((type) => type.name)).toEqual([
+      "Website",
+      "GitHub",
+      "Tweet",
+      "Image",
+      "Video",
+    ]);
+    // The two lists never share an entry, so neither picker can offer the
+    // other's: no subpage is ever a Stream, and no page is ever a Tweet.
+    const pageTypes = properties.types.map((type) => type.name);
+    for (const type of properties.subpageTypes) expect(pageTypes).not.toContain(type.name);
+  });
+
+  it("gives a subpage one type from the subpage list", () => {
+    store = new ContentStore(":memory:");
+    const parent = store.create("Research");
+    const child = store.create("The repo", parent.id);
+    expect(child.subpageTypeId).toBeNull();
+    const github = store.properties().subpageTypes[1]!;
+    expect(store.setProperties({ id: child.id, subpageTypeId: github.id }).ok).toBe(true);
+    expect(store.get(child.id)?.subpageTypeId).toBe(github.id);
+    expect(store.list().find((page) => page.id === child.id)?.subpageTypeId).toBe(
+      github.id,
+    );
+    // One type at a time: choosing another replaces it.
+    const video = store.properties().subpageTypes[4]!;
+    expect(store.setProperties({ id: child.id, subpageTypeId: video.id }).ok).toBe(true);
+    expect(store.get(child.id)?.subpageTypeId).toBe(video.id);
+    expect(store.setProperties({ id: child.id, subpageTypeId: null }).ok).toBe(true);
+    expect(store.get(child.id)?.subpageTypeId).toBeNull();
+  });
+
+  it("takes a subpage type at creation and ignores one on a top-level page", () => {
+    store = new ContentStore(":memory:");
+    const website = store.properties().subpageTypes[0]!;
+    const parent = store.create("Research");
+    const child = store.create("The site", parent.id, undefined, null, [], [], website.id);
+    expect(child.subpageTypeId).toBe(website.id);
+    const alone = store.create("Standalone", null, undefined, null, [], [], website.id);
+    expect(alone.subpageTypeId).toBeNull();
+  });
+
+  it("refuses a subpage type on a page that is not a subpage, or one that does not exist", () => {
+    store = new ContentStore(":memory:");
+    const page = store.create("Top level");
+    const child = store.create("Under it", page.id);
+    const website = store.properties().subpageTypes[0]!;
+    expect(store.setProperties({ id: page.id, subpageTypeId: website.id })).toMatchObject({
+      ok: false,
+      code: "not-subpage",
+    });
+    expect(store.setProperties({ id: child.id, subpageTypeId: randomUUID() })).toMatchObject({
+      ok: false,
+      code: "unknown-subpage-type",
+    });
+    expect(store.get(child.id)?.subpageTypeId).toBeNull();
+  });
+
+  it("clears a deleted subpage type from its subpages rather than deleting them", () => {
+    store = new ContentStore(":memory:");
+    const parent = store.create("Research");
+    const child = store.create("The clip", parent.id);
+    const video = store.properties().subpageTypes[4]!;
+    expect(store.setProperties({ id: child.id, subpageTypeId: video.id }).ok).toBe(true);
+    expect(store.deleteProperty("subpageType", video.id).ok).toBe(true);
+    expect(store.get(child.id)?.subpageTypeId).toBeNull();
+    expect(store.properties().subpageTypes).toHaveLength(4);
+  });
+
+  it("renames, reorders, and adds subpage types without touching the page types", () => {
+    store = new ContentStore(":memory:");
+    const before = store.properties();
+    const website = before.subpageTypes[0]!;
+    expect(store.updateProperty("subpageType", website.id, { name: "Link" }).ok).toBe(true);
+    const created = store.createProperty("subpageType", "Podcast");
+    expect(created.ok).toBe(true);
+    expect(
+      store.reorderProperties("subpageType", [
+        created.id,
+        ...before.subpageTypes.map((type) => type.id),
+      ]).ok,
+    ).toBe(true);
+    const after = store.properties();
+    expect(after.subpageTypes.map((type) => type.name)).toEqual([
+      "Podcast",
+      "Link",
+      "GitHub",
+      "Tweet",
+      "Image",
+      "Video",
+    ]);
+    expect(after.types).toEqual(before.types);
   });
 });
 

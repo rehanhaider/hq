@@ -12,6 +12,7 @@ import {
   pageTreeIds,
   pageTypeIcons,
   persistedPageTitle,
+  subpageTypeIcon,
   relativeTime,
   compareIndexPages,
   sortPages,
@@ -36,6 +37,7 @@ const page = (
   statusId: "idea",
   typeIds: [],
   tagIds: [],
+  subpageTypeId: null,
   position: 0,
   pinned: false,
   ...overrides,
@@ -51,6 +53,10 @@ const properties: ContentProperties = {
     { id: "post", name: "Blog post", color: "blue", position: 1 },
   ],
   tags: [{ id: "sqlite", name: "sqlite", color: "blue", position: 0 }],
+  subpageTypes: [
+    { id: "website", name: "Website", color: "blue", position: 0 },
+    { id: "video", name: "Video", color: "red", position: 1 },
+  ],
 };
 
 describe("filterPages", () => {
@@ -422,5 +428,63 @@ describe("pageTypeIcons", () => {
   it("treats an unknown type as a note in its own colour and a missing one as neutral", () => {
     expect(pageTypeIcons(["custom"], types)).toEqual([{ kind: "note", color: "teal" }]);
     expect(pageTypeIcons(["missing"], types)).toEqual([{ kind: "note", color: "slate" }]);
+  });
+});
+
+describe("subpageTypeIcon", () => {
+  const subpageTypes: Property[] = [
+    { id: "website", name: "Website", color: "blue", position: 0 },
+    { id: "github", name: "GitHub", color: "violet", position: 1 },
+    { id: "tweet", name: "Tweet", color: "teal", position: 2 },
+    { id: "image", name: "Image", color: "amber", position: 3 },
+    { id: "video", name: "Video", color: "red", position: 4 },
+    { id: "podcast", name: "Podcast", color: "pink", position: 5 },
+  ];
+
+  it("gives each seeded media type its own glyph in the type's colour", () => {
+    expect(subpageTypeIcon("website", subpageTypes)).toEqual({
+      kind: "website",
+      color: "blue",
+    });
+    expect(subpageTypeIcon("github", subpageTypes)).toEqual({
+      kind: "github",
+      color: "violet",
+    });
+    expect(subpageTypeIcon("tweet", subpageTypes)).toEqual({
+      kind: "tweet",
+      color: "teal",
+    });
+    expect(subpageTypeIcon("image", subpageTypes)).toEqual({
+      kind: "image",
+      color: "amber",
+    });
+    expect(subpageTypeIcon("video", subpageTypes)).toEqual({
+      kind: "video",
+      color: "red",
+    });
+  });
+
+  it("matches a seeded name without regard to case or extra spaces", () => {
+    expect(
+      subpageTypeIcon("x", [{ id: "x", name: "  GITHUB ", color: "violet", position: 0 }]),
+    ).toEqual({ kind: "github", color: "violet" });
+    expect(
+      subpageTypeIcon("x", [{ id: "x", name: " TWEET ", color: "teal", position: 0 }]),
+    ).toEqual({ kind: "tweet", color: "teal" });
+  });
+
+  it("draws a type someone added as a file, still in its own colour", () => {
+    expect(subpageTypeIcon("podcast", subpageTypes)).toEqual({
+      kind: "file",
+      color: "pink",
+    });
+  });
+
+  it("is neutral when the subpage has no type, or a type that is gone", () => {
+    expect(subpageTypeIcon(null, subpageTypes)).toEqual({ kind: "file", color: "slate" });
+    expect(subpageTypeIcon("missing", subpageTypes)).toEqual({
+      kind: "file",
+      color: "slate",
+    });
   });
 });

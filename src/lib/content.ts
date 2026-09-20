@@ -11,8 +11,17 @@ export type JsonValue =
   | { [key: string]: JsonValue };
 export type ContentBlock = { [key: string]: JsonValue };
 
-/** The three property lists a page is described by. */
-export const PROPERTY_KINDS = ["status", "type", "tag"] as const;
+/** The three property lists a top-level page is described by. */
+export const PAGE_PROPERTY_KINDS = ["status", "type", "tag"] as const;
+export type PagePropertyKind = (typeof PAGE_PROPERTY_KINDS)[number];
+
+/**
+ * Every configurable list. A subpage is not a page in the pipeline — it is one
+ * piece of media under a page — so it carries its own single type from its own
+ * list, kept apart from the page types so neither picker can offer the other's
+ * entries.
+ */
+export const PROPERTY_KINDS = [...PAGE_PROPERTY_KINDS, "subpageType"] as const;
 export type PropertyKind = (typeof PROPERTY_KINDS)[number];
 
 /**
@@ -44,6 +53,8 @@ export type ContentProperties = {
   statuses: Property[];
   types: Property[];
   tags: Property[];
+  /** What a subpage is: a website, a repository, a tweet, a picture, a video. */
+  subpageTypes: Property[];
 };
 
 export type ContentPage = {
@@ -59,6 +70,8 @@ export type ContentPage = {
   statusId: string | null;
   typeIds: string[];
   tagIds: string[];
+  /** A subpage's single type, from the subpage list. Null on a top-level page. */
+  subpageTypeId: string | null;
   /** Manual order within a board column. */
   position: number;
   /** When true, the page sits above its unpinned siblings in the Pages index. */
@@ -122,8 +135,8 @@ export function splitTagNames(input: string): string[] {
 
 export const SORTS = ["manual", "updated", "created", "title"] as const;
 export type ContentSort = (typeof SORTS)[number];
-export const GROUPS = PROPERTY_KINDS;
-export type ContentGroup = PropertyKind;
+export const GROUPS = PAGE_PROPERTY_KINDS;
+export type ContentGroup = PagePropertyKind;
 
 const idListSchema = z.array(idSchema).max(60).optional().catch(undefined);
 
@@ -157,6 +170,7 @@ export const createPageSchema = z.object({
   statusId: idSchema.nullable().optional().default(null),
   typeIds: z.array(idSchema).max(60).optional().default([]),
   tagIds: z.array(idSchema).max(60).optional().default([]),
+  subpageTypeId: idSchema.nullable().optional().default(null),
   document: z
     .custom<ContentBlock[]>(validateContentDocument, {
       message: "The page contains unsupported or invalid content.",
@@ -181,6 +195,8 @@ export const setPagePropertiesSchema = z.object({
   statusId: idSchema.optional(),
   typeIds: z.array(idSchema).max(60).optional(),
   tagIds: z.array(idSchema).max(60).optional(),
+  /** One type, or null to clear it. Only a subpage carries one. */
+  subpageTypeId: idSchema.nullable().optional(),
 });
 
 /**
@@ -812,4 +828,52 @@ export function pageTypeIcons(typeIds: string[], types: Property[]): PageTypeIco
     const color = colors.get(kind);
     return color ? [{ kind, color }] : [];
   });
+}
+
+/**
+ * The glyphs a subpage can show: one per default media type, plus a neutral
+ * file for a type someone added or renamed past recognition. The list is data,
+ * not a fixed set of types — a new entry in Settings draws as a file until a
+ * glyph is claimed for its name here.
+ */
+export const SUBPAGE_TYPE_ICONS = [
+  "website",
+  "github",
+  "tweet",
+  "image",
+  "video",
+  "file",
+] as const;
+export type SubpageTypeIconKind = (typeof SUBPAGE_TYPE_ICONS)[number];
+
+const SUBPAGE_TYPE_NAME_ICONS: Record<string, SubpageTypeIconKind> = {
+  website: "website",
+  github: "github",
+  tweet: "tweet",
+  image: "image",
+  video: "video",
+};
+
+/**
+ * The glyph and colour for a subpage's type. An unknown or renamed type keeps
+ * its own colour behind the neutral file; a subpage with no type yet is
+ * neutral in both.
+ */
+export function subpageTypeIcon(
+  subpageTypeId: string | null,
+  subpageTypes: Property[],
+): { kind: SubpageTypeIconKind; color: PropertyColor } {
+  const type = subpageTypeId
+    ? subpageTypes.find((candidate) => candidate.id === subpageTypeId)
+    : undefined;
+  if (!type) return { kind: "file", color: "slate" };
+  return {
+    kind: SUBPAGE_TYPE_NAME_ICONS[typeNameKey(type.name)] ?? "file",
+    color: type.color,
+  };
+}
+
+/** True when the page hangs under another one, so it is typed as media. */
+export function isSubpage(page: { parentId: string | null }) {
+  return page.parentId !== null;
 }

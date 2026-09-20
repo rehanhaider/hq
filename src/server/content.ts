@@ -36,6 +36,7 @@ const PROPERTY_TABLES: Record<PropertyKind, string> = {
   status: "statuses",
   type: "types",
   tag: "tags",
+  subpageType: "subpage_types",
 };
 
 /**
@@ -58,6 +59,14 @@ const SEED_TYPES: [string, PropertyColor][] = [
   ["Blog post", "blue"],
   ["Architecture article", "violet"],
 ];
+/** What a subpage holds. Its own list, so a subpage is never an Idea. */
+const SEED_SUBPAGE_TYPES: [string, PropertyColor][] = [
+  ["Website", "blue"],
+  ["GitHub", "violet"],
+  ["Tweet", "teal"],
+  ["Image", "amber"],
+  ["Video", "red"],
+];
 
 type PageRow = {
   id: string;
@@ -72,6 +81,7 @@ type PageRow = {
   revision: number;
   deletion_group: string | null;
   status_id: string | null;
+  subpage_type_id: string | null;
   position: number;
   pinned: number;
   type_ids: string | null;
@@ -159,6 +169,7 @@ function pageFromRow(row: Omit<PageListRow, "preview"> & { preview: string }): C
     statusId: row.status_id,
     typeIds: tagIdsFrom(row.type_ids),
     tagIds: tagIdsFrom(row.tag_ids),
+    subpageTypeId: row.subpage_type_id,
     position: row.position,
     pinned: Boolean(row.pinned),
   };
@@ -166,7 +177,8 @@ function pageFromRow(row: Omit<PageListRow, "preview"> & { preview: string }): C
 
 const LIST_COLUMNS = `pages.id, pages.title, substr(pages.search_text, 1, 180) AS preview,
         pages.parent_id, pages.display_order, pages.created_at, pages.updated_at,
-        pages.deleted_at, pages.revision, pages.status_id, pages.position, pages.pinned,
+        pages.deleted_at, pages.revision, pages.status_id, pages.subpage_type_id,
+        pages.position, pages.pinned,
         (SELECT group_concat(type_id ORDER BY rowid) FROM page_types WHERE page_id = pages.id) AS type_ids,
         (SELECT group_concat(tag_id) FROM page_tags WHERE page_id = pages.id) AS tag_ids`;
 
@@ -233,6 +245,12 @@ export class ContentStore {
         position INTEGER NOT NULL
       );
       CREATE TABLE IF NOT EXISTS types (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        color TEXT NOT NULL,
+        position INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS subpage_types (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         color TEXT NOT NULL,
@@ -305,11 +323,36 @@ export class ContentStore {
         WHERE pages.id = ordered.id
       `);
     }
+    // A subpage's own type. Nullable: the column arrives on databases full of
+    // subpages that predate it, and "no type yet" is the honest value for them.
+    if (!columns.has("subpage_type_id"))
+      this.db.exec(
+        "ALTER TABLE pages ADD COLUMN subpage_type_id TEXT REFERENCES subpage_types(id) ON DELETE SET NULL",
+      );
     if (!columns.has("pinned"))
       this.db.exec("ALTER TABLE pages ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0");
     this.db.exec(
       "CREATE INDEX IF NOT EXISTS pages_status_position ON pages(status_id, position)",
     );
+
+    // Seeded under its own key: a database written before subpage types exists
+    // with `properties_seeded` already set, and would otherwise never get them.
+    const seededSubpageTypes = this.db
+      .prepare("SELECT value FROM meta WHERE key = 'subpage_types_seeded'")
+      .get();
+    if (!seededSubpageTypes) {
+      this.transaction(() => {
+        const insert = this.db.prepare(
+          "INSERT INTO subpage_types (id, name, color, position) VALUES (?, ?, ?, ?)",
+        );
+        SEED_SUBPAGE_TYPES.forEach(([name, color], index) =>
+          insert.run(randomUUID(), name, color, index),
+        );
+        this.db
+          .prepare("INSERT INTO meta (key, value) VALUES ('subpage_types_seeded', ?)")
+          .run(new Date().toISOString());
+      });
+    }
 
     const seeded = this.db.prepare("SELECT value FROM meta WHERE key = 'properties_seeded'").get();
     if (!seeded) {
@@ -370,6 +413,7 @@ export class ContentStore {
     statusId?: string;
     addTypeId?: string;
     addTagId?: string;
+    subpageTypeId?: string | null;
   }) {
     if (input.statusId !== undefined && !this.propertyExists("status", input.statusId))
       return "unknown-status" as const;
@@ -377,6 +421,12 @@ export class ContentStore {
       return "unknown-type" as const;
     if (input.addTagId !== undefined && !this.propertyExists("tag", input.addTagId))
       return "unknown-tag" as const;
+    if (
+      input.subpageTypeId !== undefined &&
+      input.subpageTypeId !== null &&
+      !this.propertyExists("subpageType", input.subpageTypeId)
+    )
+      return "unknown-subpage-type" as const;
     return null;
   }
 
@@ -407,7 +457,12 @@ export class ContentStore {
           .prepare(`SELECT id, name, color, position FROM ${PROPERTY_TABLES[kind]} ORDER BY position, name`)
           .all() as unknown as PropertyRow[]
       ).map(propertyFromRow);
-    return { statuses: read("status"), types: read("type"), tags: read("tag") };
+    return {
+      statuses: read("status"),
+      types: read("type"),
+      tags: read("tag"),
+      subpageTypes: read("subpageType"),
+    };
   }
 
   list({ q, trashed = false }: { q?: string; trashed?: boolean } = {}): ContentPage[] {
@@ -448,9 +503,10 @@ export class ContentStore {
     statusId: string | null = null,
     typeIds: string[] = [],
     tagIds: string[] = [],
+    subpageTypeId: string | null = null,
   ): PageDetail {
     return this.transaction(() =>
-      this.insert(title, parentId, document, statusId, typeIds, tagIds),
+      this.insert(title, parentId, document, statusId, typeIds, tagIds, subpageTypeId),
     );
   }
 
@@ -461,6 +517,7 @@ export class ContentStore {
     statusId: string | null,
     typeIds: string[],
     tagIds: string[],
+    subpageTypeId: string | null,
   ): PageDetail {
     if (parentId) {
       const parent = this.get(parentId);
@@ -508,6 +565,11 @@ export class ContentStore {
     );
     if (validTypes.length) this.setTypes(id, validTypes);
     if (tagIds.length) this.setTags(id, tagIds);
+    // Only a subpage carries one, and only a type that still exists.
+    if (parentId && subpageTypeId && this.propertyExists("subpageType", subpageTypeId))
+      this.db
+        .prepare("UPDATE pages SET subpage_type_id = ? WHERE id = ?")
+        .run(subpageTypeId, id);
     this.adoptUploads(id, document);
     return this.get(id)!;
   }
@@ -565,12 +627,21 @@ export class ContentStore {
     statusId?: string;
     typeIds?: string[];
     tagIds?: string[];
+    subpageTypeId?: string | null;
   }) {
     return this.transaction(() => {
       const page = this.get(input.id);
       if (!page) return { ok: false as const, code: "missing" as const };
       const unknown = this.unknownProperty(input);
       if (unknown) return { ok: false as const, code: unknown };
+      // The subpage list describes media under a page. A top-level page is not
+      // media, so it is refused rather than quietly given a type nothing shows.
+      if (input.subpageTypeId !== undefined && page.parentId === null)
+        return { ok: false as const, code: "not-subpage" as const };
+      if (input.subpageTypeId !== undefined)
+        this.db
+          .prepare("UPDATE pages SET subpage_type_id = ? WHERE id = ?")
+          .run(input.subpageTypeId, input.id);
       if (input.statusId !== undefined)
         this.db.prepare("UPDATE pages SET status_id = ? WHERE id = ?").run(input.statusId, input.id);
       if (input.typeIds) this.setTypes(input.id, input.typeIds);
@@ -821,6 +892,10 @@ export class ContentStore {
       }
       if (kind === "type")
         this.db.prepare("DELETE FROM page_types WHERE type_id = ?").run(id);
+      if (kind === "subpageType")
+        this.db
+          .prepare("UPDATE pages SET subpage_type_id = NULL WHERE subpage_type_id = ?")
+          .run(id);
       if (kind === "tag") this.db.prepare("DELETE FROM page_tags WHERE tag_id = ?").run(id);
       this.db.prepare(`DELETE FROM ${PROPERTY_TABLES[kind]} WHERE id = ?`).run(id);
       return { ok: true as const };
