@@ -324,7 +324,14 @@ export function ContentBoard() {
                   properties={properties}
                   sortable={sort === "manual"}
                   parentTitle={parentTitles}
-                  onAdd={() => void addCard(bucket)}
+                  // Nothing can be created without a status, and a subpage is
+                  // created from the page it belongs under, so the "No status"
+                  // column has nothing to offer here.
+                  onAdd={
+                    group === "status" && bucket.id === null
+                      ? undefined
+                      : () => void addCard(bucket)
+                  }
                   onOpen={(id) =>
                     void navigate({ to: "/content", search: { ...search, page: id } })
                   }
@@ -360,7 +367,8 @@ function Column({
   properties: ContentProperties;
   sortable: boolean;
   parentTitle: (page: ContentPage) => string | undefined;
-  onAdd: () => void;
+  /** Absent on a column that cannot be created into. */
+  onAdd?: () => void;
   onOpen: (id: string) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: keyOf(bucket) });
@@ -401,14 +409,16 @@ function Column({
           </p>
         )}
       </div>
-      <Button
-        variant="ghost"
-        size="sm"
-        className="m-2 mt-0 justify-start text-muted-foreground"
-        onClick={onAdd}
-      >
-        <Plus /> New
-      </Button>
+      {onAdd && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="m-2 mt-0 justify-start text-muted-foreground"
+          onClick={onAdd}
+        >
+          <Plus /> New
+        </Button>
+      )}
     </section>
   );
 }

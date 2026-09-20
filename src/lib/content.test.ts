@@ -516,9 +516,19 @@ describe("canDropOnColumn", () => {
     expect(canDropOnColumn(child, "type", "video", "video")).toBe(true);
   });
 
+  it("refuses a top-level page dropped on the No status column", () => {
+    // Every page has a status and the board cannot take it away, so the drop
+    // has to be nothing at all: no commit, and no reorder of the column it
+    // came from either.
+    expect(canDropOnColumn(parent, "status", "idea", null)).toBe(false);
+    expect(canDropOnColumn(parent, "status", null, null)).toBe(false);
+    // The same page keeps every other status column.
+    expect(canDropOnColumn(parent, "status", "idea", "published")).toBe(true);
+  });
+
   it("leaves every other drag alone", () => {
     expect(canDropOnColumn(parent, "type", "video", "post")).toBe(true);
-    expect(canDropOnColumn(parent, "status", "idea", "published")).toBe(true);
+    expect(canDropOnColumn(parent, "type", "video", null)).toBe(true);
     expect(canDropOnColumn(child, "tag", "sqlite", "release")).toBe(true);
   });
 });

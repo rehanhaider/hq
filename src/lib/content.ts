@@ -891,6 +891,11 @@ export function isSubpage(page: { parentId: string | null }) {
  * into a page type's column or a status column would give it a property its
  * own panel never offers and its card never shows. Emptying it is always
  * allowed, and so is reordering a subpage inside the column it is already in.
+ *
+ * The "No status" column is the other way round: every page has a status and
+ * the board has no way to take it away, so a page dropped there would spring
+ * back to the column it came from having quietly reordered that one. Only
+ * subpages belong in it.
  */
 export function canDropOnColumn(
   page: { parentId: string | null },
@@ -898,6 +903,8 @@ export function canDropOnColumn(
   from: string | null,
   to: string | null,
 ) {
-  if (group === "tag" || !isSubpage(page)) return true;
+  if (group === "tag") return true;
+  if (group === "status" && to === null) return isSubpage(page);
+  if (!isSubpage(page)) return true;
   return to === null || from === to;
 }
