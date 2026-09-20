@@ -303,6 +303,9 @@ export function ContentEditor({
             );
             if (!current || text === null) return false;
             event.preventDefault();
+            // A lone tweet URL with a trailing newline is one of the forms
+            // a phone hands over, so the embed plan gets first refusal.
+            if (applyEmbedPlan(current, text, planEmbedTextInput)) return true;
             let inCodeBlock = false;
             try {
               inCodeBlock = current.getTextCursorPosition().block.type === "codeBlock";

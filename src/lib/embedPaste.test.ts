@@ -175,6 +175,9 @@ describe("multiLineInsertion", () => {
     expect(multiLineInsertion("insertText", tweet)).toBe(tweet);
     expect(multiLineInsertion("insertFromPaste", tweet)).toBe(tweet);
     expect(multiLineInsertion("insertReplacementText", "one\r\ntwo")).toBe("one\r\ntwo");
+    // A tweet URL with a trailing newline counts too; the caller must offer
+    // it to `planEmbedTextInput` before pasting it as text.
+    expect(multiLineInsertion("insertText", `${TWEET}\n`)).toBe(`${TWEET}\n`);
   });
 
   it("leaves single-line insertions and other input types to the editor", () => {
