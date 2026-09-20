@@ -16,9 +16,19 @@ import {
   type BlockNoteEditor,
   type PartialBlock,
 } from "@blocknote/core";
-import { useCreateBlockNote } from "@blocknote/react";
+import { SideMenuExtension } from "@blocknote/core/extensions";
+import {
+  DragHandleButton,
+  SideMenu,
+  SideMenuController,
+  useBlockNoteEditor,
+  useComponentsContext,
+  useCreateBlockNote,
+  useDictionary,
+  useExtensionState,
+} from "@blocknote/react";
 import { BlockNoteView, ShadCNDefaultComponents } from "@blocknote/shadcn";
-import { Link as LinkIcon } from "lucide-react";
+import { Link as LinkIcon, Plus } from "lucide-react";
 import type { ContentBlock, PageDetail } from "@/lib/content";
 import {
   multiLineInsertion,
@@ -164,6 +174,43 @@ function DragSafeDropdownMenuTrigger({
   });
 
   return <DefaultDropdownMenuTrigger render={child} {...props} />;
+}
+
+/**
+ * The side menu's + button. BlockNote's own inserts a paragraph and then
+ * opens the block-type menu with Heading 1 selected, so the Enter that
+ * usually follows turns the new line into a heading, and on an empty block
+ * it converts that block instead of adding a line. This one only adds an
+ * empty paragraph and puts the caret in it: above the hovered block on a
+ * click, below it on an Alt+click. The block types stay a keystroke away:
+ * type / on the new line.
+ */
+function AddLineButton() {
+  const Components = useComponentsContext()!;
+  const dict = useDictionary();
+  const editor = useBlockNoteEditor();
+  const block = useExtensionState(SideMenuExtension, {
+    editor,
+    selector: (state) => state?.block,
+  });
+  if (block === undefined) return null;
+  return (
+    <Components.SideMenu.Button
+      className="bn-button"
+      label={dict.side_menu.add_block_label}
+      icon={<Plus size={24} />}
+      onClick={(event) => {
+        const [inserted] = editor.insertBlocks(
+          [{ type: "paragraph" }],
+          block,
+          event.altKey ? "after" : "before",
+        );
+        if (!inserted) return;
+        editor.setTextCursorPosition(inserted);
+        editor.focus();
+      }}
+    />
+  );
 }
 
 function normalizedLink(value: string) {
@@ -339,8 +386,21 @@ export function ContentEditor({
       setLinkError("");
       setLinkOpen(true);
     };
+    // BlockNote hides the side menu from a document keydown listener. Stop a
+    // bare Alt at window first, only while the menu is visible, so the + button
+    // survives an Alt+click.
+    const keepSideMenuOnAlt = (event: KeyboardEvent) => {
+      if (!editable) return;
+      if (event.key !== "Alt") return;
+      if (!host.querySelector(".bn-side-menu")) return;
+      event.stopPropagation();
+    };
     host.addEventListener("keydown", keydown, true);
-    return () => host.removeEventListener("keydown", keydown, true);
+    window.addEventListener("keydown", keepSideMenuOnAlt, true);
+    return () => {
+      host.removeEventListener("keydown", keydown, true);
+      window.removeEventListener("keydown", keepSideMenuOnAlt, true);
+    };
   }, [editable, editor]);
 
   const saveLink = () => {
@@ -380,7 +440,17 @@ export function ContentEditor({
         }
         className="min-h-112"
         data-testid="content-editor"
-      />
+        sideMenu={false}
+      >
+        <SideMenuController
+          sideMenu={(props) => (
+            <SideMenu {...props}>
+              <AddLineButton />
+              <DragHandleButton {...props} />
+            </SideMenu>
+          )}
+        />
+      </BlockNoteView>
       <div className="flex flex-wrap items-center gap-2 border-t px-3 py-2 text-xs text-muted-foreground sm:px-4">
         <span>Type / for blocks, or drop an image, video, or file onto the page.</span>
         <span className="ml-auto hidden sm:inline">Up to {formatBytes(MAX_UPLOAD_BYTES)} a file</span>
