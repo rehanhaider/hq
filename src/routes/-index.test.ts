@@ -20,21 +20,24 @@ describe("Home Nasr card footer", () => {
     expect(work).toMatch(/Open GitHub work/);
   });
 
-  it("logs the next unlogged prayer as on time from the card", () => {
+  it("offers On time and Qada for the next unlogged prayer", () => {
     expect(source).toMatch(/const nextPrayer = prayers\.find/);
-    expect(nasr).toMatch(/`Log \$\{nextPrayer\[1\]\}`/);
-    expect(nasr).toMatch(/date: nasr\.today,[\s\S]*key: nextPrayer\[0\]/);
+    expect(nasr).toMatch(/Log \$\{nextPrayer\[1\]\} as on time/);
+    expect(nasr).toMatch(/Log \$\{nextPrayer\[1\]\} as qada/);
+    expect(nasr).toMatch(/status: "ontime"/);
+    expect(nasr).toMatch(/status: "qada"/);
     expect(nasr).toMatch(/!nextPrayer \|\| logPrayer\.isPending/);
     expect(nasr).toMatch(/The prayer could not be saved/);
+    expect(nasr).not.toMatch(/"Done"/);
+    expect(source).toMatch(/data: \{ date, \[key\]: status \}/);
   });
 
   it("keeps the button stable while the card updates optimistically", () => {
-    expect(source).toMatch(/onMutate: async \(\{ key \}\)/);
+    expect(source).toMatch(/onMutate: async \(\{ key, status \}\)/);
     expect(source).toMatch(
-      /day: \{ \.\.\.current\.nasr\.day, \[key\]: "ontime" \}/,
+      /day: \{ \.\.\.current\.nasr\.day, \[key\]: status \}/,
     );
     expect(source).toMatch(/onError: \(_error, _variables, context\)/);
-    expect(nasr).toMatch(/className="w-16"/);
     expect(nasr).not.toMatch(/Logging…/);
     expect(nasr).not.toMatch(/size="sm"/);
   });

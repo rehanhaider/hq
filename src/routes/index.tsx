@@ -26,6 +26,7 @@ export const Route = createFileRoute("/")({
 
 const WORDS = ["No", "One", "Two", "Three", "Four", "Five"] as const;
 type PrayerKey = "fajr" | "dhuhr" | "asr" | "maghrib" | "isha";
+type LoggedStatus = "ontime" | "qada";
 
 function number(value: number) {
   return value.toLocaleString("en-GB");
@@ -41,9 +42,9 @@ function HomePage() {
   const newPage = useNewPage();
   const [creating, setCreating] = useState(false);
   const logPrayer = useMutation({
-    mutationFn: ({ date, key }: { date: string; key: PrayerKey }) =>
-      updateNasrDay({ data: { date, [key]: "ontime" } }),
-    onMutate: async ({ key }) => {
+    mutationFn: ({ date, key, status }: { date: string; key: PrayerKey; status: LoggedStatus }) =>
+      updateNasrDay({ data: { date, [key]: status } }),
+    onMutate: async ({ key, status }) => {
       await queryClient.cancelQueries({ queryKey: nasrKeys.home });
       const previous = queryClient.getQueryData(homeQuery.queryKey);
       queryClient.setQueryData(homeQuery.queryKey, (current) =>
@@ -52,7 +53,7 @@ function HomePage() {
               ...current,
               nasr: {
                 ...current.nasr,
-                day: { ...current.nasr.day, [key]: "ontime" },
+                day: { ...current.nasr.day, [key]: status },
               },
             }
           : current,
@@ -181,27 +182,47 @@ function HomePage() {
               </p>
               <p className="mt-0.5 text-[0.6875rem] text-muted-foreground">
                 {nextPrayer
-                  ? "Mark today's next prayer on time"
+                  ? "Mark today's next prayer as on time or qada"
                   : "Today's salah is complete"}
               </p>
             </div>
-            <Button
-              type="button"
-              className="w-16"
-              disabled={!nextPrayer || logPrayer.isPending}
-              aria-label={
-                nextPrayer ? `Log ${nextPrayer[1]} as on time` : undefined
-              }
-              onClick={() => {
-                if (!nextPrayer) return;
-                logPrayer.mutate({
-                  date: nasr.today,
-                  key: nextPrayer[0],
-                });
-              }}
-            >
-              {nextPrayer ? "Log" : "Done"}
-            </Button>
+            <div className="flex shrink-0 gap-2">
+              <Button
+                type="button"
+                disabled={!nextPrayer || logPrayer.isPending}
+                aria-label={
+                  nextPrayer ? `Log ${nextPrayer[1]} as on time` : undefined
+                }
+                onClick={() => {
+                  if (!nextPrayer) return;
+                  logPrayer.mutate({
+                    date: nasr.today,
+                    key: nextPrayer[0],
+                    status: "ontime",
+                  });
+                }}
+              >
+                On time
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!nextPrayer || logPrayer.isPending}
+                aria-label={
+                  nextPrayer ? `Log ${nextPrayer[1]} as qada` : undefined
+                }
+                onClick={() => {
+                  if (!nextPrayer) return;
+                  logPrayer.mutate({
+                    date: nasr.today,
+                    key: nextPrayer[0],
+                    status: "qada",
+                  });
+                }}
+              >
+                Qada
+              </Button>
+            </div>
           </div>
           {logPrayer.isError && (
             <p role="alert" className="mt-2 text-xs text-negative">
