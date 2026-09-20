@@ -22,8 +22,25 @@ we may close it without merging it, or never review it.
 ## UI Changes
 
 <!-- If this PR changes UI, include clear before/after screenshots.
+     Push them to the `assets` branch under `pr-<number>/` and link the raw URL.
+     Use one two-column table per colour mode, before in the first row and
+     after in the second. Do not put before and after side by side.
      If the change involves motion or interaction, include a short video.
      Delete this section if not applicable. -->
+
+### Dark
+
+| | |
+| --- | --- |
+| Before | <img src="" alt="before dark" width="600"> |
+| After | <img src="" alt="after dark" width="600"> |
+
+### Light
+
+| | |
+| --- | --- |
+| Before | <img src="" alt="before light" width="600"> |
+| After | <img src="" alt="after light" width="600"> |
 
 ## Checklist
 
