@@ -181,8 +181,9 @@ function DragSafeDropdownMenuTrigger({
  * opens the block-type menu with Heading 1 selected, so the Enter that
  * usually follows turns the new line into a heading, and on an empty block
  * it converts that block instead of adding a line. This one only adds an
- * empty paragraph after the hovered block and puts the caret in it. The
- * block types stay a keystroke away: type / on the new line.
+ * empty paragraph and puts the caret in it: above the hovered block on a
+ * click, below it on an Alt+click. The block types stay a keystroke away:
+ * type / on the new line.
  */
 function AddLineButton() {
   const Components = useComponentsContext()!;
@@ -198,11 +199,11 @@ function AddLineButton() {
       className="bn-button"
       label={dict.side_menu.add_block_label}
       icon={<Plus size={24} />}
-      onClick={() => {
+      onClick={(event) => {
         const [inserted] = editor.insertBlocks(
           [{ type: "paragraph" }],
           block,
-          "after",
+          event.altKey ? "after" : "before",
         );
         if (!inserted) return;
         editor.setTextCursorPosition(inserted);
@@ -385,8 +386,21 @@ export function ContentEditor({
       setLinkError("");
       setLinkOpen(true);
     };
+    // BlockNote hides the side menu from a document keydown listener. Stop a
+    // bare Alt at window first, only while the menu is visible, so the + button
+    // survives an Alt+click.
+    const keepSideMenuOnAlt = (event: KeyboardEvent) => {
+      if (!editable) return;
+      if (event.key !== "Alt" || event.repeat) return;
+      if (!host.querySelector(".bn-side-menu")) return;
+      event.stopPropagation();
+    };
     host.addEventListener("keydown", keydown, true);
-    return () => host.removeEventListener("keydown", keydown, true);
+    window.addEventListener("keydown", keepSideMenuOnAlt, true);
+    return () => {
+      host.removeEventListener("keydown", keydown, true);
+      window.removeEventListener("keydown", keepSideMenuOnAlt, true);
+    };
   }, [editable, editor]);
 
   const saveLink = () => {

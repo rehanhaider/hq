@@ -20,11 +20,17 @@ describe("side menu + button", () => {
     expect(source).not.toMatch(/\bAddBlockButton\b/);
   });
 
-  it("inserts an empty paragraph after the hovered block and moves the caret there", () => {
+  it("inserts an empty paragraph above the hovered block, or below it with Alt held, and moves the caret there", () => {
     expect(addLine).toMatch(
-      /editor\.insertBlocks\(\s*\[\{ type: "paragraph" \}\],\s*block,\s*"after",?\s*\)/,
+      /editor\.insertBlocks\(\s*\[\{ type: "paragraph" \}\],\s*block,\s*event\.altKey \? "after" : "before",?\s*\)/,
     );
     expect(addLine).toMatch(/editor\.setTextCursorPosition\(inserted\)/);
+  });
+
+  it("keeps the side menu open when Alt is pressed so Alt+click can reach the button", () => {
+    expect(source).toMatch(
+      /const keepSideMenuOnAlt = \(event: KeyboardEvent\) => \{\s*if \(!editable\) return;\s*if \(event\.key !== "Alt" \|\| event\.repeat\) return;\s*if \(!host\.querySelector\("\.bn-side-menu"\)\) return;\s*event\.stopPropagation\(\);\s*\};[\s\S]*?window\.addEventListener\("keydown", keepSideMenuOnAlt, true\)/,
+    );
   });
 
   it("never opens the suggestion menu or changes the hovered block", () => {
