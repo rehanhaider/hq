@@ -15,6 +15,10 @@ const STATUS_PATH = /\/(?:status|statuses)\/(\d{1,20})(?:\/|$)/;
 export function tweetStatusUrl(value: string): string | null {
   const trimmed = value.trim();
   if (!trimmed || trimmed.length > 2_048) return null;
+  // The URL parser drops newlines and encodes spaces, so a tweet link with
+  // text after it would otherwise parse as one long URL and pass the host and
+  // path checks below. Anything with whitespace inside is not a lone URL.
+  if (/\s/.test(trimmed)) return null;
   let parsed: URL;
   try {
     parsed = new URL(trimmed);

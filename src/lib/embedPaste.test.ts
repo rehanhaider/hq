@@ -5,6 +5,7 @@ import {
   pasteTarget,
   planEmbedPaste,
   planEmbedTextInput,
+  multiLineInsertion,
 } from "./embedPaste";
 
 const ID = "1234567890123456789";
@@ -164,5 +165,28 @@ describe("isEmptyParagraphContent", () => {
         },
       ]),
     ).toBe(false);
+  });
+});
+
+describe("multiLineInsertion", () => {
+  const tweet = "Top 10 use cases:\n\n1.) Model routing\nSimple → cheap model.";
+
+  it("returns the text of a typed, pasted, or replaced insertion that spans lines", () => {
+    expect(multiLineInsertion("insertText", tweet)).toBe(tweet);
+    expect(multiLineInsertion("insertFromPaste", tweet)).toBe(tweet);
+    expect(multiLineInsertion("insertReplacementText", "one\r\ntwo")).toBe("one\r\ntwo");
+    // A tweet URL with a trailing newline counts too; the caller must offer
+    // it to `planEmbedTextInput` before pasting it as text.
+    expect(multiLineInsertion("insertText", `${TWEET}\n`)).toBe(`${TWEET}\n`);
+  });
+
+  it("leaves single-line insertions and other input types to the editor", () => {
+    expect(multiLineInsertion("insertText", "one line")).toBeNull();
+    expect(multiLineInsertion("insertText", TWEET)).toBeNull();
+    expect(multiLineInsertion("insertParagraph", null)).toBeNull();
+    expect(multiLineInsertion("insertLineBreak", "\n")).toBeNull();
+    expect(multiLineInsertion("deleteContentBackward", tweet)).toBeNull();
+    expect(multiLineInsertion("insertText", "")).toBeNull();
+    expect(multiLineInsertion("insertText", undefined)).toBeNull();
   });
 });

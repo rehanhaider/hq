@@ -96,3 +96,28 @@ export function planEmbedTextInput(
   if (!tweetUrlFromPaste(text)) return { kind: "ignore" };
   return planEmbedPaste(text, current);
 }
+
+/**
+ * Text that a `beforeinput` insertion carries when it spans more than one
+ * line. Chrome splits such an insertion into sibling paragraphs inside the
+ * block it lands in, and ProseMirror keeps only the first of them when it
+ * reads the DOM back, so everything after the first line break is lost. A
+ * mobile keyboard's clipboard chip and share-sheet inserts arrive this way.
+ * The caller cancels the event and pastes the text instead.
+ *
+ * Single-line insertions return null: ProseMirror handles those correctly
+ * and `planEmbedTextInput` still sees them.
+ */
+export function multiLineInsertion(
+  inputType: string,
+  text: string | null | undefined,
+): string | null {
+  if (
+    inputType !== "insertText" &&
+    inputType !== "insertFromPaste" &&
+    inputType !== "insertReplacementText"
+  )
+    return null;
+  if (!text || !/[\r\n]/.test(text)) return null;
+  return text;
+}

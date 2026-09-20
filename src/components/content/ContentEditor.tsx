@@ -21,6 +21,7 @@ import { BlockNoteView, ShadCNDefaultComponents } from "@blocknote/shadcn";
 import { Link as LinkIcon } from "lucide-react";
 import type { ContentBlock, PageDetail } from "@/lib/content";
 import {
+  multiLineInsertion,
   pasteTarget,
   planEmbedPaste,
   planEmbedTextInput,
@@ -287,6 +288,34 @@ export function ContentEditor({
           return current
             ? applyEmbedPlan(current, text, planEmbedTextInput)
             : false;
+        },
+        handleDOMEvents: {
+          // A multi-line insertion from a mobile keyboard never reaches
+          // `pasteHandler` either, and Chrome splits it into sibling
+          // paragraphs inside one block, of which ProseMirror keeps only
+          // the first. Take the text before the DOM changes and paste it,
+          // so it lands the way the same text would from a paste event.
+          beforeinput: (_view, event) => {
+            const current = editorRef.current;
+            const text = multiLineInsertion(
+              event.inputType,
+              event.data ?? event.dataTransfer?.getData("text/plain"),
+            );
+            if (!current || text === null) return false;
+            event.preventDefault();
+            // A lone tweet URL with a trailing newline is one of the forms
+            // a phone hands over, so the embed plan gets first refusal.
+            if (applyEmbedPlan(current, text, planEmbedTextInput)) return true;
+            let inCodeBlock = false;
+            try {
+              inCodeBlock = current.getTextCursorPosition().block.type === "codeBlock";
+            } catch {
+              inCodeBlock = false;
+            }
+            if (inCodeBlock) current.pasteText(text);
+            else current.pasteMarkdown(text);
+            return true;
+          },
         },
       },
     },
