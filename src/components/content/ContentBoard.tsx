@@ -28,6 +28,7 @@ import {
   filterPages,
   groupPages,
   hasFilters,
+  isSubpage,
   relativeTime,
   sortPages,
   type ContentGroupBucket,
@@ -38,6 +39,7 @@ import { contentKeys, contentPropertiesQuery, invalidateContent, pagesQuery } fr
 import { createPage, movePageCard } from "@/server/fns";
 import { ContentToolbar, type ToolbarPatch } from "./ContentToolbar";
 import { chipClass, Dot, byId } from "./properties";
+import { PageIcon } from "./PageTypeIcon";
 
 const NONE = "none";
 const keyOf = (bucket: ContentGroupBucket) => bucket.id ?? NONE;
@@ -85,6 +87,7 @@ export function ContentBoard() {
     statuses: [],
     types: [],
     tags: [],
+    subpageTypes: [],
   };
   const group = search.group ?? "status";
   const sort = search.sort ?? "manual";
@@ -445,9 +448,14 @@ function Card({
   overlay?: boolean;
   hint?: string;
 }) {
-  const types = page.typeIds
-    .map((id) => byId(properties.types, id))
-    .filter((type) => type !== undefined);
+  // A subpage shows the one media type it carries; a page shows its own types.
+  const types = isSubpage(page)
+    ? [byId(properties.subpageTypes, page.subpageTypeId)].filter(
+        (type) => type !== undefined,
+      )
+    : page.typeIds
+        .map((id) => byId(properties.types, id))
+        .filter((type) => type !== undefined);
   return (
     <article
       className={`rounded-lg border bg-background p-2.5 text-left shadow-xs ${
@@ -465,7 +473,10 @@ function Card({
             {parentTitle}
           </span>
         )}
-        <span className="block text-sm font-medium break-words">{displayPageTitle(page.title)}</span>
+        <span className="flex items-start gap-1.5 text-sm font-medium break-words">
+          <PageIcon page={page} properties={properties} className="mt-px" />
+          <span className="min-w-0">{displayPageTitle(page.title)}</span>
+        </span>
       </button>
       <div className="mt-1.5 flex flex-wrap items-center gap-1">
         {types.map((type) => (

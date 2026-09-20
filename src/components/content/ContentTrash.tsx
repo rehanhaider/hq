@@ -15,7 +15,7 @@ import { displayPageTitle, type ContentPage } from "@/lib/content";
 import { contentKeys, contentPropertiesQuery, invalidateContent, pagesQuery } from "@/queries/content";
 import { deletePageForever, emptyContentTrash, restorePage } from "@/server/fns";
 import { SearchBox } from "./SearchBox";
-import { PageTypeIcon } from "./PageTypeIcon";
+import { PageIcon } from "./PageTypeIcon";
 
 function message(error: unknown, fallback: string) {
   const text = error instanceof Error ? error.message.trim() : "";
@@ -111,9 +111,16 @@ export function ContentTrash() {
         ) : pages.length ? (
           pages.map((page) => (
             <div key={page.id} className="flex min-h-14 items-center gap-3 px-4 py-2">
-              <PageTypeIcon
-                typeIds={page.typeIds}
-                types={properties.data?.types ?? []}
+              <PageIcon
+                page={page}
+                properties={
+                  properties.data ?? {
+                    statuses: [],
+                    types: [],
+                    tags: [],
+                    subpageTypes: [],
+                  }
+                }
               />
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium">{displayPageTitle(page.title)}</p>

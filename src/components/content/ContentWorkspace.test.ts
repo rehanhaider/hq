@@ -97,6 +97,15 @@ describe("Content page title save", () => {
   });
 });
 
+describe("Content page index icons", () => {
+  it("draws every row from the list the page itself is typed by", () => {
+    const button = source.slice(source.indexOf("function PageIndexButton"));
+    expect(button).toMatch(/<PageIcon page=\{page\} properties=\{properties\} \/>/);
+    // The open page's icon follows the picker before the list is refetched.
+    expect(source).toMatch(/subpageTypeId: draft\.subpageTypeId/);
+  });
+});
+
 describe("Content page tree loading", () => {
   it("only fetches the complete hierarchy for an active tree filter", () => {
     expect(source).toMatch(
@@ -129,6 +138,7 @@ describe("Content page index reorder under a tree filter", () => {
     statusId: null,
     typeIds: [],
     tagIds: [],
+    subpageTypeId: null,
     position: 0,
     pinned: false,
     ...overrides,

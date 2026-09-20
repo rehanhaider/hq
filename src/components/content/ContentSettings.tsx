@@ -49,6 +49,13 @@ const SECTIONS: Section[] = [
     addLabel: "New type",
   },
   {
+    kind: "subpageType",
+    title: "Subpage types",
+    description:
+      "What a subpage holds: a website, a repository, a tweet, a picture, a video. A subpage carries one.",
+    addLabel: "New subpage type",
+  },
+  {
     kind: "tag",
     title: "Tags",
     description: "Free labels. A page can carry any number.",
@@ -70,6 +77,7 @@ export function ContentSettings() {
     status: properties.data?.statuses ?? [],
     type: properties.data?.types ?? [],
     tag: properties.data?.tags ?? [],
+    subpageType: properties.data?.subpageTypes ?? [],
   };
 
   const counts = (kind: PropertyKind, id: string) =>
@@ -78,7 +86,9 @@ export function ContentSettings() {
         ? page.statusId === id
         : kind === "type"
           ? page.typeIds.includes(id)
-          : page.tagIds.includes(id),
+          : kind === "subpageType"
+            ? page.subpageTypeId === id
+            : page.tagIds.includes(id),
     ).length;
 
   return (
@@ -91,7 +101,7 @@ export function ContentSettings() {
       {properties.isPending ? (
         <p className="py-16 text-center text-muted-foreground">Loading properties…</p>
       ) : (
-        <div className="grid items-start gap-6 lg:grid-cols-3">
+        <div className="grid items-start gap-6 md:grid-cols-2 xl:grid-cols-4">
           {SECTIONS.map((section) => (
             <PropertyList
               key={section.kind}

@@ -59,7 +59,6 @@ import {
   type ContentPage,
   type ContentProperties,
   type PageDetail,
-  type Property,
 } from "@/lib/content";
 import { bookmarkUrlsFromDocument } from "@/lib/linkPreview";
 import { tweetIdsFromDocument } from "@/lib/tweet";
@@ -84,7 +83,7 @@ import {
 } from "@/server/fns";
 import { ContentToolbar, type ToolbarPatch } from "./ContentToolbar";
 import { SearchBox } from "./SearchBox";
-import { PageTypeIcon } from "./PageTypeIcon";
+import { PageIcon } from "./PageTypeIcon";
 import { PropertyPanel, type PropertyPatch } from "./PropertyPanel";
 import { useUI } from "@/store/ui";
 
@@ -234,6 +233,7 @@ export function ContentWorkspace() {
     statuses: [],
     types: [],
     tags: [],
+    subpageTypes: [],
   };
   const selectedId = search.page;
   const detail = useQuery(pageQuery(selectedId ?? ""));
@@ -449,7 +449,9 @@ export function ContentWorkspace() {
     const source = localPages ?? list.data ?? [];
     if (!draft || draft.id !== selectedId) return source;
     return source.map((page) =>
-      page.id === draft.id ? { ...page, typeIds: draft.typeIds } : page,
+      page.id === draft.id
+        ? { ...page, typeIds: draft.typeIds, subpageTypeId: draft.subpageTypeId }
+        : page,
     );
   }, [localPages, list.data, draft, selectedId]);
   // Reorder commits run one at a time, in drag order: two quick drags would
@@ -584,6 +586,8 @@ export function ContentWorkspace() {
       ...patch,
       typeIds: patch.typeIds ?? current.typeIds,
       tagIds: patch.tagIds ?? current.tagIds,
+      subpageTypeId:
+        patch.subpageTypeId !== undefined ? patch.subpageTypeId : current.subpageTypeId,
     };
     draftRef.current = next;
     setDraft(next);
@@ -601,6 +605,11 @@ export function ContentWorkspace() {
         restored.typeIds = current.typeIds;
       if (patch.tagIds !== undefined && latest.tagIds.join() === next.tagIds.join())
         restored.tagIds = current.tagIds;
+      if (
+        patch.subpageTypeId !== undefined &&
+        latest.subpageTypeId === next.subpageTypeId
+      )
+        restored.subpageTypeId = current.subpageTypeId;
       draftRef.current = restored;
       setDraft(restored);
       setActionError("The page properties could not be saved.");
@@ -788,7 +797,7 @@ export function ContentWorkspace() {
                   fallback={
                     <PageIndexList
                       rows={rows}
-                      types={properties.types}
+                      properties={properties}
                       selectedId={selectedId}
                       disabled={recovering}
                       onSelect={(id) => void selectPage(id)}
@@ -809,7 +818,7 @@ export function ContentWorkspace() {
                       parentId={null}
                       depth={0}
                       tree={tree}
-                      types={properties.types}
+                      properties={properties}
                       selectedId={selectedId}
                       disabled={recovering}
                       onSelect={(id) => void selectPage(id)}
@@ -821,7 +830,7 @@ export function ContentWorkspace() {
                       <PageIndexRow
                         key={page.id}
                         page={page}
-                        types={properties.types}
+                        properties={properties}
                         depth={0}
                         selected={selectedId === page.id}
                         disabled={recovering}
@@ -834,10 +843,7 @@ export function ContentWorkspace() {
                     <DragOverlay>
                       {draggedPage ? (
                         <div className="flex min-h-10 w-full items-center gap-2 rounded-lg bg-accent px-2 text-sm font-medium shadow-lg">
-                          <PageTypeIcon
-                            typeIds={draggedPage.typeIds}
-                            types={properties.types}
-                          />
+                          <PageIcon page={draggedPage} properties={properties} />
                           <span className="truncate">
                             {displayPageTitle(draggedPage.title)}
                           </span>
@@ -852,7 +858,7 @@ export function ContentWorkspace() {
               ) : (
                 <PageIndexList
                   rows={rows}
-                  types={properties.types}
+                  properties={properties}
                   selectedId={selectedId}
                   disabled={recovering}
                   onSelect={(id) => void selectPage(id)}
@@ -982,9 +988,9 @@ export function ContentWorkspace() {
               </div>
               <div className="content-page-body">
                 <div className="flex items-start gap-3">
-                  <PageTypeIcon
-                    typeIds={draft.typeIds}
-                    types={properties.types}
+                  <PageIcon
+                    page={draft}
+                    properties={properties}
                     size="title"
                     className="mt-0.5"
                   />
@@ -1062,14 +1068,14 @@ export function ContentWorkspace() {
 
 function PageIndexButton({
   page,
-  types,
+  properties,
   depth,
   selected,
   disabled,
   onSelect,
 }: {
   page: ContentPage;
-  types: Property[];
+  properties: ContentProperties;
   depth: number;
   selected: boolean;
   disabled: boolean;
@@ -1084,7 +1090,7 @@ function PageIndexButton({
       disabled={disabled}
       onClick={() => onSelect(page.id)}
     >
-      <PageTypeIcon typeIds={page.typeIds} types={types} />
+      <PageIcon page={page} properties={properties} />
       <span className="truncate">{displayPageTitle(page.title)}</span>
       {page.pinned ? (
         <>
@@ -1144,7 +1150,7 @@ function PageContextMenu({
 
 function PageIndexRow({
   page,
-  types,
+  properties,
   depth,
   selected,
   disabled,
@@ -1154,7 +1160,7 @@ function PageIndexRow({
   onSetPinned,
 }: {
   page: ContentPage;
-  types: Property[];
+  properties: ContentProperties;
   depth: number;
   selected: boolean;
   disabled: boolean;
@@ -1173,7 +1179,7 @@ function PageIndexRow({
     >
       <PageIndexButton
         page={page}
-        types={types}
+        properties={properties}
         depth={depth}
         selected={selected}
         disabled={disabled}
@@ -1185,7 +1191,7 @@ function PageIndexRow({
 
 function PageIndexList({
   rows,
-  types,
+  properties,
   selectedId,
   disabled,
   onSelect,
@@ -1194,7 +1200,7 @@ function PageIndexList({
   onSetPinned,
 }: {
   rows: { page: ContentPage; depth: number }[];
-  types: Property[];
+  properties: ContentProperties;
   selectedId: string | undefined;
   disabled: boolean;
   onSelect: (id: string) => void;
@@ -1208,7 +1214,7 @@ function PageIndexList({
         <PageIndexRow
           key={page.id}
           page={page}
-          types={types}
+          properties={properties}
           depth={depth}
           selected={selectedId === page.id}
           disabled={disabled}
@@ -1233,7 +1239,7 @@ function SortableGroup({
   parentId,
   depth,
   tree,
-  types,
+  properties,
   selectedId,
   disabled,
   onSelect,
@@ -1244,7 +1250,7 @@ function SortableGroup({
   parentId: string | null;
   depth: number;
   tree: PageTree;
-  types: Property[];
+  properties: ContentProperties;
   selectedId: string | undefined;
   disabled: boolean;
   onSelect: (id: string) => void;
@@ -1262,7 +1268,7 @@ function SortableGroup({
         pages={pinned}
         depth={depth}
         tree={tree}
-        types={types}
+        properties={properties}
         selectedId={selectedId}
         disabled={disabled}
         onSelect={onSelect}
@@ -1274,7 +1280,7 @@ function SortableGroup({
         pages={unpinned}
         depth={depth}
         tree={tree}
-        types={types}
+        properties={properties}
         selectedId={selectedId}
         disabled={disabled}
         onSelect={onSelect}
@@ -1290,7 +1296,7 @@ function SortableSiblingList({
   pages,
   depth,
   tree,
-  types,
+  properties,
   selectedId,
   disabled,
   onSelect,
@@ -1301,7 +1307,7 @@ function SortableSiblingList({
   pages: ContentPage[];
   depth: number;
   tree: PageTree;
-  types: Property[];
+  properties: ContentProperties;
   selectedId: string | undefined;
   disabled: boolean;
   onSelect: (id: string) => void;
@@ -1316,7 +1322,7 @@ function SortableSiblingList({
         <SortablePageRow
           key={page.id}
           page={page}
-          types={types}
+          properties={properties}
           depth={depth}
           selected={selectedId === page.id}
           disabled={disabled}
@@ -1330,7 +1336,7 @@ function SortableSiblingList({
             parentId={page.id}
             depth={depth + 1}
             tree={tree}
-            types={types}
+            properties={properties}
             selectedId={selectedId}
             disabled={disabled}
             onSelect={onSelect}
@@ -1346,7 +1352,7 @@ function SortableSiblingList({
 
 function SortablePageRow({
   page,
-  types,
+  properties,
   depth,
   selected,
   disabled,
@@ -1358,7 +1364,7 @@ function SortablePageRow({
   children,
 }: {
   page: ContentPage;
-  types: Property[];
+  properties: ContentProperties;
   depth: number;
   selected: boolean;
   disabled: boolean;
@@ -1403,7 +1409,7 @@ function SortablePageRow({
         <div ref={setActivatorNodeRef} {...attributes} {...listeners}>
           <PageIndexButton
             page={page}
-            types={types}
+            properties={properties}
             depth={depth}
             selected={selected}
             disabled={disabled}
