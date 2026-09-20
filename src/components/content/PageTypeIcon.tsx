@@ -1,14 +1,7 @@
+import type { ComponentType } from "react";
 import type { LucideIcon } from "lucide-react";
-import {
-  AtSign,
-  FileText,
-  GitBranch,
-  Globe,
-  Image,
-  Radio,
-  SquarePlay,
-  Video,
-} from "lucide-react";
+import { FileText, Globe, Image, Radio, SquarePlay, Video } from "lucide-react";
+import { SiGithub, SiX } from "@icons-pack/react-simple-icons";
 import { cn } from "cn";
 import {
   isSubpage,
@@ -29,15 +22,18 @@ const ICONS: Record<PageTypeIconKind, LucideIcon> = {
   note: FileText,
 };
 
+/** Anything that draws a glyph from a class: a Lucide icon or a brand mark. */
+type GlyphIcon = ComponentType<{ className?: string }>;
+
 /**
- * One glyph per subpage media type. Lucide dropped its brand marks, so a
- * repository is a branch and a tweet is an at-sign: the shape of the thing
- * rather than the logo.
+ * One glyph per subpage media type. GitHub and X are places rather than
+ * shapes, so they wear their own marks; Lucide has none, and a branch or an
+ * at-sign reads as the wrong thing. The rest stay Lucide outlines.
  */
-const SUBPAGE_ICONS: Record<SubpageTypeIconKind, LucideIcon> = {
+const SUBPAGE_ICONS: Record<SubpageTypeIconKind, GlyphIcon> = {
   website: Globe,
-  github: GitBranch,
-  tweet: AtSign,
+  github: SiGithub,
+  tweet: SiX,
   image: Image,
   video: Video,
   file: FileText,
@@ -56,7 +52,7 @@ function Tile({
   color,
   size,
 }: {
-  Icon: LucideIcon;
+  Icon: GlyphIcon;
   color: PropertyColor;
   size: IconSize;
 }) {
