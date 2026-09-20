@@ -35,6 +35,9 @@ importers:
       '@fontsource-variable/geist-mono':
         specifier: 5.3.0
         version: 5.3.0
+      '@icons-pack/react-simple-icons':
+        specifier: ^13.15.1
+        version: 13.15.1(react@19.2.8)
       '@tanstack/react-query':
         specifier: 5.102.8
         version: 5.102.8(react@19.2.8)
@@ -388,6 +391,11 @@ packages:
     engines: {node: '>=20'}
     peerDependencies:
       hono: ^4
+
+  '@icons-pack/react-simple-icons@13.15.1':
+    resolution: {integrity: sha512-S35E7vJlJzMeoqjwwI7ZmQUJ2W+2KspnB6bc49KdoDGwp5mCgAy9L3sscfWMewQSMgBdPU8KWWwpSGq5DJyAFw==}
+    peerDependencies:
+      react: ^16.13 || ^17 || ^18 || ^19
 
   '@jridgewell/gen-mapping@0.3.13':
     resolution: {integrity: sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA==}
@@ -3174,6 +3182,10 @@ snapshots:
   '@hono/node-server@2.1.1(hono@4.13.7)':
     dependencies:
       hono: 4.13.7
+
+  '@icons-pack/react-simple-icons@13.15.1(react@19.2.8)':
+    dependencies:
+      react: 19.2.8
 
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:
