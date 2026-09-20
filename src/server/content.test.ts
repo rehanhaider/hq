@@ -955,6 +955,25 @@ describe("subpage types", () => {
     expect(store.get(child.id)?.subpageTypeId).toBeNull();
   });
 
+  it("refuses the page types on a subpage, from the panel and from a board drag", () => {
+    store = new ContentStore(":memory:");
+    const type = store.properties().types[0]!;
+    const parent = store.create("Research");
+    const child = store.create("The repo", parent.id);
+    expect(store.setProperties({ id: child.id, typeIds: [type.id] })).toMatchObject({
+      ok: false,
+      code: "not-page",
+    });
+    expect(store.moveCard({ id: child.id, addTypeId: type.id })).toMatchObject({
+      ok: false,
+      code: "not-page",
+    });
+    expect(store.get(child.id)?.typeIds).toEqual([]);
+    // The parent still takes them, and a subpage can still be reordered.
+    expect(store.setProperties({ id: parent.id, typeIds: [type.id] }).ok).toBe(true);
+    expect(store.moveCard({ id: child.id, orderedIds: [child.id] }).ok).toBe(true);
+  });
+
   it("clears a deleted subpage type from its subpages rather than deleting them", () => {
     store = new ContentStore(":memory:");
     const parent = store.create("Research");

@@ -430,6 +430,21 @@ export class ContentStore {
     return null;
   }
 
+  /**
+   * A subpage is typed from the subpage list, so the page types are refused on
+   * it rather than stored where nothing would ever show them. Removing one it
+   * was given before this rule existed is still allowed: that is cleanup.
+   */
+  private pageTypesOnSubpage(
+    page: ContentPage,
+    input: { typeIds?: string[]; addTypeId?: string },
+  ) {
+    return (
+      page.parentId !== null &&
+      (input.typeIds !== undefined || input.addTypeId !== undefined)
+    );
+  }
+
   /** Replaces a page's types. Types that no longer exist are dropped. */
   private setTypes(pageId: string, typeIds: string[]) {
     this.db.prepare("DELETE FROM page_types WHERE page_id = ?").run(pageId);
@@ -638,6 +653,8 @@ export class ContentStore {
       // media, so it is refused rather than quietly given a type nothing shows.
       if (input.subpageTypeId !== undefined && page.parentId === null)
         return { ok: false as const, code: "not-subpage" as const };
+      if (this.pageTypesOnSubpage(page, input))
+        return { ok: false as const, code: "not-page" as const };
       if (input.subpageTypeId !== undefined)
         this.db
           .prepare("UPDATE pages SET subpage_type_id = ? WHERE id = ?")
@@ -675,6 +692,8 @@ export class ContentStore {
       if (!page) return { ok: false as const, code: "missing" as const };
       const unknown = this.unknownProperty(input);
       if (unknown) return { ok: false as const, code: unknown };
+      if (this.pageTypesOnSubpage(page, input))
+        return { ok: false as const, code: "not-page" as const };
       if (input.statusId !== undefined)
         this.db.prepare("UPDATE pages SET status_id = ? WHERE id = ?").run(input.statusId, input.id);
       if (input.typeIds) this.setTypes(input.id, input.typeIds);

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  canDropOnColumn,
   contentSearchSchema,
   contentSummary,
   DEFAULT_PAGE_TITLE,
@@ -486,5 +487,25 @@ describe("subpageTypeIcon", () => {
       kind: "file",
       color: "slate",
     });
+  });
+});
+
+describe("canDropOnColumn", () => {
+  const parent = page("Research notes");
+  const child = page("The repo", { parentId: parent.id });
+
+  it("refuses to drag a subpage across the page-type columns", () => {
+    expect(canDropOnColumn(child, "type", "website", "video")).toBe(false);
+    expect(canDropOnColumn(child, "type", null, "video")).toBe(false);
+  });
+
+  it("still reorders a subpage inside the column it is already in", () => {
+    expect(canDropOnColumn(child, "type", "video", "video")).toBe(true);
+  });
+
+  it("leaves every other drag alone", () => {
+    expect(canDropOnColumn(parent, "type", "video", "post")).toBe(true);
+    expect(canDropOnColumn(child, "status", "idea", "published")).toBe(true);
+    expect(canDropOnColumn(child, "tag", "sqlite", "none")).toBe(true);
   });
 });

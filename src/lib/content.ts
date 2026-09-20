@@ -877,3 +877,19 @@ export function subpageTypeIcon(
 export function isSubpage(page: { parentId: string | null }) {
   return page.parentId !== null;
 }
+
+/**
+ * True when a board drag may land the card in that column. A subpage is typed
+ * from the subpage list, so crossing the page-type columns would hand it a
+ * type its own picker never offers and nothing on the card would show. Every
+ * other drag, including reordering a subpage inside the column it is already
+ * in, is allowed.
+ */
+export function canDropOnColumn(
+  page: { parentId: string | null },
+  group: ContentGroup,
+  from: string | null,
+  to: string,
+) {
+  return !(group === "type" && isSubpage(page) && from !== to);
+}

@@ -24,6 +24,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
+  canDropOnColumn,
   displayPageTitle,
   filterPages,
   groupPages,
@@ -147,6 +148,8 @@ export function ContentBoard() {
         .find((bucket) => keyOf(bucket) === from)!
         .pages.find((page) => page.id === activePage);
       if (!moving) return list;
+      // The preview never shows a move the drop would refuse.
+      if (!canDropOnColumn(moving, group, from, to)) return list;
       const overPage = pageOf(String(over.id));
       return list.map((bucket) => {
         if (keyOf(bucket) === from)
@@ -174,6 +177,14 @@ export function ContentBoard() {
     const list = local ?? computed;
     const target = columnOf(list, String(over.id));
     if (!target) {
+      setLocal(null);
+      return;
+    }
+    // A subpage carries a type from the subpage list, so a drop across the
+    // page-type columns is nothing: the card goes back where it was.
+    const activePage = (pages.data ?? []).find((page) => page.id === activeId);
+    if (activePage && !canDropOnColumn(activePage, group, source.current, target)) {
+      source.current = null;
       setLocal(null);
       return;
     }
