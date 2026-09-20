@@ -3,7 +3,7 @@ import {
   calculateAdherence,
   dayCompletion,
   daysInWindow,
-  hasQada,
+  markLabel,
   overallAdherence,
   windowStrip,
 } from "./adherence";
@@ -183,16 +183,16 @@ describe("windowStrip", () => {
       dhuhr: "ontime",
       asr: "qada",
       maghrib: "ontime",
-      isha: "ontime",
+      isha: "missed",
       morning_adhkar: true,
       istighfar_count: 100,
     }),
     makeDay("2026-09-02", { fajr: "ontime" }),
-    makeDay("2026-09-03", { fajr: "missed" }),
+    makeDay("2026-09-03", {}),
   ];
 
   it("runs the last forty days to today, and marks today", () => {
-    const marks = windowStrip(days, "2026-09-04", 100);
+    const marks = windowStrip(days, "2026-09-04");
     expect(marks).toHaveLength(40);
     expect(marks.at(0)?.date).toBe("2026-07-27");
     expect(marks.at(-1)?.date).toBe("2026-09-04");
@@ -201,53 +201,66 @@ describe("windowStrip", () => {
     ]);
   });
 
-  it("empties a day with nothing kept, logged or not", () => {
-    const marks = windowStrip(days, "2026-09-04", 100);
-    // 09-01 kept most of the day but prayed Asr late, so it reads amber, not
-    // green: lateness outranks a high count.
-    expect(marks.slice(-4).map((mark) => mark.state)).toEqual([
-      "late",
-      "partial",
-      "empty",
-      "empty",
-    ]);
-    expect(windowStrip([], "2026-09-04", 100).every((m) => m.state === "empty")).toBe(
-      true,
-    );
+  it("counts the five prayers of a day by status", () => {
+    const marks = windowStrip(days, "2026-09-04");
+    expect(marks.at(-4)).toEqual({
+      date: "2026-09-01",
+      ontime: 3,
+      qada: 1,
+      missed: 1,
+      today: false,
+    });
+  });
+
+  it("leaves the unlogged prayers of a part-logged day out of the counts", () => {
+    const mark = windowStrip(days, "2026-09-02").at(-1);
+    expect(mark).toMatchObject({ ontime: 1, qada: 0, missed: 0 });
+  });
+
+  it("zeroes a day with no prayer logged, whether or not the day exists", () => {
+    const marks = windowStrip(days, "2026-09-04");
+    // 09-03 was logged with nothing set; 09-04 was never logged at all.
+    expect(marks.slice(-2).map((mark) => [mark.ontime, mark.qada, mark.missed]))
+      .toEqual([
+        [0, 0, 0],
+        [0, 0, 0],
+      ]);
+    expect(
+      windowStrip([], "2026-09-04").every(
+        (mark) => mark.ontime + mark.qada + mark.missed === 0,
+      ),
+    ).toBe(true);
   });
 });
 
-describe("a late day in the strip", () => {
-  it("reads late whatever else the day holds", () => {
-    const whole = makeDay("2026-09-01", {
-      fajr: "ontime",
-      dhuhr: "ontime",
-      asr: "ontime",
-      maghrib: "ontime",
-      isha: "qada",
-      morning_adhkar: true,
-      evening_adhkar: true,
-      night_ayat_kursi: true,
-      night_baqarah: true,
-      night_three_suras: true,
-      ruqyah: true,
-      istighfar_count: 100,
-    });
-    expect(hasQada(whole)).toBe(true);
-    expect(windowStrip([whole], "2026-09-01", 100).at(-1)?.state).toBe("late");
+describe("markLabel", () => {
+  it("names each status it holds, in a fixed status order", () => {
+    const mark = windowStrip(
+      [
+        makeDay("2026-09-01", {
+          fajr: "ontime",
+          dhuhr: "qada",
+          asr: "qada",
+          maghrib: "qada",
+          isha: "missed",
+        }),
+      ],
+      "2026-09-01",
+    ).at(-1)!;
+    expect(markLabel(mark)).toBe("2026-09-01 — 1 on time, 3 qada, 1 missed");
   });
-  it("reads hit when nothing was late", () => {
-    const day = makeDay("2026-09-01", {
-      fajr: "ontime",
-      dhuhr: "ontime",
-      asr: "ontime",
-      maghrib: "ontime",
-      isha: "ontime",
-      morning_adhkar: true,
-      evening_adhkar: true,
-    });
-    expect(hasQada(day)).toBe(false);
-    expect(windowStrip([day], "2026-09-01", 100).at(-1)?.state).toBe("hit");
+
+  it("drops a status the day does not hold", () => {
+    const mark = windowStrip(
+      [makeDay("2026-09-01", { fajr: "ontime", dhuhr: "missed" })],
+      "2026-09-01",
+    ).at(-1)!;
+    expect(markLabel(mark)).toBe("2026-09-01 — 1 on time, 1 missed");
+  });
+
+  it("reads as not logged when the day holds no prayer", () => {
+    const mark = windowStrip([], "2026-09-01").at(-1)!;
+    expect(markLabel(mark)).toBe("2026-09-01 — not logged");
   });
 });
 
