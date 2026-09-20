@@ -294,6 +294,7 @@ export function ContentWorkspace() {
   const [actionError, setActionError] = useState("");
   const [deletingPage, setDeletingPage] = useState<ContentPage | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const deleteBusyRef = useRef(false);
   const [deleteScope, setDeleteScope] = useState<ContentPage[] | null>(null);
   const staleRevision = useRef<number | null>(null);
   const recoveringRef = useRef(false);
@@ -651,8 +652,17 @@ export function ContentWorkspace() {
 
   const confirmIndexDelete = async () => {
     const target = deletingPage;
-    if (!target || recoveringRef.current || deleteBusy) return;
-    if (!(await drain())) return;
+    if (!target || recoveringRef.current || deleteBusyRef.current) return;
+    // Arm synchronously, before any await: Cancel and dismiss stay enabled
+    // until busy lands, and a confirm that already passed this point must not
+    // be stoppable by clearing the pending page.
+    deleteBusyRef.current = true;
+    setDeleteBusy(true);
+    if (!(await drain())) {
+      deleteBusyRef.current = false;
+      setDeleteBusy(false);
+      return;
+    }
     // Snapshot the unfiltered tree before trashing: afterwards the trashed
     // rows are excluded from list results, so the redirect check could no
     // longer walk from an open descendant up to the removed page.
@@ -664,7 +674,6 @@ export function ContentWorkspace() {
         scope = null;
       }
     }
-    setDeleteBusy(true);
     try {
       const freshRevision =
         draftRef.current?.id === target.id ? draftRef.current.revision : target.revision;
@@ -701,6 +710,7 @@ export function ContentWorkspace() {
     } catch (error) {
       setActionError(readableError(error, "The page could not be deleted."));
     } finally {
+      deleteBusyRef.current = false;
       setDeleteBusy(false);
     }
   };

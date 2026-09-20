@@ -148,6 +148,20 @@ describe("Content page index delete", () => {
     expect(source).toMatch(/deleteChildCount === null/);
   });
 
+  it("locks the dialog before any await so cancel cannot slip through", () => {
+    const confirm = source.slice(source.indexOf("const confirmIndexDelete"));
+    // The guard arms synchronously: a second confirm returns early and Cancel
+    // is disabled before drain or the scope fetch yields.
+    expect(confirm).toMatch(/if \(!target \|\| recoveringRef\.current \|\| deleteBusyRef\.current\) return;/);
+    expect(confirm.indexOf("deleteBusyRef.current = true;")).toBeLessThan(
+      confirm.indexOf("await drain()"),
+    );
+    // A failed drain releases the lock with the dialog still open.
+    expect(confirm).toMatch(
+      /if \(\!\(await drain\(\)\)\) \{\s+deleteBusyRef\.current = false;\s+setDeleteBusy\(false\);\s+return;\s+\}/,
+    );
+  });
+
   it("moves the confirmed page to trash and refreshes the index", () => {
     expect(source).toMatch(
       /await trashPage\(\{ data: \{ id: target\.id, revision: freshRevision \} \}\)/,
