@@ -34,6 +34,7 @@ describe("tweetStatusUrl", () => {
     expect(tweetStatusUrl(`https://user:pass@x.com/alice/status/${ID}`)).toBeNull();
     expect(tweetStatusUrl(`javascript:https://x.com/alice/status/${ID}`)).toBeNull();
     expect(tweetStatusUrl(`see https://x.com/alice/status/${ID}`)).toBeNull();
+    expect(tweetStatusUrl(`https://x.com/alice/status/${ID}?s=20 see`)).toBeNull();
     expect(tweetStatusUrl("")).toBeNull();
   });
 });
@@ -51,6 +52,20 @@ describe("tweetUrlFromPaste", () => {
       tweetUrlFromPaste(`Look at this\nhttps://x.com/alice/status/${ID}`),
     ).toBeNull();
     expect(tweetUrlFromPaste("https://example.com")).toBeNull();
+  });
+
+  it("keeps a tweet body that starts with a share link as ordinary text", () => {
+    expect(
+      tweetUrlFromPaste(
+        `https://x.com/alice/status/${ID}?s=20\nSecond line of the tweet.\nThird line.`,
+      ),
+    ).toBeNull();
+    expect(
+      tweetUrlFromPaste(`https://x.com/alice/status/${ID}/\nSecond line of the tweet.`),
+    ).toBeNull();
+    expect(
+      tweetUrlFromPaste(`https://x.com/alice/status/${ID}?s=20\r\nSecond line.`),
+    ).toBeNull();
   });
 });
 
