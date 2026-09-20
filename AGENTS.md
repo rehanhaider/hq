@@ -28,3 +28,10 @@ Any change that affects what the user sees must be shown as a visual preview
 before it is reported complete: open the actual page or app, check the
 relevant viewport and theme, and capture a screenshot or recording of the
 observed result.
+
+## Pull requests
+
+The body follows `.github/pull_request_template.md`. Passing `--body` to
+`gh pr create` skips the template, so paste its headings and fill each one.
+Before and after screenshots for UI changes go on the `assets` branch under
+`pr-<number>/`, linked from the body by their raw GitHub URL.
