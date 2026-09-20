@@ -481,6 +481,14 @@ describe("subpageTypeIcon", () => {
     });
   });
 
+  it("does not mistake an inherited property for a glyph", () => {
+    // "constructor" finds a function on Object.prototype in a plain lookup.
+    for (const name of ["constructor", "toString", "__proto__"])
+      expect(
+        subpageTypeIcon("x", [{ id: "x", name, color: "pink", position: 0 }]),
+      ).toEqual({ kind: "file", color: "pink" });
+  });
+
   it("is neutral when the subpage has no type, or a type that is gone", () => {
     expect(subpageTypeIcon(null, subpageTypes)).toEqual({ kind: "file", color: "slate" });
     expect(subpageTypeIcon("missing", subpageTypes)).toEqual({
@@ -494,18 +502,44 @@ describe("canDropOnColumn", () => {
   const parent = page("Research notes");
   const child = page("The repo", { parentId: parent.id });
 
-  it("refuses to drag a subpage across the page-type columns", () => {
+  it("refuses to drag a subpage into a page type's or a status's column", () => {
     expect(canDropOnColumn(child, "type", "website", "video")).toBe(false);
     expect(canDropOnColumn(child, "type", null, "video")).toBe(false);
+    expect(canDropOnColumn(child, "status", null, "published")).toBe(false);
   });
 
-  it("still reorders a subpage inside the column it is already in", () => {
+  it("lets a subpage be emptied, and reordered where it already sits", () => {
+    // The trailing column — No type, No status — takes the property away
+    // rather than giving one, so it is always reachable.
+    expect(canDropOnColumn(child, "type", "video", null)).toBe(true);
+    expect(canDropOnColumn(child, "status", "idea", null)).toBe(true);
     expect(canDropOnColumn(child, "type", "video", "video")).toBe(true);
   });
 
   it("leaves every other drag alone", () => {
     expect(canDropOnColumn(parent, "type", "video", "post")).toBe(true);
-    expect(canDropOnColumn(child, "status", "idea", "published")).toBe(true);
-    expect(canDropOnColumn(child, "tag", "sqlite", "none")).toBe(true);
+    expect(canDropOnColumn(parent, "status", "idea", "published")).toBe(true);
+    expect(canDropOnColumn(child, "tag", "sqlite", "release")).toBe(true);
+  });
+});
+
+describe("groupPages with a subpage", () => {
+  const parent = page("Research notes");
+  const child = page("The repo", { parentId: parent.id, statusId: null });
+
+  it("collects the pages with no status in a column of their own", () => {
+    const buckets = groupPages([parent, child], "status", properties);
+    expect(buckets.map((bucket) => [bucket.label, bucket.pages.map((p) => p.id)])).toEqual([
+      ["Idea", [parent.id]],
+      ["Published", []],
+      ["No status", [child.id]],
+    ]);
+  });
+
+  it("drops that column when nothing is in it", () => {
+    expect(groupPages([parent], "status", properties).map((bucket) => bucket.label)).toEqual([
+      "Idea",
+      "Published",
+    ]);
   });
 });

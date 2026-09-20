@@ -68,6 +68,19 @@ const SEED_SUBPAGE_TYPES: [string, PropertyColor][] = [
   ["Video", "red"],
 ];
 
+/**
+ * The page types describe a page, not the media under it. `create` has no
+ * result object to carry a code, so it refuses the same way it refuses a
+ * missing parent: by throwing, with the code the update paths return.
+ */
+function pageTypesRefused() {
+  const error = new Error("A subpage cannot carry the page types.") as Error & {
+    code?: string;
+  };
+  error.code = "not-page";
+  return error;
+}
+
 type PageRow = {
   id: string;
   title: string;
@@ -373,9 +386,26 @@ export class ContentStore {
       });
     }
 
+    // Subpages used to be given the first status — an Idea — which described
+    // the page above them rather than the media they hold. Cleared once, under
+    // its own key, so a status set deliberately afterwards is left alone.
+    const clearedSubpageStatus = this.db
+      .prepare("SELECT value FROM meta WHERE key = 'subpage_status_cleared'")
+      .get();
+    if (!clearedSubpageStatus) {
+      this.transaction(() => {
+        this.db.exec("UPDATE pages SET status_id = NULL WHERE parent_id IS NOT NULL");
+        this.db
+          .prepare("INSERT INTO meta (key, value) VALUES ('subpage_status_cleared', ?)")
+          .run(new Date().toISOString());
+      });
+    }
+
     const first = this.firstStatusId();
     if (first)
-      this.db.prepare("UPDATE pages SET status_id = ? WHERE status_id IS NULL").run(first);
+      this.db
+        .prepare("UPDATE pages SET status_id = ? WHERE status_id IS NULL AND parent_id IS NULL")
+        .run(first);
   }
 
   private transaction<T>(work: () => T): T {
@@ -410,12 +440,16 @@ export class ContentStore {
    * would report a failed move and keep the damage.
    */
   private unknownProperty(input: {
-    statusId?: string;
+    statusId?: string | null;
     addTypeId?: string;
     addTagId?: string;
     subpageTypeId?: string | null;
   }) {
-    if (input.statusId !== undefined && !this.propertyExists("status", input.statusId))
+    if (
+      input.statusId !== undefined &&
+      input.statusId !== null &&
+      !this.propertyExists("status", input.statusId)
+    )
       return "unknown-status" as const;
     if (input.addTypeId !== undefined && !this.propertyExists("type", input.addTypeId))
       return "unknown-type" as const;
@@ -441,8 +475,17 @@ export class ContentStore {
   ) {
     return (
       page.parentId !== null &&
-      (input.typeIds !== undefined || input.addTypeId !== undefined)
+      (Boolean(input.typeIds?.length) || input.addTypeId !== undefined)
     );
+  }
+
+  /**
+   * A subpage is not a step in the publishing pipeline, so it holds no status.
+   * Clearing one is allowed: that is how a page that becomes a subpage, or a
+   * subpage written before this rule, is put right.
+   */
+  private statusOnSubpage(page: ContentPage, input: { statusId?: string | null }) {
+    return page.parentId !== null && Boolean(input.statusId);
   }
 
   /** Replaces a page's types. Types that no longer exist are dropped. */
@@ -538,8 +581,14 @@ export class ContentStore {
       const parent = this.get(parentId);
       if (!parent || parent.deletedAt) throw new Error("The parent page is not available.");
     }
-    const status =
-      statusId && this.propertyExists("status", statusId) ? statusId : this.firstStatusId();
+    // A subpage has no status at all: the pipeline belongs to the page above
+    // it, so it never starts as an Idea.
+    const status = parentId
+      ? null
+      : statusId && this.propertyExists("status", statusId)
+        ? statusId
+        : this.firstStatusId();
+    if (parentId && typeIds.length) throw pageTypesRefused();
     const id = randomUUID();
     const now = new Date().toISOString();
     const order = Number(
@@ -639,7 +688,7 @@ export class ContentStore {
    */
   setProperties(input: {
     id: string;
-    statusId?: string;
+    statusId?: string | null;
     typeIds?: string[];
     tagIds?: string[];
     subpageTypeId?: string | null;
@@ -653,7 +702,7 @@ export class ContentStore {
       // media, so it is refused rather than quietly given a type nothing shows.
       if (input.subpageTypeId !== undefined && page.parentId === null)
         return { ok: false as const, code: "not-subpage" as const };
-      if (this.pageTypesOnSubpage(page, input))
+      if (this.pageTypesOnSubpage(page, input) || this.statusOnSubpage(page, input))
         return { ok: false as const, code: "not-page" as const };
       if (input.subpageTypeId !== undefined)
         this.db
@@ -676,7 +725,7 @@ export class ContentStore {
    */
   moveCard(input: {
     id: string;
-    statusId?: string;
+    statusId?: string | null;
     addTypeId?: string;
     removeTypeId?: string;
     addTagId?: string;
@@ -692,7 +741,7 @@ export class ContentStore {
       if (!page) return { ok: false as const, code: "missing" as const };
       const unknown = this.unknownProperty(input);
       if (unknown) return { ok: false as const, code: unknown };
-      if (this.pageTypesOnSubpage(page, input))
+      if (this.pageTypesOnSubpage(page, input) || this.statusOnSubpage(page, input))
         return { ok: false as const, code: "not-page" as const };
       if (input.statusId !== undefined)
         this.db.prepare("UPDATE pages SET status_id = ? WHERE id = ?").run(input.statusId, input.id);

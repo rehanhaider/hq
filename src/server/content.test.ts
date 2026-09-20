@@ -692,6 +692,30 @@ describe("content migration", () => {
     expect(store.get(child.id)?.subpageTypeId).toBe(tweet.id);
   });
 
+  it("clears the status a subpage was given before, once", () => {
+    directory = mkdtempSync(join(tmpdir(), "hq-content-"));
+    const path = join(directory, "content.sqlite");
+    store = new ContentStore(path);
+    const parent = store.create("Research");
+    const child = store.create("The repo", parent.id);
+    const idea = store.properties().statuses[0]!;
+    // Simulate a database written while every page, subpages included, was
+    // given the first status.
+    store.db.prepare("UPDATE pages SET status_id = ?").run(idea.id);
+    store.db.prepare("DELETE FROM meta WHERE key = ?").run("subpage_status_cleared");
+    store.close();
+
+    store = new ContentStore(path);
+    expect(store.get(child.id)?.statusId).toBeNull();
+    expect(store.get(parent.id)?.statusId).toBe(idea.id);
+    store.close();
+
+    // Reopening does not hand it one again, and the backfill that gives a
+    // page the first status leaves subpages alone.
+    store = new ContentStore(path);
+    expect(store.get(child.id)?.statusId).toBeNull();
+  });
+
   it("keeps a pin after the database is reopened", () => {
     directory = mkdtempSync(join(tmpdir(), "hq-content-"));
     const path = join(directory, "content.sqlite");
@@ -784,23 +808,42 @@ describe("content properties", () => {
     expect(store.save({ id: page.id, title: "Draft", revision: page.revision, document: paragraph("still mine") }).ok).toBe(true);
   });
 
-  it("starts a subpage with no types and the first status", () => {
+  it("starts a subpage with no types and no status", () => {
     store = new ContentStore(":memory:");
     const types = store.properties().types;
     const parent = store.create("Series");
     store.setProperties({ id: parent.id, typeIds: [types[0]!.id, types[1]!.id] });
     const child = store.create("Episode 1", parent.id);
     expect(child.typeIds).toEqual([]);
-    expect(child.statusId).toBe(store.properties().statuses[0]!.id);
+    // The pipeline belongs to the page above it: a subpage is never an Idea.
+    expect(child.statusId).toBeNull();
+    expect(parent.statusId).toBe(store.properties().statuses[0]!.id);
+    // Even when the caller names one.
+    const named = store.create(
+      "Episode 2",
+      parent.id,
+      undefined,
+      store.properties().statuses[1]!.id,
+    );
+    expect(named.statusId).toBeNull();
   });
 
-  it("keeps types that were asked for when creating a subpage", () => {
+  it("refuses to create a subpage carrying the page types", () => {
     store = new ContentStore(":memory:");
     const types = store.properties().types;
     const parent = store.create("Series");
     store.setProperties({ id: parent.id, typeIds: [types[0]!.id] });
-    const child = store.create("Episode 1", parent.id, undefined, null, [types[1]!.id]);
-    expect(child.typeIds).toEqual([types[1]!.id]);
+    expect(() =>
+      store.create("Episode 1", parent.id, undefined, null, [types[1]!.id]),
+    ).toThrow(
+      expect.objectContaining({ code: "not-page" }),
+    );
+    // Nothing was written: the refusal is not half a page.
+    expect(store.list().map((page) => page.title)).toEqual(["Series"]);
+    // A top-level page still takes them at creation.
+    expect(store.create("Standalone", null, undefined, null, [types[1]!.id]).typeIds).toEqual([
+      types[1]!.id,
+    ]);
   });
 
   it("reuses a tag that already exists instead of creating a duplicate", () => {
@@ -972,6 +1015,52 @@ describe("subpage types", () => {
     // The parent still takes them, and a subpage can still be reordered.
     expect(store.setProperties({ id: parent.id, typeIds: [type.id] }).ok).toBe(true);
     expect(store.moveCard({ id: child.id, orderedIds: [child.id] }).ok).toBe(true);
+  });
+
+  it("lets a subpage clear the page types it was given before", () => {
+    store = new ContentStore(":memory:");
+    const type = store.properties().types[0]!;
+    const parent = store.create("Research");
+    const child = store.create("The repo", parent.id);
+    // A page that was typed and then became a subpage still holds the type.
+    store.db
+      .prepare("INSERT INTO page_types (page_id, type_id) VALUES (?, ?)")
+      .run(child.id, type.id);
+    expect(store.get(child.id)?.typeIds).toEqual([type.id]);
+    // Emptying is not a claim, so both paths allow it — a board drag onto
+    // "No type" among them.
+    expect(store.setProperties({ id: child.id, typeIds: [] }).ok).toBe(true);
+    expect(store.get(child.id)?.typeIds).toEqual([]);
+    store.db
+      .prepare("INSERT INTO page_types (page_id, type_id) VALUES (?, ?)")
+      .run(child.id, type.id);
+    expect(store.moveCard({ id: child.id, typeIds: [] }).ok).toBe(true);
+    expect(store.get(child.id)?.typeIds).toEqual([]);
+  });
+
+  it("refuses a status on a subpage and lets one be cleared", () => {
+    store = new ContentStore(":memory:");
+    const planned = store.properties().statuses[1]!;
+    const parent = store.create("Research");
+    const child = store.create("The repo", parent.id);
+    expect(store.setProperties({ id: child.id, statusId: planned.id })).toMatchObject({
+      ok: false,
+      code: "not-page",
+    });
+    expect(store.moveCard({ id: child.id, statusId: planned.id })).toMatchObject({
+      ok: false,
+      code: "not-page",
+    });
+    expect(store.get(child.id)?.statusId).toBeNull();
+    // A status left on a subpage by an older build can still be cleared.
+    store.db
+      .prepare("UPDATE pages SET status_id = ? WHERE id = ?")
+      .run(planned.id, child.id);
+    expect(store.setProperties({ id: child.id, statusId: null }).ok).toBe(true);
+    expect(store.get(child.id)?.statusId).toBeNull();
+    // The page above it keeps its pipeline.
+    expect(store.setProperties({ id: parent.id, statusId: planned.id }).ok).toBe(true);
+    expect(store.get(parent.id)?.statusId).toBe(planned.id);
   });
 
   it("clears a deleted subpage type from its subpages rather than deleting them", () => {

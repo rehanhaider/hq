@@ -192,7 +192,8 @@ export const changePageStateSchema = z.object({
  */
 export const setPagePropertiesSchema = z.object({
   id: idSchema,
-  statusId: idSchema.optional(),
+  /** An id, or null to clear it. A subpage holds no status. */
+  statusId: idSchema.nullable().optional(),
   typeIds: z.array(idSchema).max(60).optional(),
   tagIds: z.array(idSchema).max(60).optional(),
   /** One type, or null to clear it. Only a subpage carries one. */
@@ -685,18 +686,18 @@ export function groupPages(
     color: property.color,
     pages: pages.filter((page) => belongs(page, property.id)),
   }));
-  if (group !== "status") {
-    const orphans = pages.filter(
-      (page) => !list.some((property) => belongs(page, property.id)),
-    );
-    if (orphans.length)
-      buckets.push({
-        id: null,
-        label: group === "type" ? "No type" : "Untagged",
-        color: "slate",
-        pages: orphans,
-      });
-  }
+  const orphans = pages.filter(
+    (page) => !list.some((property) => belongs(page, property.id)),
+  );
+  // A subpage carries no status, so the status grouping needs this column too
+  // or the board would simply lose it.
+  if (orphans.length)
+    buckets.push({
+      id: null,
+      label: group === "status" ? "No status" : group === "type" ? "No type" : "Untagged",
+      color: "slate",
+      pages: orphans,
+    });
   return options.hideEmpty
     ? buckets.filter((bucket) => bucket.pages.length > 0)
     : buckets;
@@ -867,10 +868,13 @@ export function subpageTypeIcon(
     ? subpageTypes.find((candidate) => candidate.id === subpageTypeId)
     : undefined;
   if (!type) return { kind: "file", color: "slate" };
-  return {
-    kind: SUBPAGE_TYPE_NAME_ICONS[typeNameKey(type.name)] ?? "file",
-    color: type.color,
-  };
+  // Own keys only: a type named "constructor" or "toString" would otherwise
+  // find something on Object.prototype and draw nothing at all.
+  const name = typeNameKey(type.name);
+  const kind = Object.hasOwn(SUBPAGE_TYPE_NAME_ICONS, name)
+    ? SUBPAGE_TYPE_NAME_ICONS[name]!
+    : "file";
+  return { kind, color: type.color };
 }
 
 /** True when the page hangs under another one, so it is typed as media. */
@@ -879,17 +883,21 @@ export function isSubpage(page: { parentId: string | null }) {
 }
 
 /**
- * True when a board drag may land the card in that column. A subpage is typed
- * from the subpage list, so crossing the page-type columns would hand it a
- * type its own picker never offers and nothing on the card would show. Every
- * other drag, including reordering a subpage inside the column it is already
- * in, is allowed.
+ * True when a board drag may land the card in that column. `from` and `to` are
+ * the columns' property ids, or null for the trailing column that collects the
+ * pages with none.
+ *
+ * A subpage is typed from the subpage list and holds no status, so crossing
+ * into a page type's column or a status column would give it a property its
+ * own panel never offers and its card never shows. Emptying it is always
+ * allowed, and so is reordering a subpage inside the column it is already in.
  */
 export function canDropOnColumn(
   page: { parentId: string | null },
   group: ContentGroup,
   from: string | null,
-  to: string,
+  to: string | null,
 ) {
-  return !(group === "type" && isSubpage(page) && from !== to);
+  if (group === "tag" || !isSubpage(page)) return true;
+  return to === null || from === to;
 }

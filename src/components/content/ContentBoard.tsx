@@ -44,6 +44,8 @@ import { PageIcon } from "./PageTypeIcon";
 
 const NONE = "none";
 const keyOf = (bucket: ContentGroupBucket) => bucket.id ?? NONE;
+/** The property a column stands for, or null for the column that collects the pages with none. */
+const propertyOf = (column: string | null) => (column === NONE ? null : column);
 
 /**
  * A drag id is unique per card *slot*, not per page: grouped by tag, one page
@@ -149,7 +151,7 @@ export function ContentBoard() {
         .pages.find((page) => page.id === activePage);
       if (!moving) return list;
       // The preview never shows a move the drop would refuse.
-      if (!canDropOnColumn(moving, group, from, to)) return list;
+      if (!canDropOnColumn(moving, group, propertyOf(from), propertyOf(to))) return list;
       const overPage = pageOf(String(over.id));
       return list.map((bucket) => {
         if (keyOf(bucket) === from)
@@ -183,7 +185,10 @@ export function ContentBoard() {
     // A subpage carries a type from the subpage list, so a drop across the
     // page-type columns is nothing: the card goes back where it was.
     const activePage = (pages.data ?? []).find((page) => page.id === activeId);
-    if (activePage && !canDropOnColumn(activePage, group, source.current, target)) {
+    if (
+      activePage &&
+      !canDropOnColumn(activePage, group, propertyOf(source.current), propertyOf(target))
+    ) {
       source.current = null;
       setLocal(null);
       return;
