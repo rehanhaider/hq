@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  canDropOnColumn,
   contentSearchSchema,
   contentSummary,
   DEFAULT_PAGE_TITLE,
@@ -12,6 +13,7 @@ import {
   pageTreeIds,
   pageTypeIcons,
   persistedPageTitle,
+  subpageTypeIcon,
   relativeTime,
   compareIndexPages,
   sortPages,
@@ -36,6 +38,7 @@ const page = (
   statusId: "idea",
   typeIds: [],
   tagIds: [],
+  subpageTypeId: null,
   position: 0,
   pinned: false,
   ...overrides,
@@ -51,6 +54,10 @@ const properties: ContentProperties = {
     { id: "post", name: "Blog post", color: "blue", position: 1 },
   ],
   tags: [{ id: "sqlite", name: "sqlite", color: "blue", position: 0 }],
+  subpageTypes: [
+    { id: "website", name: "Website", color: "blue", position: 0 },
+    { id: "video", name: "Video", color: "red", position: 1 },
+  ],
 };
 
 describe("filterPages", () => {
@@ -422,5 +429,127 @@ describe("pageTypeIcons", () => {
   it("treats an unknown type as a note in its own colour and a missing one as neutral", () => {
     expect(pageTypeIcons(["custom"], types)).toEqual([{ kind: "note", color: "teal" }]);
     expect(pageTypeIcons(["missing"], types)).toEqual([{ kind: "note", color: "slate" }]);
+  });
+});
+
+describe("subpageTypeIcon", () => {
+  const subpageTypes: Property[] = [
+    { id: "website", name: "Website", color: "blue", position: 0 },
+    { id: "github", name: "GitHub", color: "violet", position: 1 },
+    { id: "tweet", name: "Tweet", color: "teal", position: 2 },
+    { id: "image", name: "Image", color: "amber", position: 3 },
+    { id: "video", name: "Video", color: "red", position: 4 },
+    { id: "podcast", name: "Podcast", color: "pink", position: 5 },
+  ];
+
+  it("gives each seeded media type its own glyph in the type's colour", () => {
+    expect(subpageTypeIcon("website", subpageTypes)).toEqual({
+      kind: "website",
+      color: "blue",
+    });
+    expect(subpageTypeIcon("github", subpageTypes)).toEqual({
+      kind: "github",
+      color: "violet",
+    });
+    expect(subpageTypeIcon("tweet", subpageTypes)).toEqual({
+      kind: "tweet",
+      color: "teal",
+    });
+    expect(subpageTypeIcon("image", subpageTypes)).toEqual({
+      kind: "image",
+      color: "amber",
+    });
+    expect(subpageTypeIcon("video", subpageTypes)).toEqual({
+      kind: "video",
+      color: "red",
+    });
+  });
+
+  it("matches a seeded name without regard to case or extra spaces", () => {
+    expect(
+      subpageTypeIcon("x", [{ id: "x", name: "  GITHUB ", color: "violet", position: 0 }]),
+    ).toEqual({ kind: "github", color: "violet" });
+    expect(
+      subpageTypeIcon("x", [{ id: "x", name: " TWEET ", color: "teal", position: 0 }]),
+    ).toEqual({ kind: "tweet", color: "teal" });
+  });
+
+  it("draws a type someone added as a file, still in its own colour", () => {
+    expect(subpageTypeIcon("podcast", subpageTypes)).toEqual({
+      kind: "file",
+      color: "pink",
+    });
+  });
+
+  it("does not mistake an inherited property for a glyph", () => {
+    // "constructor" finds a function on Object.prototype in a plain lookup.
+    for (const name of ["constructor", "toString", "__proto__"])
+      expect(
+        subpageTypeIcon("x", [{ id: "x", name, color: "pink", position: 0 }]),
+      ).toEqual({ kind: "file", color: "pink" });
+  });
+
+  it("is neutral when the subpage has no type, or a type that is gone", () => {
+    expect(subpageTypeIcon(null, subpageTypes)).toEqual({ kind: "file", color: "slate" });
+    expect(subpageTypeIcon("missing", subpageTypes)).toEqual({
+      kind: "file",
+      color: "slate",
+    });
+  });
+});
+
+describe("canDropOnColumn", () => {
+  const parent = page("Research notes");
+  const child = page("The repo", { parentId: parent.id });
+
+  it("refuses to drag a subpage into a page type's or a status's column", () => {
+    expect(canDropOnColumn(child, "type", "website", "video")).toBe(false);
+    expect(canDropOnColumn(child, "type", null, "video")).toBe(false);
+    expect(canDropOnColumn(child, "status", null, "published")).toBe(false);
+  });
+
+  it("lets a subpage be emptied, and reordered where it already sits", () => {
+    // The trailing column — No type, No status — takes the property away
+    // rather than giving one, so it is always reachable.
+    expect(canDropOnColumn(child, "type", "video", null)).toBe(true);
+    expect(canDropOnColumn(child, "status", "idea", null)).toBe(true);
+    expect(canDropOnColumn(child, "type", "video", "video")).toBe(true);
+  });
+
+  it("refuses a top-level page dropped on the No status column", () => {
+    // Every page has a status and the board cannot take it away, so the drop
+    // has to be nothing at all: no commit, and no reorder of the column it
+    // came from either.
+    expect(canDropOnColumn(parent, "status", "idea", null)).toBe(false);
+    expect(canDropOnColumn(parent, "status", null, null)).toBe(false);
+    // The same page keeps every other status column.
+    expect(canDropOnColumn(parent, "status", "idea", "published")).toBe(true);
+  });
+
+  it("leaves every other drag alone", () => {
+    expect(canDropOnColumn(parent, "type", "video", "post")).toBe(true);
+    expect(canDropOnColumn(parent, "type", "video", null)).toBe(true);
+    expect(canDropOnColumn(child, "tag", "sqlite", "release")).toBe(true);
+  });
+});
+
+describe("groupPages with a subpage", () => {
+  const parent = page("Research notes");
+  const child = page("The repo", { parentId: parent.id, statusId: null });
+
+  it("collects the pages with no status in a column of their own", () => {
+    const buckets = groupPages([parent, child], "status", properties);
+    expect(buckets.map((bucket) => [bucket.label, bucket.pages.map((p) => p.id)])).toEqual([
+      ["Idea", [parent.id]],
+      ["Published", []],
+      ["No status", [child.id]],
+    ]);
+  });
+
+  it("drops that column when nothing is in it", () => {
+    expect(groupPages([parent], "status", properties).map((bucket) => bucket.label)).toEqual([
+      "Idea",
+      "Published",
+    ]);
   });
 });

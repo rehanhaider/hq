@@ -24,10 +24,12 @@ import { CSS } from "@dnd-kit/utilities";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
+  canDropOnColumn,
   displayPageTitle,
   filterPages,
   groupPages,
   hasFilters,
+  isSubpage,
   relativeTime,
   sortPages,
   type ContentGroupBucket,
@@ -38,9 +40,12 @@ import { contentKeys, contentPropertiesQuery, invalidateContent, pagesQuery } fr
 import { createPage, movePageCard } from "@/server/fns";
 import { ContentToolbar, type ToolbarPatch } from "./ContentToolbar";
 import { chipClass, Dot, byId } from "./properties";
+import { PageIcon } from "./PageTypeIcon";
 
 const NONE = "none";
 const keyOf = (bucket: ContentGroupBucket) => bucket.id ?? NONE;
+/** The property a column stands for, or null for the column that collects the pages with none. */
+const propertyOf = (column: string | null) => (column === NONE ? null : column);
 
 /**
  * A drag id is unique per card *slot*, not per page: grouped by tag, one page
@@ -85,6 +90,7 @@ export function ContentBoard() {
     statuses: [],
     types: [],
     tags: [],
+    subpageTypes: [],
   };
   const group = search.group ?? "status";
   const sort = search.sort ?? "manual";
@@ -144,6 +150,8 @@ export function ContentBoard() {
         .find((bucket) => keyOf(bucket) === from)!
         .pages.find((page) => page.id === activePage);
       if (!moving) return list;
+      // The preview never shows a move the drop would refuse.
+      if (!canDropOnColumn(moving, group, propertyOf(from), propertyOf(to))) return list;
       const overPage = pageOf(String(over.id));
       return list.map((bucket) => {
         if (keyOf(bucket) === from)
@@ -171,6 +179,17 @@ export function ContentBoard() {
     const list = local ?? computed;
     const target = columnOf(list, String(over.id));
     if (!target) {
+      setLocal(null);
+      return;
+    }
+    // A subpage carries a type from the subpage list, so a drop across the
+    // page-type columns is nothing: the card goes back where it was.
+    const activePage = (pages.data ?? []).find((page) => page.id === activeId);
+    if (
+      activePage &&
+      !canDropOnColumn(activePage, group, propertyOf(source.current), propertyOf(target))
+    ) {
+      source.current = null;
       setLocal(null);
       return;
     }
@@ -305,7 +324,14 @@ export function ContentBoard() {
                   properties={properties}
                   sortable={sort === "manual"}
                   parentTitle={parentTitles}
-                  onAdd={() => void addCard(bucket)}
+                  // Nothing can be created without a status, and a subpage is
+                  // created from the page it belongs under, so the "No status"
+                  // column has nothing to offer here.
+                  onAdd={
+                    group === "status" && bucket.id === null
+                      ? undefined
+                      : () => void addCard(bucket)
+                  }
                   onOpen={(id) =>
                     void navigate({ to: "/content", search: { ...search, page: id } })
                   }
@@ -341,7 +367,8 @@ function Column({
   properties: ContentProperties;
   sortable: boolean;
   parentTitle: (page: ContentPage) => string | undefined;
-  onAdd: () => void;
+  /** Absent on a column that cannot be created into. */
+  onAdd?: () => void;
   onOpen: (id: string) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: keyOf(bucket) });
@@ -382,14 +409,16 @@ function Column({
           </p>
         )}
       </div>
-      <Button
-        variant="ghost"
-        size="sm"
-        className="m-2 mt-0 justify-start text-muted-foreground"
-        onClick={onAdd}
-      >
-        <Plus /> New
-      </Button>
+      {onAdd && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="m-2 mt-0 justify-start text-muted-foreground"
+          onClick={onAdd}
+        >
+          <Plus /> New
+        </Button>
+      )}
     </section>
   );
 }
@@ -445,9 +474,14 @@ function Card({
   overlay?: boolean;
   hint?: string;
 }) {
-  const types = page.typeIds
-    .map((id) => byId(properties.types, id))
-    .filter((type) => type !== undefined);
+  // A subpage shows the one media type it carries; a page shows its own types.
+  const types = isSubpage(page)
+    ? [byId(properties.subpageTypes, page.subpageTypeId)].filter(
+        (type) => type !== undefined,
+      )
+    : page.typeIds
+        .map((id) => byId(properties.types, id))
+        .filter((type) => type !== undefined);
   return (
     <article
       className={`rounded-lg border bg-background p-2.5 text-left shadow-xs ${
@@ -465,7 +499,10 @@ function Card({
             {parentTitle}
           </span>
         )}
-        <span className="block text-sm font-medium break-words">{displayPageTitle(page.title)}</span>
+        <span className="flex items-start gap-1.5 text-sm font-medium break-words">
+          <PageIcon page={page} properties={properties} className="mt-px" />
+          <span className="min-w-0">{displayPageTitle(page.title)}</span>
+        </span>
       </button>
       <div className="mt-1.5 flex flex-wrap items-center gap-1">
         {types.map((type) => (

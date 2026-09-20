@@ -2,17 +2,20 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Check, CircleDashed, Plus, Shapes, Tag as TagIcon, X } from "lucide-react";
 import { cn } from "cn";
 import {
+  isSubpage,
   splitTagNames,
   type ContentPage,
   type ContentProperties,
   type Property,
 } from "@/lib/content";
 import { chipClass } from "./properties";
+import { SubpageTypeIcon } from "./PageTypeIcon";
 
 export type PropertyPatch = {
   statusId?: string;
   typeIds?: string[];
   tagIds?: string[];
+  subpageTypeId?: string | null;
 };
 
 /**
@@ -41,6 +44,86 @@ export function PropertyPanel({
   const tags = page.tagIds
     .map((id) => properties.tags.find((entry) => entry.id === id))
     .filter((tag) => tag !== undefined);
+  const subpageType = properties.subpageTypes.find(
+    (entry) => entry.id === page.subpageTypeId,
+  );
+
+  // A subpage is one piece of media under a page, not a step in the publishing
+  // pipeline, so it carries its own single type and neither the status list nor
+  // the page types are offered on it.
+  if (isSubpage(page))
+    return (
+      <dl className="mt-4 space-y-0.5">
+        <Row icon={<Shapes />} label="Type">
+          <Picker
+            disabled={disabled}
+            label="Type"
+            value={
+              subpageType ? (
+                <span className="flex items-center gap-1.5">
+                  <SubpageTypeIcon
+                    subpageTypeId={subpageType.id}
+                    subpageTypes={properties.subpageTypes}
+                  />
+                  <Pill property={subpageType} />
+                </span>
+              ) : (
+                <Empty>Empty</Empty>
+              )
+            }
+          >
+            {(close) => (
+              <>
+                {properties.subpageTypes.map((option) => (
+                  <Option
+                    key={option.id}
+                    property={option}
+                    selected={option.id === page.subpageTypeId}
+                    icon={
+                      <SubpageTypeIcon
+                        subpageTypeId={option.id}
+                        subpageTypes={properties.subpageTypes}
+                      />
+                    }
+                    onSelect={() => {
+                      onChange({ subpageTypeId: option.id });
+                      close();
+                    }}
+                  />
+                ))}
+                {properties.subpageTypes.length === 0 && (
+                  <p className="px-2 py-3 text-xs text-muted-foreground">
+                    No subpage types yet. Add them in Content settings.
+                  </p>
+                )}
+                {page.subpageTypeId && (
+                  <button
+                    type="button"
+                    className="flex min-h-8 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-muted-foreground hover:bg-muted"
+                    onClick={() => {
+                      onChange({ subpageTypeId: null });
+                      close();
+                    }}
+                  >
+                    <X className="size-3.5" /> Clear
+                  </button>
+                )}
+              </>
+            )}
+          </Picker>
+        </Row>
+        <Row icon={<TagIcon />} label="Tags">
+          <TagPicker
+            page={page}
+            properties={properties}
+            disabled={disabled}
+            tags={tags}
+            onChange={onChange}
+            onCreateTag={onCreateTag}
+          />
+        </Row>
+      </dl>
+    );
 
   return (
     <dl className="mt-4 space-y-0.5">
@@ -167,10 +250,13 @@ function Empty({ children }: { children: ReactNode }) {
 function Option({
   property,
   selected,
+  icon,
   onSelect,
 }: {
   property: Property;
   selected: boolean;
+  /** Shown before the pill where the option's glyph is part of the choice. */
+  icon?: ReactNode;
   onSelect: () => void;
 }) {
   return (
@@ -180,6 +266,7 @@ function Option({
       aria-pressed={selected}
       onClick={onSelect}
     >
+      {icon}
       <Pill property={property} />
       {selected && <Check className="ml-auto size-3.5 shrink-0 text-muted-foreground" />}
     </button>
