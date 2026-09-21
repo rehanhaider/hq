@@ -42,4 +42,10 @@ describe("Home Nasr card footer", () => {
     expect(nasr).not.toMatch(/Logging…/);
     expect(nasr).not.toMatch(/size="sm"/);
   });
+
+  it("joins the split button halves without a seam", () => {
+    expect(nasr).toMatch(
+      /rounded-l-none border-l border-primary-foreground\/20 -ml-px max-sm:min-h-11 max-sm:min-w-11 pointer-coarse:min-h-11 pointer-coarse:min-w-11/,
+    );
+  });
 });
