@@ -1,11 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
+  ancestorIds,
   canSortIndex,
+  COLLAPSED_PAGES_KEY,
   countDescendants,
+  expandAncestors,
   isInSubtree,
   pageRows,
   pageTree,
+  readCollapsedPages,
   reorderedSiblings,
+  toggleCollapsedPage,
+  writeCollapsedPages,
 } from "./ContentWorkspace";
 import {
   contentSearchSchema,
@@ -60,7 +66,7 @@ describe("Content page index context menu", () => {
     const sortableReturn = sortable.slice(sortable.indexOf("return ("));
     expect(sortableReturn).toMatch(/<PageContextMenu/);
     expect(sortableReturn).toMatch(
-      /<div ref=\{setActivatorNodeRef\} \{\.\.\.attributes\} \{\.\.\.listeners\}>/,
+      /<div ref=\{setActivatorNodeRef\} \{\.\.\.attributes\} \{\.\.\.listeners\}[^>]*>/,
     );
     expect(sortableReturn.indexOf("<PageContextMenu")).toBeLessThan(
       sortableReturn.indexOf("setActivatorNodeRef"),
@@ -348,5 +354,117 @@ describe("Content page index reorder under a tree filter", () => {
     );
     expect(gate).not.toMatch(/search\.tree/);
     expect(source).toMatch(/pageTree\(visiblePages, treeRootId\)/);
+  });
+});
+
+describe("Content page index collapse", () => {
+  const id = (name: string) =>
+    `00000000-0000-4000-8000-${name.padStart(12, "0")}`;
+  const page = (name: string, overrides: Partial<ContentPage> = {}): ContentPage => ({
+    id: id(name),
+    title: name,
+    parentId: null,
+    order: 0,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    deletedAt: null,
+    revision: 0,
+    preview: "",
+    statusId: null,
+    typeIds: [],
+    tagIds: [],
+    subpageTypeId: null,
+    position: 0,
+    pinned: false,
+    ...overrides,
+  });
+
+  it("folds one page's subtree out of the rows and unfolds it again", () => {
+    const root = page("1");
+    const child = page("11", { parentId: id("1"), order: 0 });
+    const grandchild = page("111", { parentId: id("11"), order: 0 });
+    const sibling = page("2", { order: 1 });
+    const pages = [root, child, grandchild, sibling];
+    expect(pageRows(pages, false).map((row) => row.page.id)).toEqual([
+      root.id,
+      child.id,
+      grandchild.id,
+      sibling.id,
+    ]);
+    expect(
+      pageRows(pages, false, null, new Set([root.id])).map((row) => row.page.id),
+    ).toEqual([root.id, sibling.id]);
+    expect(
+      pageRows(pages, false, null, new Set([child.id])).map((row) => row.page.id),
+    ).toEqual([root.id, child.id, sibling.id]);
+  });
+
+  it("ignores the folded set while searching so every match stays reachable", () => {
+    const root = page("1");
+    const child = page("11", { parentId: id("1"), order: 0 });
+    const pages = [root, child];
+    expect(
+      pageRows(pages, true, null, new Set([root.id])).map((row) => [
+        row.page.id,
+        row.depth,
+      ]),
+    ).toEqual([
+      [root.id, 0],
+      [child.id, 0],
+    ]);
+  });
+
+  it("toggles one id with a stable order for storage", () => {
+    expect(toggleCollapsedPage([], id("2"))).toEqual([id("2")]);
+    expect(toggleCollapsedPage([id("2")], id("2"))).toEqual([]);
+    expect(toggleCollapsedPage([id("2")], id("1"))).toEqual([id("1"), id("2")]);
+  });
+
+  it("remembers the folded ids across sessions and drops bad values", () => {
+    const storage = new Map<string, string>();
+    const store = {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        storage.set(key, value);
+      },
+    };
+    expect(readCollapsedPages(store)).toEqual([]);
+    writeCollapsedPages([id("1")], store);
+    expect(storage.get(COLLAPSED_PAGES_KEY)).toBe(JSON.stringify([id("1")]));
+    expect(readCollapsedPages(store)).toEqual([id("1")]);
+    storage.set(COLLAPSED_PAGES_KEY, "not json");
+    expect(readCollapsedPages(store)).toEqual([]);
+    storage.set(COLLAPSED_PAGES_KEY, JSON.stringify([id("1"), 42, null]));
+    expect(readCollapsedPages(store)).toEqual([id("1")]);
+    expect(readCollapsedPages(null)).toEqual([]);
+  });
+
+  it("unfolds the open page's ancestors so the selection stays visible", () => {
+    const root = page("1");
+    const child = page("11", { parentId: id("1") });
+    const grandchild = page("111", { parentId: id("11") });
+    const pages = [root, child, grandchild];
+    expect([...ancestorIds(pages, grandchild.id)]).toEqual([child.id, root.id]);
+    expect(expandAncestors([root.id, child.id], pages, grandchild.id)).toEqual([]);
+    expect(expandAncestors([root.id, id("9")], pages, child.id)).toEqual([id("9")]);
+    expect(expandAncestors([root.id], pages, undefined)).toEqual([root.id]);
+  });
+
+  it("renders a disclosure only for pages with subpages", () => {
+    expect(source).toMatch(/function CollapseToggle/);
+    expect(source).toMatch(/aria-expanded=\{expanded\}/);
+    expect(source).toMatch(/Collapse.*subpages of/);
+    expect(source).toMatch(/Expand.*subpages of/);
+    // The toggle stops the pointer so unfolding never starts a drag.
+    expect(source).toMatch(/onPointerDown=\{\(event\) => event\.stopPropagation\(\)\}/);
+    // A folded subtree renders no rows below it in either list.
+    expect(source).toMatch(/if \(collapsed\?\.has\(page\.id\)\) continue;/);
+    expect(source).toMatch(/\{collapsed\.has\(page\.id\) \? null : \(/);
+  });
+
+  it("persists the folded set in localStorage like the other sidebar UI", () => {
+    expect(source).toMatch(/hq:content-collapsed-pages/);
+    expect(source).toMatch(/readCollapsedPages\(localStorage\)/);
+    expect(source).toMatch(/writeCollapsedPages\(collapsedIds, localStorage\)/);
   });
 });

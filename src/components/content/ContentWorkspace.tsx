@@ -30,7 +30,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ArrowLeft, FilePlus2, FileText, ListFilter, Pin, PinOff, Trash2 } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronRight, FilePlus2, FileText, ListFilter, Pin, PinOff, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   ContextMenu,
@@ -146,6 +146,7 @@ export function pageRows(
   pages: ContentPage[],
   searching: boolean,
   rootId: string | null = null,
+  collapsed?: ReadonlySet<string>,
 ) {
   if (searching) return pages.map((page) => ({ page, depth: 0 }));
   const { children, orphans } = pageTree(pages, rootId);
@@ -153,12 +154,89 @@ export function pageRows(
   const visit = (parentId: string | null, depth: number) => {
     for (const page of children.get(parentId) ?? []) {
       rows.push({ page, depth });
+      if (collapsed?.has(page.id)) continue;
       visit(page.id, depth + 1);
     }
   };
   visit(null, 0);
   for (const page of orphans) rows.push({ page, depth: 0 });
   return rows;
+}
+
+/**
+ * Which page subtrees the index has folded shut. The list is the memory;
+ * the view only asks whether an id is in it. Sibling to the Work view's
+ * collapsed repos — same localStorage home, different key.
+ */
+export const COLLAPSED_PAGES_KEY = "hq:content-collapsed-pages";
+
+type CollapsedStorage = Pick<Storage, "getItem" | "setItem">;
+
+/** Ids that should render folded; anything else stays open. */
+export function readCollapsedPages(storage?: CollapsedStorage | null): string[] {
+  try {
+    const raw = storage?.getItem(COLLAPSED_PAGES_KEY);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((entry): entry is string => typeof entry === "string");
+  } catch {
+    return [];
+  }
+}
+
+export function writeCollapsedPages(
+  ids: readonly string[],
+  storage?: CollapsedStorage | null,
+) {
+  try {
+    storage?.setItem(COLLAPSED_PAGES_KEY, JSON.stringify([...ids]));
+  } catch {
+    /* nothing to remember it with */
+  }
+}
+
+/** Fold or unfold one page's subpages; order is stable for the stored list. */
+export function toggleCollapsedPage(
+  collapsed: readonly string[],
+  id: string,
+): string[] {
+  const next = new Set(collapsed);
+  if (next.has(id)) next.delete(id);
+  else next.add(id);
+  return [...next].sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * Every ancestor of the given page, walking up `parentId`. Used to keep the
+ * open page visible: selecting a page unfolds the chain above it.
+ */
+export function ancestorIds(
+  pages: ContentPage[],
+  id: string | undefined,
+): Set<string> {
+  const ancestors = new Set<string>();
+  if (!id) return ancestors;
+  const byId = new Map(pages.map((page) => [page.id, page]));
+  let current = byId.get(id)?.parentId ?? null;
+  while (current) {
+    if (ancestors.has(current)) break;
+    ancestors.add(current);
+    current = byId.get(current)?.parentId ?? null;
+  }
+  return ancestors;
+}
+
+/** Unfold every ancestor of the given page; ids not on screen stay as they were. */
+export function expandAncestors(
+  collapsed: readonly string[],
+  pages: ContentPage[],
+  id: string | undefined,
+): string[] {
+  if (!id || collapsed.length === 0) return [...collapsed];
+  const ancestors = ancestorIds(pages, id);
+  if (ancestors.size === 0) return [...collapsed];
+  return collapsed.filter((entry) => !ancestors.has(entry));
 }
 
 /**
@@ -490,6 +568,28 @@ export function ContentWorkspace() {
     hasFilters({ ...search, q: undefined, tree: undefined });
   const [localPages, setLocalPages] = useState<ContentPage[] | null>(null);
   const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [collapsedIds, setCollapsedIds] = useState<string[]>([]);
+  const [collapsedRestored, setCollapsedRestored] = useState(false);
+  useEffect(() => {
+    try {
+      setCollapsedIds(readCollapsedPages(localStorage));
+    } catch {
+      setCollapsedIds([]);
+    }
+    setCollapsedRestored(true);
+  }, []);
+  useEffect(() => {
+    if (!collapsedRestored) return;
+    try {
+      writeCollapsedPages(collapsedIds, localStorage);
+    } catch {
+      /* nothing to remember it with */
+    }
+  }, [collapsedIds, collapsedRestored]);
+  const collapsed = useMemo(() => new Set(collapsedIds), [collapsedIds]);
+  const toggleCollapsed = useCallback((id: string) => {
+    setCollapsedIds((current) => toggleCollapsedPage(current, id));
+  }, []);
   const indexPages = useMemo(() => {
     const source = localPages ?? list.data ?? [];
     if (!draft || draft.id !== selectedId) return source;
@@ -499,6 +599,14 @@ export function ContentWorkspace() {
         : page,
     );
   }, [localPages, list.data, draft, selectedId]);
+  // Opening a page unfolds the chain above it so the selection stays visible.
+  useEffect(() => {
+    if (!selectedId || !collapsedRestored) return;
+    setCollapsedIds((current) => {
+      const next = expandAncestors(current, indexPages, selectedId);
+      return next.length === current.length ? current : next;
+    });
+  }, [selectedId, indexPages, collapsedRestored]);
   // Reorder commits run one at a time, in drag order: two quick drags would
   // otherwise race and the earlier drag's order could land last in SQLite.
   const orderChain = useRef<Promise<void>>(Promise.resolve());
@@ -508,8 +616,8 @@ export function ContentWorkspace() {
   );
   const treeRootId = search.tree ?? null;
   const rows = useMemo(
-    () => pageRows(visiblePages, searching, treeRootId),
-    [visiblePages, searching, treeRootId],
+    () => pageRows(visiblePages, searching, treeRootId, searching ? undefined : collapsed),
+    [visiblePages, searching, treeRootId, collapsed],
   );
   // Dragging a searched or property-filtered list would persist an order the
   // user never saw whole, so those stay read-only. Filtering to one page's
@@ -937,9 +1045,13 @@ export function ContentWorkspace() {
                   fallback={
                     <PageIndexList
                       rows={rows}
+                      tree={tree}
                       properties={properties}
                       selectedId={selectedId}
                       disabled={recovering}
+                      showCollapse={!searching}
+                      collapsed={collapsed}
+                      onToggleCollapsed={toggleCollapsed}
                       onSelect={(id) => void selectPage(id)}
                       onCreateSubpage={(id) => void addPage(id)}
                       onFilterTree={filterToTree}
@@ -962,6 +1074,8 @@ export function ContentWorkspace() {
                       properties={properties}
                       selectedId={selectedId}
                       disabled={recovering}
+                      collapsed={collapsed}
+                      onToggleCollapsed={toggleCollapsed}
                       onSelect={(id) => void selectPage(id)}
                       onCreateSubpage={(id) => void addPage(id)}
                       onFilterTree={filterToTree}
@@ -976,6 +1090,9 @@ export function ContentWorkspace() {
                         depth={0}
                         selected={selectedId === page.id}
                         disabled={recovering}
+                        hasChildren={false}
+                        collapsed={false}
+                        onToggleCollapsed={toggleCollapsed}
                         onSelect={(id) => void selectPage(id)}
                         onCreateSubpage={(id) => void addPage(id)}
                         onFilterTree={filterToTree}
@@ -1001,9 +1118,13 @@ export function ContentWorkspace() {
               ) : (
                 <PageIndexList
                   rows={rows}
+                  tree={tree}
                   properties={properties}
                   selectedId={selectedId}
                   disabled={recovering}
+                  showCollapse={!searching}
+                  collapsed={collapsed}
+                  onToggleCollapsed={toggleCollapsed}
                   onSelect={(id) => void selectPage(id)}
                   onCreateSubpage={(id) => void addPage(id)}
                   onFilterTree={filterToTree}
@@ -1252,14 +1373,12 @@ export function ContentWorkspace() {
 function PageIndexButton({
   page,
   properties,
-  depth,
   selected,
   disabled,
   onSelect,
 }: {
   page: ContentPage;
   properties: ContentProperties;
-  depth: number;
   selected: boolean;
   disabled: boolean;
   onSelect: (id: string) => void;
@@ -1267,8 +1386,7 @@ function PageIndexButton({
   return (
     <button
       type="button"
-      className="flex min-h-10 w-full items-center gap-2 rounded-lg pr-2 text-left text-sm hover:bg-muted aria-[current=page]:bg-accent aria-[current=page]:font-medium"
-      style={{ paddingLeft: `${Math.min(depth, 8) * 16 + 8}px` }}
+      className="flex min-h-10 min-w-0 flex-1 items-center gap-2 rounded-lg px-2 text-left text-sm hover:bg-muted aria-[current=page]:bg-accent aria-[current=page]:font-medium"
       aria-current={selected ? "page" : undefined}
       disabled={disabled}
       onClick={() => onSelect(page.id)}
@@ -1283,6 +1401,46 @@ function PageIndexButton({
       ) : null}
     </button>
   );
+}
+
+/**
+ * The disclosure before a page that has subpages. It sits beside the page
+ * button — never inside it — so the row stays valid HTML, and it stops the
+ * pointer before dnd-kit so unfolding never starts a drag.
+ */
+function CollapseToggle({
+  page,
+  collapsed,
+  disabled,
+  onToggle,
+}: {
+  page: ContentPage;
+  collapsed: boolean;
+  disabled: boolean;
+  onToggle: (id: string) => void;
+}) {
+  const expanded = !collapsed;
+  const Icon = expanded ? ChevronDown : ChevronRight;
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      aria-expanded={expanded}
+      aria-label={`${expanded ? "Collapse" : "Expand"} subpages of ${displayPageTitle(page.title)}`}
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={(event) => {
+        event.stopPropagation();
+        onToggle(page.id);
+      }}
+      className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+    >
+      <Icon className="size-4" aria-hidden />
+    </button>
+  );
+}
+
+function rowIndent(depth: number) {
+  return { paddingLeft: `${Math.min(depth, 8) * 16 + 2}px`, paddingRight: "8px" };
 }
 
 /**
@@ -1342,6 +1500,9 @@ function PageIndexRow({
   depth,
   selected,
   disabled,
+  hasChildren,
+  collapsed,
+  onToggleCollapsed,
   onSelect,
   onCreateSubpage,
   onFilterTree,
@@ -1353,6 +1514,9 @@ function PageIndexRow({
   depth: number;
   selected: boolean;
   disabled: boolean;
+  hasChildren: boolean;
+  collapsed: boolean;
+  onToggleCollapsed: (id: string) => void;
   onSelect: (id: string) => void;
   onCreateSubpage: (id: string) => void;
   onFilterTree: (id: string) => void;
@@ -1368,23 +1532,38 @@ function PageIndexRow({
       onSetPinned={onSetPinned}
       onDelete={onDelete}
     >
-      <PageIndexButton
-        page={page}
-        properties={properties}
-        depth={depth}
-        selected={selected}
-        disabled={disabled}
-        onSelect={onSelect}
-      />
+      <div className="flex items-center gap-0.5" style={rowIndent(depth)}>
+        {hasChildren ? (
+          <CollapseToggle
+            page={page}
+            collapsed={collapsed}
+            disabled={disabled}
+            onToggle={onToggleCollapsed}
+          />
+        ) : (
+          <span aria-hidden className="size-6 shrink-0" />
+        )}
+        <PageIndexButton
+          page={page}
+          properties={properties}
+          selected={selected}
+          disabled={disabled}
+          onSelect={onSelect}
+        />
+      </div>
     </PageContextMenu>
   );
 }
 
 function PageIndexList({
   rows,
+  tree,
   properties,
   selectedId,
   disabled,
+  showCollapse,
+  collapsed,
+  onToggleCollapsed,
   onSelect,
   onCreateSubpage,
   onFilterTree,
@@ -1392,9 +1571,13 @@ function PageIndexList({
   onDelete,
 }: {
   rows: { page: ContentPage; depth: number }[];
+  tree: PageTree;
   properties: ContentProperties;
   selectedId: string | undefined;
   disabled: boolean;
+  showCollapse: boolean;
+  collapsed: ReadonlySet<string>;
+  onToggleCollapsed: (id: string) => void;
   onSelect: (id: string) => void;
   onCreateSubpage: (id: string) => void;
   onFilterTree: (id: string) => void;
@@ -1403,21 +1586,28 @@ function PageIndexList({
 }) {
   return (
     <>
-      {rows.map(({ page, depth }) => (
-        <PageIndexRow
-          key={page.id}
-          page={page}
-          properties={properties}
-          depth={depth}
-          selected={selectedId === page.id}
-          disabled={disabled}
-          onSelect={onSelect}
-          onCreateSubpage={onCreateSubpage}
-          onFilterTree={onFilterTree}
-          onSetPinned={onSetPinned}
-          onDelete={onDelete}
-        />
-      ))}
+      {rows.map(({ page, depth }) => {
+        const hasChildren =
+          showCollapse && (tree.children.get(page.id)?.length ?? 0) > 0;
+        return (
+          <PageIndexRow
+            key={page.id}
+            page={page}
+            properties={properties}
+            depth={depth}
+            selected={selectedId === page.id}
+            disabled={disabled}
+            hasChildren={hasChildren}
+            collapsed={collapsed.has(page.id)}
+            onToggleCollapsed={onToggleCollapsed}
+            onSelect={onSelect}
+            onCreateSubpage={onCreateSubpage}
+            onFilterTree={onFilterTree}
+            onSetPinned={onSetPinned}
+            onDelete={onDelete}
+          />
+        );
+      })}
     </>
   );
 }
@@ -1436,6 +1626,8 @@ function SortableGroup({
   properties,
   selectedId,
   disabled,
+  collapsed,
+  onToggleCollapsed,
   onSelect,
   onCreateSubpage,
   onFilterTree,
@@ -1448,6 +1640,8 @@ function SortableGroup({
   properties: ContentProperties;
   selectedId: string | undefined;
   disabled: boolean;
+  collapsed: ReadonlySet<string>;
+  onToggleCollapsed: (id: string) => void;
   onSelect: (id: string) => void;
   onCreateSubpage: (id: string) => void;
   onFilterTree: (id: string) => void;
@@ -1467,6 +1661,8 @@ function SortableGroup({
         properties={properties}
         selectedId={selectedId}
         disabled={disabled}
+        collapsed={collapsed}
+        onToggleCollapsed={onToggleCollapsed}
         onSelect={onSelect}
         onCreateSubpage={onCreateSubpage}
         onFilterTree={onFilterTree}
@@ -1480,6 +1676,8 @@ function SortableGroup({
         properties={properties}
         selectedId={selectedId}
         disabled={disabled}
+        collapsed={collapsed}
+        onToggleCollapsed={onToggleCollapsed}
         onSelect={onSelect}
         onCreateSubpage={onCreateSubpage}
         onFilterTree={onFilterTree}
@@ -1497,6 +1695,8 @@ function SortableSiblingList({
   properties,
   selectedId,
   disabled,
+  collapsed,
+  onToggleCollapsed,
   onSelect,
   onCreateSubpage,
   onFilterTree,
@@ -1509,6 +1709,8 @@ function SortableSiblingList({
   properties: ContentProperties;
   selectedId: string | undefined;
   disabled: boolean;
+  collapsed: ReadonlySet<string>;
+  onToggleCollapsed: (id: string) => void;
   onSelect: (id: string) => void;
   onCreateSubpage: (id: string) => void;
   onFilterTree: (id: string) => void;
@@ -1527,25 +1729,32 @@ function SortableSiblingList({
           selected={selectedId === page.id}
           disabled={disabled}
           sortable={pages.length > 1}
+          hasChildren={(tree.children.get(page.id)?.length ?? 0) > 0}
+          collapsed={collapsed.has(page.id)}
+          onToggleCollapsed={onToggleCollapsed}
           onSelect={onSelect}
           onCreateSubpage={onCreateSubpage}
           onFilterTree={onFilterTree}
           onSetPinned={onSetPinned}
           onDelete={onDelete}
         >
-          <SortableGroup
-            parentId={page.id}
-            depth={depth + 1}
-            tree={tree}
-            properties={properties}
-            selectedId={selectedId}
-            disabled={disabled}
-            onSelect={onSelect}
-            onCreateSubpage={onCreateSubpage}
-            onFilterTree={onFilterTree}
-            onSetPinned={onSetPinned}
-            onDelete={onDelete}
-          />
+          {collapsed.has(page.id) ? null : (
+            <SortableGroup
+              parentId={page.id}
+              depth={depth + 1}
+              tree={tree}
+              properties={properties}
+              selectedId={selectedId}
+              disabled={disabled}
+              collapsed={collapsed}
+              onToggleCollapsed={onToggleCollapsed}
+              onSelect={onSelect}
+              onCreateSubpage={onCreateSubpage}
+              onFilterTree={onFilterTree}
+              onSetPinned={onSetPinned}
+              onDelete={onDelete}
+            />
+          )}
         </SortablePageRow>
       ))}
     </SortableContext>
@@ -1559,6 +1768,9 @@ function SortablePageRow({
   selected,
   disabled,
   sortable,
+  hasChildren,
+  collapsed,
+  onToggleCollapsed,
   onSelect,
   onCreateSubpage,
   onFilterTree,
@@ -1573,6 +1785,9 @@ function SortablePageRow({
   disabled: boolean;
   /** False when the page has no sibling to swap with: the row stays a button. */
   sortable: boolean;
+  hasChildren: boolean;
+  collapsed: boolean;
+  onToggleCollapsed: (id: string) => void;
   onSelect: (id: string) => void;
   onCreateSubpage: (id: string) => void;
   onFilterTree: (id: string) => void;
@@ -1597,6 +1812,8 @@ function SortablePageRow({
   // Only the row itself is the handle; the subtree below it is outside the
   // handle, so grabbing a child never drags the parent. The context-menu
   // trigger wraps the handle so a right-click still opens the page menu.
+  // The disclosure sits beside the handle and stops the pointer, so
+  // unfolding never starts a drag.
   return (
     <div
       ref={setNodeRef}
@@ -1611,15 +1828,26 @@ function SortablePageRow({
         onSetPinned={onSetPinned}
         onDelete={onDelete}
       >
-        <div ref={setActivatorNodeRef} {...attributes} {...listeners}>
-          <PageIndexButton
-            page={page}
-            properties={properties}
-            depth={depth}
-            selected={selected}
-            disabled={disabled}
-            onSelect={onSelect}
-          />
+        <div className="flex items-center gap-0.5" style={rowIndent(depth)}>
+          {hasChildren ? (
+            <CollapseToggle
+              page={page}
+              collapsed={collapsed}
+              disabled={disabled}
+              onToggle={onToggleCollapsed}
+            />
+          ) : (
+            <span aria-hidden className="size-6 shrink-0" />
+          )}
+          <div ref={setActivatorNodeRef} {...attributes} {...listeners} className="min-w-0 flex-1">
+            <PageIndexButton
+              page={page}
+              properties={properties}
+              selected={selected}
+              disabled={disabled}
+              onSelect={onSelect}
+            />
+          </div>
         </div>
       </PageContextMenu>
       {children}
