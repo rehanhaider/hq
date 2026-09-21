@@ -204,6 +204,47 @@ export function reorderedSiblings(
 // Only the dragged page's siblings can be dropped on. Nesting never changes
 // here, so a nested row must not steal the drop: with siblings in their own
 // SortableContext, the preview and the saved order are then the same list.
+/**
+ * Counts every page below the given id. Trashing moves the whole subtree, so
+ * the delete confirmation names how many subpages go with the page.
+ */
+export function countDescendants(pages: ContentPage[], id: string) {
+  const childrenOf = new Map<string | null, string[]>();
+  for (const page of pages) {
+    const list = childrenOf.get(page.parentId) ?? [];
+    list.push(page.id);
+    childrenOf.set(page.parentId, list);
+  }
+  let count = 0;
+  const stack = [...(childrenOf.get(id) ?? [])];
+  while (stack.length) {
+    const current = stack.pop()!;
+    count += 1;
+    stack.push(...(childrenOf.get(current) ?? []));
+  }
+  return count;
+}
+
+/**
+ * True when `pageId` is the ancestor itself or sits below it. After a trash
+ * the index checks this to decide whether the open editor was inside the
+ * removed subtree and should return to the list.
+ */
+export function isInSubtree(
+  pages: ContentPage[],
+  pageId: string,
+  ancestorId: string,
+) {
+  if (pageId === ancestorId) return true;
+  const byId = new Map(pages.map((page) => [page.id, page]));
+  let current = byId.get(pageId);
+  while (current?.parentId) {
+    if (current.parentId === ancestorId) return true;
+    current = byId.get(current.parentId);
+  }
+  return false;
+}
+
 const sameLevelCollision: CollisionDetection = (args) => {
   const current = args.active.data.current as
     | { parentId?: string | null; pinned?: boolean }
@@ -251,6 +292,10 @@ export function ContentWorkspace() {
   const [recovering, setRecovering] = useState(false);
   const [editorGeneration, setEditorGeneration] = useState(0);
   const [actionError, setActionError] = useState("");
+  const [deletingPage, setDeletingPage] = useState<ContentPage | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const deleteBusyRef = useRef(false);
+  const [deleteScope, setDeleteScope] = useState<ContentPage[] | null>(null);
   const staleRevision = useRef<number | null>(null);
   const recoveringRef = useRef(false);
   const uploads = useRef(createUploadGate()).current;
@@ -578,6 +623,101 @@ export function ContentWorkspace() {
     }
   };
 
+  // Deleting from the index moves the page to trash, where it can be
+  // restored. The server moves the whole subtree, so the confirmation names
+  // the subpages going with it and the open editor returns to the list when
+  // it was inside that subtree.
+  // The rows on screen can be filtered by search or tree, hiding the very
+  // subpages a delete would take with it. The unfiltered list loads while
+  // the confirmation is open so the count and the editor redirect see the
+  // whole subtree; until it lands the dialog uses copy that never undercounts.
+  useEffect(() => {
+    if (!deletingPage) {
+      setDeleteScope(null);
+      return;
+    }
+    let cancelled = false;
+    void queryClient
+      .fetchQuery(pagesQuery())
+      .then((pages) => {
+        if (!cancelled) setDeleteScope(pages);
+      })
+      .catch(() => {
+        if (!cancelled) setDeleteScope(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [deletingPage, queryClient]);
+
+  const confirmIndexDelete = async () => {
+    const target = deletingPage;
+    if (!target || recoveringRef.current || deleteBusyRef.current) return;
+    // Arm synchronously, before any await: Cancel and dismiss stay enabled
+    // until busy lands, and a confirm that already passed this point must not
+    // be stoppable by clearing the pending page.
+    deleteBusyRef.current = true;
+    setDeleteBusy(true);
+    if (!(await drain())) {
+      deleteBusyRef.current = false;
+      setDeleteBusy(false);
+      return;
+    }
+    // Snapshot the unfiltered tree before trashing: afterwards the trashed
+    // rows are excluded from list results, so the redirect check could no
+    // longer walk from an open descendant up to the removed page.
+    let scope = deleteScope;
+    if (!scope) {
+      try {
+        scope = await queryClient.fetchQuery(pagesQuery());
+      } catch {
+        scope = null;
+      }
+    }
+    try {
+      const freshRevision =
+        draftRef.current?.id === target.id ? draftRef.current.revision : target.revision;
+      const result = await trashPage({ data: { id: target.id, revision: freshRevision } });
+      if (!result.ok) {
+        setActionError(
+          "This page changed before it could be deleted. The list has been refreshed.",
+        );
+        setDeletingPage(null);
+        await invalidateContent(queryClient);
+        return;
+      }
+      setActionError("");
+      setLocalPages(null);
+      setDeletingPage(null);
+      await invalidateContent(queryClient, contentKeys.all);
+      if (selectedId) {
+        const known = new Map(
+          (scope ?? [...indexPages, ...(hierarchy.data ?? [])]).map((page) => [
+            page.id,
+            page,
+          ]),
+        );
+        if (draftRef.current && !known.has(draftRef.current.id))
+          known.set(draftRef.current.id, draftRef.current);
+        if (isInSubtree([...known.values()], selectedId, target.id)) {
+          loadedId.current = null;
+          await navigate({
+            to: "/content",
+            search: { ...search, page: undefined },
+          });
+        }
+      }
+    } catch (error) {
+      setActionError(readableError(error, "The page could not be deleted."));
+    } finally {
+      deleteBusyRef.current = false;
+      setDeleteBusy(false);
+    }
+  };
+
+  const deleteChildCount =
+    deletingPage && deleteScope ? countDescendants(deleteScope, deletingPage.id) : null;
+
   const applyProperties = async (patch: PropertyPatch) => {
     const current = draftRef.current;
     if (!current) return;
@@ -804,6 +944,7 @@ export function ContentWorkspace() {
                       onCreateSubpage={(id) => void addPage(id)}
                       onFilterTree={filterToTree}
                       onSetPinned={setPinned}
+                      onDelete={(page) => setDeletingPage(page)}
                     />
                   }
                 >
@@ -825,6 +966,7 @@ export function ContentWorkspace() {
                       onCreateSubpage={(id) => void addPage(id)}
                       onFilterTree={filterToTree}
                       onSetPinned={setPinned}
+                      onDelete={(page) => setDeletingPage(page)}
                     />
                     {tree.orphans.map((page) => (
                       <PageIndexRow
@@ -838,6 +980,7 @@ export function ContentWorkspace() {
                         onCreateSubpage={(id) => void addPage(id)}
                         onFilterTree={filterToTree}
                         onSetPinned={setPinned}
+                        onDelete={(page) => setDeletingPage(page)}
                       />
                     ))}
                     <DragOverlay>
@@ -865,6 +1008,7 @@ export function ContentWorkspace() {
                   onCreateSubpage={(id) => void addPage(id)}
                   onFilterTree={filterToTree}
                   onSetPinned={setPinned}
+                  onDelete={(page) => setDeletingPage(page)}
                 />
               )
             ) : (
@@ -1038,6 +1182,45 @@ export function ContentWorkspace() {
           )}
         </div>
       </div>
+      <Dialog
+        open={deletingPage !== null}
+        onOpenChange={(open) => {
+          if (!open && !deleteBusy) setDeletingPage(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {deletingPage
+                ? `Move "${displayPageTitle(deletingPage.title)}" to trash?`
+                : "Move this page to trash?"}
+            </DialogTitle>
+            <DialogDescription>
+              {deleteChildCount === null
+                ? "This page and its subpages will be moved to trash. You can restore them from Trash."
+                : deleteChildCount > 0
+                  ? `This page and its ${deleteChildCount} subpage${deleteChildCount === 1 ? "" : "s"} will be moved to trash. You can restore them from Trash.`
+                  : "This page will be moved to trash. You can restore it from Trash."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={deleteBusy}
+              onClick={() => setDeletingPage(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deleteBusy}
+              onClick={() => void confirmIndexDelete()}
+            >
+              {deleteBusy ? "Moving…" : "Move to trash"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <Dialog open={blocker.status === "blocked"} onOpenChange={(open) => { if (!open && blocker.status === "blocked") blocker.reset(); }}>
         <DialogContent showCloseButton={false}>
           <DialogHeader>
@@ -1112,6 +1295,7 @@ function PageContextMenu({
   onCreateSubpage,
   onFilterTree,
   onSetPinned,
+  onDelete,
   children,
 }: {
   page: ContentPage;
@@ -1119,6 +1303,7 @@ function PageContextMenu({
   onCreateSubpage: (id: string) => void;
   onFilterTree: (id: string) => void;
   onSetPinned: (id: string, pinned: boolean) => void;
+  onDelete: (page: ContentPage) => void;
   children: ReactNode;
 }) {
   return (
@@ -1143,6 +1328,9 @@ function PageContextMenu({
         >
           <FilePlus2 className="size-4" /> New subpage
         </ContextMenuItem>
+        <ContextMenuItem disabled={disabled} onClick={() => onDelete(page)}>
+          <Trash2 className="size-4" /> Delete
+        </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
   );
@@ -1158,6 +1346,7 @@ function PageIndexRow({
   onCreateSubpage,
   onFilterTree,
   onSetPinned,
+  onDelete,
 }: {
   page: ContentPage;
   properties: ContentProperties;
@@ -1168,6 +1357,7 @@ function PageIndexRow({
   onCreateSubpage: (id: string) => void;
   onFilterTree: (id: string) => void;
   onSetPinned: (id: string, pinned: boolean) => void;
+  onDelete: (page: ContentPage) => void;
 }) {
   return (
     <PageContextMenu
@@ -1176,6 +1366,7 @@ function PageIndexRow({
       onCreateSubpage={onCreateSubpage}
       onFilterTree={onFilterTree}
       onSetPinned={onSetPinned}
+      onDelete={onDelete}
     >
       <PageIndexButton
         page={page}
@@ -1198,6 +1389,7 @@ function PageIndexList({
   onCreateSubpage,
   onFilterTree,
   onSetPinned,
+  onDelete,
 }: {
   rows: { page: ContentPage; depth: number }[];
   properties: ContentProperties;
@@ -1207,6 +1399,7 @@ function PageIndexList({
   onCreateSubpage: (id: string) => void;
   onFilterTree: (id: string) => void;
   onSetPinned: (id: string, pinned: boolean) => void;
+  onDelete: (page: ContentPage) => void;
 }) {
   return (
     <>
@@ -1222,6 +1415,7 @@ function PageIndexList({
           onCreateSubpage={onCreateSubpage}
           onFilterTree={onFilterTree}
           onSetPinned={onSetPinned}
+          onDelete={onDelete}
         />
       ))}
     </>
@@ -1246,6 +1440,7 @@ function SortableGroup({
   onCreateSubpage,
   onFilterTree,
   onSetPinned,
+  onDelete,
 }: {
   parentId: string | null;
   depth: number;
@@ -1257,6 +1452,7 @@ function SortableGroup({
   onCreateSubpage: (id: string) => void;
   onFilterTree: (id: string) => void;
   onSetPinned: (id: string, pinned: boolean) => void;
+  onDelete: (page: ContentPage) => void;
 }) {
   const pages = tree.children.get(parentId) ?? [];
   if (!pages.length) return null;
@@ -1275,6 +1471,7 @@ function SortableGroup({
         onCreateSubpage={onCreateSubpage}
         onFilterTree={onFilterTree}
         onSetPinned={onSetPinned}
+        onDelete={onDelete}
       />
       <SortableSiblingList
         pages={unpinned}
@@ -1287,6 +1484,7 @@ function SortableGroup({
         onCreateSubpage={onCreateSubpage}
         onFilterTree={onFilterTree}
         onSetPinned={onSetPinned}
+        onDelete={onDelete}
       />
     </>
   );
@@ -1303,6 +1501,7 @@ function SortableSiblingList({
   onCreateSubpage,
   onFilterTree,
   onSetPinned,
+  onDelete,
 }: {
   pages: ContentPage[];
   depth: number;
@@ -1314,6 +1513,7 @@ function SortableSiblingList({
   onCreateSubpage: (id: string) => void;
   onFilterTree: (id: string) => void;
   onSetPinned: (id: string, pinned: boolean) => void;
+  onDelete: (page: ContentPage) => void;
 }) {
   if (!pages.length) return null;
   return (
@@ -1331,6 +1531,7 @@ function SortableSiblingList({
           onCreateSubpage={onCreateSubpage}
           onFilterTree={onFilterTree}
           onSetPinned={onSetPinned}
+          onDelete={onDelete}
         >
           <SortableGroup
             parentId={page.id}
@@ -1343,6 +1544,7 @@ function SortableSiblingList({
             onCreateSubpage={onCreateSubpage}
             onFilterTree={onFilterTree}
             onSetPinned={onSetPinned}
+            onDelete={onDelete}
           />
         </SortablePageRow>
       ))}
@@ -1361,6 +1563,7 @@ function SortablePageRow({
   onCreateSubpage,
   onFilterTree,
   onSetPinned,
+  onDelete,
   children,
 }: {
   page: ContentPage;
@@ -1374,6 +1577,7 @@ function SortablePageRow({
   onCreateSubpage: (id: string) => void;
   onFilterTree: (id: string) => void;
   onSetPinned: (id: string, pinned: boolean) => void;
+  onDelete: (page: ContentPage) => void;
   /** The page's own subtree, carried along when the row moves. */
   children?: ReactNode;
 }) {
@@ -1392,7 +1596,7 @@ function SortablePageRow({
   });
   // Only the row itself is the handle; the subtree below it is outside the
   // handle, so grabbing a child never drags the parent. The context-menu
-  // trigger wraps the handle so a right-click still opens New subpage.
+  // trigger wraps the handle so a right-click still opens the page menu.
   return (
     <div
       ref={setNodeRef}
@@ -1405,6 +1609,7 @@ function SortablePageRow({
         onCreateSubpage={onCreateSubpage}
         onFilterTree={onFilterTree}
         onSetPinned={onSetPinned}
+        onDelete={onDelete}
       >
         <div ref={setActivatorNodeRef} {...attributes} {...listeners}>
           <PageIndexButton
