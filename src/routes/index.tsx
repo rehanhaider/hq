@@ -212,7 +212,7 @@ function HomePage() {
                     <Button
                       type="button"
                       size="icon"
-                      className="rounded-l-none border-l border-primary-foreground/20"
+                      className="rounded-l-none border-l border-primary-foreground/20 -ml-px max-sm:min-h-11 max-sm:min-w-11 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
                       disabled={!nextPrayer || logPrayer.isPending}
                       aria-label={
                         nextPrayer
