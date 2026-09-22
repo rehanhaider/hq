@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { ClientOnly, useBlocker, useNavigate, useSearch } from "@tanstack/react-router";
+import { ClientOnly, Link, useBlocker, useNavigate, useSearch } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   DndContext,
@@ -1370,7 +1370,14 @@ export function ContentWorkspace() {
   );
 }
 
-function PageIndexButton({
+/**
+ * The row is an anchor, not a button, so a click that lands before hydration
+ * is a real navigation the browser performs instead of an event React never
+ * hears. Once hydrated the click is taken over here so pending editor saves
+ * still drain before the page changes. `draggable={false}` keeps the native
+ * link drag from stealing the pointer dnd-kit needs to reorder.
+ */
+function PageIndexLink({
   page,
   properties,
   selected,
@@ -1384,12 +1391,29 @@ function PageIndexButton({
   onSelect: (id: string) => void;
 }) {
   return (
-    <button
-      type="button"
+    <Link
+      to="/content"
+      search={(prev) => ({ ...prev, page: page.id })}
+      preload="intent"
+      draggable={false}
       className="flex min-h-10 min-w-0 flex-1 items-center gap-2 rounded-lg px-2 text-left text-sm hover:bg-muted aria-[current=page]:bg-accent aria-[current=page]:font-medium"
       aria-current={selected ? "page" : undefined}
       disabled={disabled}
-      onClick={() => onSelect(page.id)}
+      onClick={(event) => {
+        // A modified click belongs to the browser: open in a new tab or
+        // window, never a same-tab navigation.
+        if (
+          event.button !== 0 ||
+          event.metaKey ||
+          event.ctrlKey ||
+          event.shiftKey ||
+          event.altKey
+        )
+          return;
+        event.preventDefault();
+        if (disabled) return;
+        onSelect(page.id);
+      }}
     >
       <PageIcon page={page} properties={properties} />
       <span className="truncate">{displayPageTitle(page.title)}</span>
@@ -1399,7 +1423,7 @@ function PageIndexButton({
           <Pin className="ml-auto size-3.5 shrink-0 text-muted-foreground" aria-hidden />
         </>
       ) : null}
-    </button>
+    </Link>
   );
 }
 
@@ -1543,7 +1567,7 @@ function PageIndexRow({
         ) : (
           <span aria-hidden className="size-6 shrink-0" />
         )}
-        <PageIndexButton
+        <PageIndexLink
           page={page}
           properties={properties}
           selected={selected}
@@ -1840,7 +1864,7 @@ function SortablePageRow({
             <span aria-hidden className="size-6 shrink-0" />
           )}
           <div ref={setActivatorNodeRef} {...attributes} {...listeners} className="min-w-0 flex-1">
-            <PageIndexButton
+            <PageIndexLink
               page={page}
               properties={properties}
               selected={selected}
