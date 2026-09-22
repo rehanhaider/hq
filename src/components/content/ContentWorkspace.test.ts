@@ -249,9 +249,10 @@ describe("Content page index rows", () => {
     expect(row).toMatch(/aria-current=\{selected \? "page" : undefined\}/);
   });
 
-  it("hands a modified click back to the browser and drains the rest", () => {
-    expect(row).toMatch(/event\.metaKey/);
-    expect(row).toMatch(/event\.preventDefault\(\);\n\s+if \(disabled\) return;\n\s+onSelect\(page\.id\);/);
+  it("carries no click handler: leaving is the blocker's job, not the row's", () => {
+    expect(row).not.toMatch(/onClick/);
+    expect(row).not.toMatch(/preventDefault/);
+    expect(row).not.toMatch(/onSelect/);
   });
 
   it("disables the link itself during recovery so no href or preload remains", () => {
@@ -261,6 +262,56 @@ describe("Content page index rows", () => {
 
   it("stops the native link drag so a row can still be reordered", () => {
     expect(row).toMatch(/draggable=\{false\}/);
+  });
+});
+
+describe("Content leaving a page with unsaved text", () => {
+  const effect = source.slice(
+    source.indexOf("const blocker = useBlocker("),
+    source.indexOf("// The server already searched titles"),
+  );
+
+  it("blocks every navigation away from unsaved text, not just a row click", () => {
+    expect(effect).toMatch(/enableBeforeUnload: \(\) => hasUnsaved/);
+    expect(effect).toMatch(/withResolver: true/);
+    expect(effect).toMatch(
+      /hasUnsaved && \(current\.pathname !== next\.pathname \|\| currentPage !== nextPage\)/,
+    );
+  });
+
+  it("drains the pending saves and then resumes the held navigation", () => {
+    expect(effect).toMatch(/if \(blocker\.status !== "blocked"\)/);
+    expect(effect).toMatch(/void drain\(\)\.then\(\(saved\) => \{/);
+    expect(effect).toMatch(/if \(saved\) proceed\(\);/);
+    expect(effect.indexOf("void drain()")).toBeLessThan(effect.indexOf("proceed()"));
+  });
+
+  it("runs the drain once per block and never resumes a stale one", () => {
+    expect(effect).toMatch(/if \(drainAttempt\.current === blocker\) return;/);
+    expect(effect).toMatch(/drainAttempt\.current = blocker;/);
+    expect(effect).toMatch(/if \(drainAttempt\.current !== blocker\) return;/);
+    // Leaving the blocked state, and unmounting, both drop the attempt.
+    expect(effect).toMatch(/drainAttempt\.current = null;\n\s+setDrainFailed\(false\);/);
+    expect(effect).toMatch(
+      /useEffect\(\(\) => \(\) => \{\s+drainAttempt\.current = null;\s+\}, \[\]\);/,
+    );
+  });
+
+  it("only asks the user when the drain cannot succeed", () => {
+    expect(effect).toMatch(/if \(saveConflict \|\| saveUnavailable \|\| recovering\) \{\s+setDrainFailed\(true\);/);
+    expect(effect).toMatch(/else setDrainFailed\(true\);/);
+    expect(source).toMatch(
+      /open=\{blocker\.status === "blocked" && drainFailed\}/,
+    );
+    // Staying put leaves the navigation blocked and the text where it is.
+    expect(source).toMatch(
+      /if \(!open && blocker\.status === "blocked"\) blocker\.reset\(\)/,
+    );
+    expect(source).toMatch(/Overwrite and continue/);
+    expect(source).toMatch(/Save copy and continue/);
+    expect(source).toMatch(
+      /if \(\(await drain\(\)\) && blocker\.status === "blocked"\) blocker\.proceed\(\)/,
+    );
   });
 });
 
