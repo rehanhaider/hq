@@ -35,6 +35,8 @@ import {
   pasteTarget,
   planEmbedPaste,
   planEmbedTextInput,
+  uriListText,
+  type EmbedBlockType,
   type EmbedPastePlan,
 } from "@/lib/embedPaste";
 import { MAX_UPLOAD_BYTES, formatBytes, uploadRejection } from "@/lib/uploads";
@@ -60,11 +62,20 @@ const {
 } = defaultBlockSpecs;
 const { bold, italic, underline } = defaultStyleSpecs;
 
+/**
+ * A block for every type the paste planner can produce, keyed by that type,
+ * so a card the planner knows about but the schema does not is a compile
+ * error rather than a paste that silently drops its block.
+ */
+const embedBlockSpecs = {
+  tweet: tweetBlock(),
+  bookmark: bookmarkBlock(),
+} satisfies Record<EmbedBlockType, unknown>;
+
 const noteSchema = BlockNoteSchema.create({
   blockSpecs: {
     ...noteBlockSpecs,
-    tweet: tweetBlock(),
-    bookmark: bookmarkBlock(),
+    ...embedBlockSpecs,
   },
   inlineContentSpecs: defaultInlineContentSpecs,
   styleSpecs: { bold, italic, underline },
@@ -77,13 +88,45 @@ type NoteEditor = BlockNoteEditor<
 >;
 
 /**
+ * The selection's verdict on whether deleting it leaves the caret's
+ * paragraph with nothing in it, or null when there is no selection to ask.
+ *
+ * The test is the offsets at both ends, not which blocks they sit in, so it
+ * holds across a block boundary — `deleteSelection` merges what it crosses,
+ * and only text outside the selection survives that merge. Four cases
+ * follow: the whole of one textblock is empty afterwards; a selection from
+ * the very start of one block to the very end of another leaves a single
+ * empty block, so the card still lands; select-all is the same answer by
+ * the same measure, its ends resolving to the document rather than to any
+ * textblock; anything else — part of a block, part of a block across a
+ * boundary, a node selection — leaves text behind and is not empty, however
+ * blank the caret's own block looks.
+ */
+function selectionLeavesBlockEmpty(editor: NoteEditor): boolean | null {
+  const { selection } = editor.prosemirrorState;
+  if (selection.empty) return null;
+  const { $from, $to } = selection;
+  // Ctrl/Cmd+A spans the document itself, so both ends sit at depth 0 with
+  // the document as their parent and the offset test below still reads
+  // true. Every other selection has to end inside text for the offsets to
+  // mean anything.
+  const spansDocument = $from.depth === 0 && $to.depth === 0;
+  if (!spansDocument && (!$from.parent.isTextblock || !$to.parent.isTextblock))
+    return false;
+  return $from.parentOffset === 0 && $to.parentOffset === $to.parent.content.size;
+}
+
+/**
  * Puts a planned embed into the document, or reports that there was nothing
  * to plan so the caller can let the editor handle the text itself.
  *
- * A non-empty selection is deleted first, matching ordinary paste, and the
- * plan is made again on what is left: a paragraph emptied by that deletion
- * is replaced, a paragraph with text around the selection keeps its text
- * and takes the embed after it.
+ * The plan is made once, before anything is touched, on what the paragraph
+ * will hold after the selection goes: a paragraph the selection empties is
+ * replaced, a paragraph that keeps text around the selection takes the
+ * embed after it. Deciding first matters because the callers treat a false
+ * return as "the editor still owns this text" — `handleTextInput` inserts
+ * it at positions it resolved before this ran — so returning false after a
+ * mutation would drop or misplace what the user typed.
  */
 function applyEmbedPlan(
   editor: NoteEditor,
@@ -96,7 +139,7 @@ function applyEmbedPlan(
   let cursor: { type: string; empty: boolean } | null = null;
   try {
     const { block } = editor.getTextCursorPosition();
-    cursor = pasteTarget(block, editor.prosemirrorState.selection.empty);
+    cursor = pasteTarget(block, selectionLeavesBlockEmpty(editor));
   } catch {
     cursor = null;
   }
@@ -107,20 +150,18 @@ function applyEmbedPlan(
       if (!tr.selection.empty) tr.deleteSelection();
     });
     const { block } = editor.getTextCursorPosition();
-    const after = plan(planned.url, pasteTarget(block, true));
-    if (after.kind === "ignore") return false;
-    if (after.kind === "replace") {
+    if (planned.kind === "replace") {
       // replaceBlocks would drop indented children unless they travel with the embed.
       editor.replaceBlocks([block], [
         {
-          type: after.type,
-          props: { url: after.url },
+          type: planned.type,
+          props: { url: planned.url },
           children: block.children,
         },
       ]);
     } else {
       editor.insertBlocks(
-        [{ type: after.type, props: { url: after.url } }],
+        [{ type: planned.type, props: { url: planned.url } }],
         block,
         "after",
       );
@@ -313,23 +354,25 @@ export function ContentEditor({
     },
     uploadFile,
     defaultStyles: true,
-    // A clipboard that is only a URL becomes an embed: a tweet block for a
-    // tweet, a bookmark card on an empty paragraph for anything else. Mixed
-    // content and code blocks fall through so ordinary paste is unchanged.
-    pasteHandler: ({ event, editor: current, defaultPasteHandler }) =>
-      applyEmbedPlan(
-        current,
-        event.clipboardData?.getData("text/plain") ||
-          event.clipboardData?.getData("text/uri-list") ||
-          "",
-        planEmbedPaste,
-      ) || defaultPasteHandler(),
+    // A clipboard that is only a URL becomes an embed: the block its own
+    // matcher claims, a bookmark card on an empty paragraph for anything
+    // else. Mixed content and code blocks fall through so ordinary paste is
+    // unchanged.
+    pasteHandler: ({ event, editor: current, defaultPasteHandler }) => {
+      const plain = event.clipboardData?.getData("text/plain");
+      // Only the uri-list flavour carries `#` comment lines; a `#` in plain
+      // text is a hashtag or a heading and stays.
+      const text =
+        plain || uriListText(event.clipboardData?.getData("text/uri-list") || "");
+      return applyEmbedPlan(current, text, planEmbedPaste) || defaultPasteHandler();
+    },
     _tiptapOptions: {
       editorProps: {
         // Mobile keyboards deliver a clipboard URL as an insertion rather
-        // than a paste event, so `pasteHandler` above never runs and the
-        // tweet stays a bare link. ProseMirror reads such an insertion —
-        // whether it reaches it as `beforeinput` or as a DOM change — here.
+        // than a paste event, so `pasteHandler` above never runs and the URL
+        // stays a bare link. ProseMirror reads such an insertion — whether it
+        // reaches it as `beforeinput` or as a DOM change — here, and the
+        // planner sorts an insert from typing.
         handleTextInput: (_view, _from, _to, text) => {
           const current = editorRef.current;
           return current
@@ -350,8 +393,8 @@ export function ContentEditor({
             );
             if (!current || text === null) return false;
             event.preventDefault();
-            // A lone tweet URL with a trailing newline is one of the forms
-            // a phone hands over, so the embed plan gets first refusal.
+            // A lone URL with a trailing newline is one of the forms a phone
+            // hands over, so the embed plan gets first refusal.
             if (applyEmbedPlan(current, text, planEmbedTextInput)) return true;
             let inCodeBlock = false;
             try {

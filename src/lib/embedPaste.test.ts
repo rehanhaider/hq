@@ -6,18 +6,43 @@ import {
   planEmbedPaste,
   planEmbedTextInput,
   multiLineInsertion,
+  uriListText,
 } from "./embedPaste";
 
 const ID = "1234567890123456789";
 const TWEET = `https://x.com/alice/status/${ID}`;
 const CANONICAL = `https://x.com/i/web/status/${ID}`;
 const LINK = "https://example.com/post?id=7";
+const REPO = "https://github.com/rehanhaider/hq";
+const VIDEO = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+
+describe("uriListText", () => {
+  it("drops the comment lines a uri-list payload may carry", () => {
+    expect(uriListText(`# comment\n${LINK}\n`)).toBe(`${LINK}\n`);
+    expect(loneUrlFromPaste(uriListText(`# comment\n${LINK}\n`))).toBe(LINK);
+    expect(uriListText(`  # indented\n${LINK}`)).toBe(LINK);
+  });
+
+  it("leaves a payload with no comment lines as it found it", () => {
+    expect(uriListText(LINK)).toBe(LINK);
+    expect(uriListText(`${LINK}\nhttps://example.org`)).toBe(
+      `${LINK}\nhttps://example.org`,
+    );
+    expect(uriListText("")).toBe("");
+  });
+});
 
 describe("loneUrlFromPaste", () => {
-  it("accepts one http(s) URL, with whitespace or a uri-list comment around it", () => {
+  it("accepts one http(s) URL with whitespace around it", () => {
     expect(loneUrlFromPaste(`  ${LINK}  `)).toBe(LINK);
-    expect(loneUrlFromPaste(`# comment\n${LINK}\n`)).toBe(LINK);
     expect(loneUrlFromPaste("http://example.com/#frag")).toBe("http://example.com/");
+  });
+
+  it("keeps a hashtag or heading line as a second line, not a comment", () => {
+    // Only a uri-list payload has comment lines. In ordinary text the user
+    // meant to keep that line, so this is more than a URL.
+    expect(loneUrlFromPaste(`${LINK}\n#buildinpublic`)).toBeNull();
+    expect(loneUrlFromPaste(`# Heading\n${LINK}`)).toBeNull();
   });
 
   it("leaves prose, several lines, and other schemes alone", () => {
@@ -62,6 +87,16 @@ describe("planEmbedPaste", () => {
       kind: "ignore",
     });
     expect(planEmbedPaste(LINK, null)).toEqual({ kind: "ignore" });
+  });
+
+  it("leaves a URL followed by a hashtag or heading line to ordinary paste", () => {
+    // Both lines are the user's; reducing them to a card would drop one.
+    expect(
+      planEmbedPaste(`${LINK}\n#hashtag`, { type: "paragraph", empty: true }),
+    ).toEqual({ kind: "ignore" });
+    expect(
+      planEmbedPaste(`${TWEET}\n#hashtag`, { type: "paragraph", empty: true }),
+    ).toEqual({ kind: "ignore" });
   });
 
   it("does not intercept code blocks or ordinary text", () => {
@@ -118,35 +153,100 @@ describe("planEmbedTextInput", () => {
     });
   });
 
-  it("leaves every other URL to the paste path", () => {
-    expect(planEmbedTextInput(LINK, empty)).toEqual({ kind: "ignore" });
-    expect(planEmbedTextInput("https://x.com/alice", empty)).toEqual({ kind: "ignore" });
+  it("turns every other lone URL into a bookmark, on an empty paragraph only", () => {
+    for (const url of [LINK, REPO, VIDEO, "https://x.com/alice"])
+      expect(planEmbedTextInput(url, empty)).toEqual({
+        kind: "replace",
+        type: "bookmark",
+        url,
+      });
+    expect(planEmbedTextInput(REPO, { type: "paragraph", empty: false })).toEqual({
+      kind: "ignore",
+    });
+  });
+
+  it("leaves a URL followed by a hashtag or heading line to ordinary paste", () => {
+    // The mobile insertion path reaches `pasteMarkdown` only when the plan
+    // ignores the text, so a card here would silently eat the second line.
+    expect(planEmbedTextInput("https://example.com\n#hashtag", empty)).toEqual({
+      kind: "ignore",
+    });
+    expect(planEmbedTextInput(`# Heading\n${LINK}`, empty)).toEqual({ kind: "ignore" });
+  });
+
+  it("reads trailing whitespace as typing, unless a media matcher claims the URL", () => {
+    // A word committed with the space bar; a clipboard or share-sheet
+    // insert never carries one.
+    expect(planEmbedTextInput(`${LINK} `, empty)).toEqual({ kind: "ignore" });
+    expect(planEmbedTextInput("https://example.com ", empty)).toEqual({ kind: "ignore" });
+    // A French or iOS layout commits a word with a no-break space. The trim
+    // the matchers run first strips those too, so the guard must see them.
+    expect(planEmbedTextInput("https://example.com\u00a0", empty)).toEqual({
+      kind: "ignore",
+    });
+    expect(planEmbedTextInput("https://example.com\u202f", empty)).toEqual({
+      kind: "ignore",
+    });
+    expect(planEmbedTextInput(`${TWEET} `, empty)).toEqual({
+      kind: "replace",
+      type: "tweet",
+      url: CANONICAL,
+    });
+    expect(planEmbedTextInput(`${TWEET}\u00a0`, empty)).toEqual({
+      kind: "replace",
+      type: "tweet",
+      url: CANONICAL,
+    });
+    // A trailing newline is a form a phone does hand over.
+    expect(planEmbedTextInput(`${LINK}\n`, empty)).toEqual({
+      kind: "replace",
+      type: "bookmark",
+      url: LINK,
+    });
   });
 });
 
 describe("pasteTarget", () => {
   const text = [{ type: "text", text: "hello", styles: {} }];
 
-  it("treats a paragraph as empty when it has no text or its selection is about to go", () => {
-    expect(pasteTarget({ type: "paragraph", content: [] }, true)).toEqual({
+  it("reads the paragraph's own content when there is no selection to ask", () => {
+    expect(pasteTarget({ type: "paragraph", content: [] }, null)).toEqual({
       type: "paragraph",
       empty: true,
     });
-    expect(pasteTarget({ type: "paragraph", content: text }, true)).toEqual({
+    expect(pasteTarget({ type: "paragraph", content: text }, null)).toEqual({
       type: "paragraph",
       empty: false,
     });
-    expect(pasteTarget({ type: "paragraph", content: text }, false)).toEqual({
+  });
+
+  it("lets the selection's verdict decide, over the paragraph's own content", () => {
+    // The whole paragraph is selected, so the embed replaces it.
+    expect(pasteTarget({ type: "paragraph", content: text }, true)).toEqual({
       type: "paragraph",
       empty: true,
+    });
+    // Only part of it is selected, so text survives and the embed goes
+    // after the paragraph rather than over it.
+    expect(pasteTarget({ type: "paragraph", content: text }, false)).toEqual({
+      type: "paragraph",
+      empty: false,
+    });
+    // A blank paragraph is still not empty when the selection runs out of
+    // it into the next block: deleting merges the two, and the survivor's
+    // text lands here. Replacing the block would destroy it.
+    expect(pasteTarget({ type: "paragraph", content: [] }, false)).toEqual({
+      type: "paragraph",
+      empty: false,
     });
   });
 
   it("never treats another block as empty", () => {
-    expect(pasteTarget({ type: "heading", content: [] }, false)).toEqual({
+    expect(pasteTarget({ type: "heading", content: [] }, null)).toEqual({
       type: "heading",
       empty: false,
     });
+    expect(pasteTarget({ type: "heading", content: [] }, true).empty).toBe(false);
     expect(pasteTarget({ type: "codeBlock", content: [] }, true).empty).toBe(false);
   });
 });

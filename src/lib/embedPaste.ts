@@ -1,11 +1,12 @@
 import { linkPreviewUrl } from "./linkPreview";
-import { tweetUrlFromPaste } from "./tweet";
+import { tweetStatusUrl } from "./tweet";
 
 /**
- * What a paste of nothing but a URL turns into. A tweet URL becomes a
- * tweet block anywhere but a code block. Any other http(s) URL becomes a
- * bookmark card only when it lands on an empty paragraph: a URL pasted
- * into running prose is a link in that prose, not a card after it.
+ * What a paste of nothing but a URL turns into. A URL a media matcher
+ * recognises becomes that block anywhere but a code block. Any other
+ * http(s) URL becomes a bookmark card only when it lands on an empty
+ * paragraph: a URL pasted into running prose is a link in that prose, not
+ * a card after it.
  */
 
 export function isEmptyParagraphContent(content: unknown): boolean {
@@ -18,43 +19,106 @@ export function isEmptyParagraphContent(content: unknown): boolean {
 }
 
 /**
- * Clipboard text that is one URL, possibly as a one-line `text/uri-list`.
- * Two or more real lines means the user copied more than a URL.
+ * Comment lines stripped from a `text/uri-list` payload, which is the one
+ * format that defines them (RFC 2483). Only the clipboard's `text/uri-list`
+ * flavour goes through here: in ordinary text a line opening with `#` is a
+ * hashtag or a markdown heading the user meant to keep.
  */
-export function loneUrlFromPaste(text: string): string | null {
-  const trimmed = text.trim();
-  if (!trimmed) return null;
-  const direct = linkPreviewUrl(trimmed);
-  if (direct && !/\s/.test(trimmed)) return direct;
-  const lines = trimmed
+export function uriListText(data: string): string {
+  return data
     .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0 && !line.startsWith("#"));
-  if (lines.length !== 1) return null;
-  const line = lines[0] ?? "";
-  if (/\s/.test(line)) return null;
-  return linkPreviewUrl(line);
+    .filter((line) => !line.trimStart().startsWith("#"))
+    .join("\n");
 }
 
 /**
- * The block a paste lands in, as the planner sees it. A paragraph whose
- * selected text is about to be replaced counts as empty: once the
- * selection goes, a lone URL is all that is left, which is the same
- * gesture as pasting into a blank line.
+ * The one bare token a pasted or inserted string reduces to, before any
+ * matcher looks at it: the text trimmed, or its single real line. Two or
+ * more real lines, or anything with whitespace inside, means the user
+ * handed over more than a URL.
+ */
+function loneToken(text: string): string | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  if (!/\s/.test(trimmed)) return trimmed;
+  const lines = trimmed
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  if (lines.length !== 1) return null;
+  const line = lines[0] ?? "";
+  if (/\s/.test(line)) return null;
+  return line;
+}
+
+/**
+ * Text that is one URL and nothing else. Two or more real lines means the
+ * user handed over more than a URL. A `text/uri-list` payload reaches this
+ * through `uriListText`, which takes its comment lines off first.
+ */
+export function loneUrlFromPaste(text: string): string | null {
+  const token = loneToken(text);
+  return token ? linkPreviewUrl(token) : null;
+}
+
+/**
+ * The block a paste lands in, as the planner sees it. Empty means a lone
+ * URL would be all the paragraph holds, so the embed replaces it rather
+ * than going after it.
+ *
+ * `selectionLeavesEmpty` is the selection's verdict on what survives the
+ * deletion that precedes the embed, or null when there is no selection to
+ * ask. A verdict decides on its own, because only the selection can see
+ * past this block: a selection running from a blank paragraph into the
+ * middle of the next one leaves that block's tail behind, and the tail
+ * lands here once the two are merged — so the paragraph is not empty,
+ * however empty its own content looks. With no verdict, that content is
+ * the whole story.
  */
 export function pasteTarget(
   block: { type: string; content?: unknown },
-  selectionEmpty: boolean,
+  selectionLeavesEmpty: boolean | null,
 ): { type: string; empty: boolean } {
   return {
     type: block.type,
     empty:
       block.type === "paragraph" &&
-      (!selectionEmpty || isEmptyParagraphContent(block.content)),
+      (selectionLeavesEmpty ?? isEmptyParagraphContent(block.content)),
   };
 }
 
-export type EmbedBlockType = "tweet" | "bookmark";
+/**
+ * Every block a lone URL can become. One list, shared with the document
+ * validator and the editor's block specs, so a card cannot be added in one
+ * place and forgotten in another.
+ */
+export const EMBED_BLOCK_TYPES = ["tweet", "bookmark"] as const;
+
+export type EmbedBlockType = (typeof EMBED_BLOCK_TYPES)[number];
+
+/**
+ * The media embeds, in the order a URL is offered to them. A hit wins
+ * wherever the caret is — outside a code block — so the block lands even in
+ * running prose. Bookmark is not here: it is the fallback for a URL nothing
+ * else claimed, and it only ever replaces an empty paragraph.
+ */
+export const embedMatchers = [
+  { type: "tweet", match: tweetStatusUrl },
+] as const satisfies readonly {
+  type: EmbedBlockType;
+  match: (text: string) => string | null;
+}[];
+
+/** The first media embed that claims this text, if any. */
+function matchEmbed(text: string): { type: EmbedBlockType; url: string } | null {
+  const token = loneToken(text);
+  if (!token) return null;
+  for (const matcher of embedMatchers) {
+    const url = matcher.match(token);
+    if (url) return { type: matcher.type, url };
+  }
+  return null;
+}
 
 export type EmbedPastePlan =
   | { kind: "ignore" }
@@ -67,11 +131,11 @@ export function planEmbedPaste(
 ): EmbedPastePlan {
   if (current?.type === "codeBlock") return { kind: "ignore" };
   const empty = current?.type === "paragraph" && current.empty;
-  const tweet = tweetUrlFromPaste(clipboardText);
-  if (tweet) {
+  const media = matchEmbed(clipboardText);
+  if (media) {
     return empty
-      ? { kind: "replace", type: "tweet", url: tweet }
-      : { kind: "insert", type: "tweet", url: tweet };
+      ? { kind: "replace", type: media.type, url: media.url }
+      : { kind: "insert", type: media.type, url: media.url };
   }
   const link = loneUrlFromPaste(clipboardText);
   if (!link || !empty) return { kind: "ignore" };
@@ -83,17 +147,23 @@ export function planEmbedPaste(
  * keyboards hand a clipboard URL to the editor as an insertion — Gboard's
  * clipboard chip, the iOS suggestion bar, and a share-sheet insert all go
  * through `beforeinput` rather than `paste` — so the clipboard is never
- * read and a tweet stays a bare link.
+ * read and the URL stays a bare link.
  *
- * Only tweets convert here. A whole tweet URL in one insertion is a
- * clipboard or share-sheet insert, never typing; every other URL keeps the
- * behaviour it has today, where the card comes from a real paste.
+ * A whole URL in one insertion is a clipboard or share-sheet insert, so it
+ * gets the same plan a paste would, with one exception: text that ends in
+ * whitespace no media matcher claims is typing. A word committed with the
+ * space bar arrives that way, and a typed URL should stay a link; a
+ * clipboard or share-sheet insert never carries trailing whitespace. Any
+ * trailing whitespace counts, not the plain space alone, because the
+ * no-break spaces a French or iOS layout commits a word with are whitespace
+ * to the trim the matchers run first. A trailing newline is a form a phone
+ * does hand over, so it is the one exception and still converts.
  */
 export function planEmbedTextInput(
   text: string,
   current: { type: string; empty: boolean } | null,
 ): EmbedPastePlan {
-  if (!tweetUrlFromPaste(text)) return { kind: "ignore" };
+  if (/[^\S\r\n]$/.test(text) && !matchEmbed(text)) return { kind: "ignore" };
   return planEmbedPaste(text, current);
 }
 
