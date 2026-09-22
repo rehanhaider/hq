@@ -11,10 +11,8 @@ import {
   MenuTrigger,
 } from "@/components/ui/menu";
 import {
-  GROUPS,
   SORTS,
   hasFilters,
-  type ContentGroup,
   type ContentProperties,
   type ContentSearch,
   type ContentSort,
@@ -27,12 +25,6 @@ const SORT_LABELS: Record<ContentSort, string> = {
   updated: "Updated",
   created: "Created",
   title: "Title",
-};
-
-const GROUP_LABELS: Record<ContentGroup, string> = {
-  status: "Status",
-  type: "Type",
-  tag: "Tag",
 };
 
 export type ToolbarPatch = Partial<ContentSearch>;
@@ -53,7 +45,6 @@ export function ContentToolbar({
   board?: boolean;
 }) {
   const sort = search.sort ?? "manual";
-  const group = search.group ?? "status";
   const filtered = hasFilters(search);
 
   return (
@@ -91,24 +82,12 @@ export function ContentToolbar({
           <MenuTrigger
             render={
               <Button variant="outline" size="sm">
-                <Columns3 /> Group: {GROUP_LABELS[group]}
+                <Columns3 /> Columns
               </Button>
             }
           />
           <MenuContent>
-            <MenuLabel>Group by</MenuLabel>
-            {GROUPS.map((option) => (
-              <MenuItem
-                key={option}
-                aria-current={group === option ? "page" : undefined}
-                onClick={() =>
-                  onChange({ group: option === "status" ? undefined : option })
-                }
-              >
-                {GROUP_LABELS[option]}
-              </MenuItem>
-            ))}
-            <MenuSeparator />
+            <MenuLabel>Columns</MenuLabel>
             <MenuCheckboxItem
               checked={search.columns === "filled"}
               onCheckedChange={(checked) =>
