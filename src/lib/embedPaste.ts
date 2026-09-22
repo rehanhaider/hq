@@ -62,23 +62,28 @@ export function loneUrlFromPaste(text: string): string | null {
 }
 
 /**
- * The block a paste lands in, as the planner sees it. A paragraph counts as
- * empty when it holds nothing, or when `selectionLeavesEmpty` says the
- * selection about to be deleted is the whole of its text: once that
- * selection goes, a lone URL is all that is left, which is the same gesture
- * as pasting into a blank line. A selection that is only part of a
- * paragraph leaves text behind, so the paragraph is not empty and the embed
- * goes after it rather than over it.
+ * The block a paste lands in, as the planner sees it. Empty means a lone
+ * URL would be all the paragraph holds, so the embed replaces it rather
+ * than going after it.
+ *
+ * `selectionLeavesEmpty` is the selection's verdict on what survives the
+ * deletion that precedes the embed, or null when there is no selection to
+ * ask. A verdict decides on its own, because only the selection can see
+ * past this block: a selection running from a blank paragraph into the
+ * middle of the next one leaves that block's tail behind, and the tail
+ * lands here once the two are merged — so the paragraph is not empty,
+ * however empty its own content looks. With no verdict, that content is
+ * the whole story.
  */
 export function pasteTarget(
   block: { type: string; content?: unknown },
-  selectionLeavesEmpty: boolean,
+  selectionLeavesEmpty: boolean | null,
 ): { type: string; empty: boolean } {
   return {
     type: block.type,
     empty:
       block.type === "paragraph" &&
-      (selectionLeavesEmpty || isEmptyParagraphContent(block.content)),
+      (selectionLeavesEmpty ?? isEmptyParagraphContent(block.content)),
   };
 }
 

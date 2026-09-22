@@ -88,16 +88,23 @@ type NoteEditor = BlockNoteEditor<
 >;
 
 /**
- * Whether deleting the selection would leave its paragraph with nothing in
- * it, which is true only when the selection is the whole of one textblock's
- * text. A selection of part of a paragraph, or one spanning two blocks,
- * leaves text behind.
+ * The selection's verdict on whether deleting it leaves the caret's
+ * paragraph with nothing in it, or null when there is no selection to ask.
+ *
+ * The test is the offsets at both ends, not which blocks they sit in, so it
+ * holds across a block boundary — `deleteSelection` merges what it crosses,
+ * and only text outside the selection survives that merge. Three cases
+ * follow: the whole of one textblock is empty afterwards; a selection from
+ * the very start of one block to the very end of another leaves a single
+ * empty block, so the card still lands; anything else — part of a block,
+ * part of a block across a boundary, a node selection — leaves text behind
+ * and is not empty, however blank the caret's own block looks.
  */
-function selectionLeavesBlockEmpty(editor: NoteEditor): boolean {
+function selectionLeavesBlockEmpty(editor: NoteEditor): boolean | null {
   const { selection } = editor.prosemirrorState;
-  if (selection.empty) return false;
+  if (selection.empty) return null;
   const { $from, $to } = selection;
-  if ($from.parent !== $to.parent || !$from.parent.isTextblock) return false;
+  if (!$from.parent.isTextblock || !$to.parent.isTextblock) return false;
   return $from.parentOffset === 0 && $to.parentOffset === $to.parent.content.size;
 }
 

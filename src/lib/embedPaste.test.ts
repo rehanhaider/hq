@@ -209,18 +209,18 @@ describe("planEmbedTextInput", () => {
 describe("pasteTarget", () => {
   const text = [{ type: "text", text: "hello", styles: {} }];
 
-  it("treats a paragraph with no text as empty, whatever the selection does", () => {
-    expect(pasteTarget({ type: "paragraph", content: [] }, false)).toEqual({
+  it("reads the paragraph's own content when there is no selection to ask", () => {
+    expect(pasteTarget({ type: "paragraph", content: [] }, null)).toEqual({
       type: "paragraph",
       empty: true,
     });
-    expect(pasteTarget({ type: "paragraph", content: [] }, true)).toEqual({
+    expect(pasteTarget({ type: "paragraph", content: text }, null)).toEqual({
       type: "paragraph",
-      empty: true,
+      empty: false,
     });
   });
 
-  it("treats a paragraph the selection empties as empty, and one that keeps text as not", () => {
+  it("lets the selection's verdict decide, over the paragraph's own content", () => {
     // The whole paragraph is selected, so the embed replaces it.
     expect(pasteTarget({ type: "paragraph", content: text }, true)).toEqual({
       type: "paragraph",
@@ -232,10 +232,17 @@ describe("pasteTarget", () => {
       type: "paragraph",
       empty: false,
     });
+    // A blank paragraph is still not empty when the selection runs out of
+    // it into the next block: deleting merges the two, and the survivor's
+    // text lands here. Replacing the block would destroy it.
+    expect(pasteTarget({ type: "paragraph", content: [] }, false)).toEqual({
+      type: "paragraph",
+      empty: false,
+    });
   });
 
   it("never treats another block as empty", () => {
-    expect(pasteTarget({ type: "heading", content: [] }, false)).toEqual({
+    expect(pasteTarget({ type: "heading", content: [] }, null)).toEqual({
       type: "heading",
       empty: false,
     });

@@ -28,12 +28,16 @@ describe("embed plan", () => {
     expect(applyEmbedPlan).not.toMatch(/pasteTarget\(block, true\)/);
   });
 
-  it("reads emptiness from a selection that covers the whole textblock", () => {
+  it("reads emptiness from the selection's offsets, on both sides of a block boundary", () => {
     expect(source).toMatch(
       /cursor = pasteTarget\(block, selectionLeavesBlockEmpty\(editor\)\)/,
     );
     expect(source).toMatch(/\$from\.parentOffset === 0/);
     expect(source).toMatch(/\$to\.parentOffset === \$to\.parent\.content\.size/);
+    // A selection that crosses blocks still gets judged on its offsets: the
+    // delete merges what it crosses, so only the ends say what survives.
+    expect(source).not.toMatch(/\$from\.parent !== \$to\.parent/);
+    expect(source).toMatch(/if \(selection\.empty\) return null;/);
   });
 });
 
