@@ -550,13 +550,15 @@ export function ContentWorkspace() {
 
   const hasUnsaved =
     saveState !== "saved" || saved.current < changed.current || uploadBusy;
-  // Every way of leaving an edited page goes through here: a row, the
-  // breadcrumb, the mobile back arrow, the browser's own back button. The
-  // navigation is held, the pending saves are drained, and the navigation
-  // then resumes on its own, so leaving normally costs nothing but the save
-  // it was going to make anyway. Only a drain that cannot succeed — a
-  // conflict, a trashed page, a page that is gone — reaches the user, as the
-  // dialog below.
+  // The only drain that runs before a navigation, and every way of leaving an
+  // edited page goes through it: a row, the breadcrumb, the mobile back
+  // arrow, the browser's own back button. The navigation is held, the pending
+  // saves are drained, and the navigation then resumes on its own, so leaving
+  // normally costs nothing but the save it was going to make anyway. Only a
+  // drain that cannot succeed — a conflict, a trashed page, a page that is
+  // gone — reaches the user, as the dialog below. The drains that remain
+  // elsewhere are not about leaving: trashing a page persists its text before
+  // the page goes, and the failed-save banner retries on demand.
   const blocker = useBlocker({
     shouldBlockFn: ({ current, next }) => {
       const currentPage = (current.search as { page?: string }).page;
@@ -943,16 +945,17 @@ export function ContentWorkspace() {
       return null;
     }
   };
+  // Navigation only. Pending edits are the blocker's business, so this and
+  // the page rows leave a page the same way: the blocker holds the
+  // navigation, drains, and resumes it.
   const selectPage = async (page: string | undefined) => {
     if (recoveringRef.current || page === selectedId) return;
-    if (!(await drain())) return;
     loadedId.current = null;
     await navigate({ to: "/content", search: { ...search, page } });
   };
 
   const addPage = async (parentId: string | null) => {
     if (recoveringRef.current) return;
-    if (!(await drain())) return;
     try {
       const created = await createPage({ data: { title: "", parentId } });
       queryClient.setQueryData(contentKeys.detail(created.id), created);
@@ -971,8 +974,8 @@ export function ContentWorkspace() {
     }
   };
 
-  // The top bar's New page runs this flow so pending edits are saved and the
-  // list overlay is cleared before the created page opens.
+  // The top bar's New page runs this flow so the list overlay is cleared
+  // before the created page opens; the blocker saves the page being left.
   const addPageRef = useRef(addPage);
   addPageRef.current = addPage;
   const setPageCreator = useUI((state) => state.setPageCreator);

@@ -297,6 +297,33 @@ describe("Content leaving a page with unsaved text", () => {
     );
   });
 
+  it("leaves the drain to the blocker: nothing else saves before navigating", () => {
+    const select = source.slice(
+      source.indexOf("const selectPage ="),
+      source.indexOf("const addPageRef"),
+    );
+    expect(select).toMatch(/const selectPage = async \(page: string \| undefined\) => \{\s+if \(recoveringRef\.current \|\| page === selectedId\) return;\s+loadedId\.current = null;\s+await navigate\(/);
+    // selectPage and addPage both navigate; neither drains on the way.
+    expect(select).not.toMatch(/drain\(\)/);
+    // The mobile back arrow and the empty-state link go through selectPage,
+    // so they are blocked and drained like every other way out.
+    expect(source).toMatch(
+      /aria-label="Back to page list" onClick=\{\(\) => void selectPage\(undefined\)\}/,
+    );
+  });
+
+  it("keeps the drains that are not about leaving", () => {
+    // Trashing persists the page's text before the page goes, and needs a
+    // current revision to trash against.
+    const confirm = source.slice(source.indexOf("const confirmIndexDelete"));
+    expect(confirm).toMatch(/await drain\(\)/);
+    expect(source).toMatch(
+      /aria-label=\{`Move \$\{displayPageTitle\(draft\.title\)\} to trash`\} onClick=\{async \(\) => \{\s+if \(!\(await drain\(\)\)\) return;/,
+    );
+    // The failed-save banner retries the save on demand.
+    expect(source).toMatch(/void drain\(\);\s+\}\}>\{recovering \? "Saving copy…"/);
+  });
+
   it("only asks the user when the drain cannot succeed", () => {
     expect(effect).toMatch(/if \(saveConflict \|\| saveUnavailable \|\| recovering\) \{\s+setDrainFailed\(true\);/);
     expect(effect).toMatch(/else setDrainFailed\(true\);/);
