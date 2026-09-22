@@ -62,48 +62,49 @@
   --color-track: var(--track);
 }
 
-/* Palette A - warm paper, evergreen. Three surface steps: the page
-   (`background`), a card (`card`), and chrome or a well (`surface-2`). Dark
-   keeps ~0.05 of lightness between each step so a card reads as a card
-   without a border. */
+/* Jewel. Three surface steps: the page (`background`), a card (`card`), and
+   chrome or a well (`surface-2`). Each module owns one hue: emerald for Nasr,
+   magenta for Content, indigo for GitHub. `primary` is emerald by default and
+   takes the module's hue inside a `data-module` element. Light uses the deep
+   shade of each hue so it holds as text; dark uses the bright one. */
 :root {
-  --background: #faf9f6;
-  --foreground: #1c1b19;
+  --background: #f5f5f9;
+  --foreground: #101318;
   --card: #ffffff;
   --card-foreground: var(--foreground);
-  --surface-2: #f3f2ee;
+  --surface-2: #eeeef5;
   --popover: var(--card);
   --popover-foreground: var(--foreground);
-  --primary: #15694e;
+  --primary: #077a52;
   --primary-foreground: #ffffff;
   --secondary: var(--surface-2);
   --secondary-foreground: var(--foreground);
   --muted: var(--surface-2);
-  --muted-foreground: #6b6862;
+  --muted-foreground: #59616d;
   --accent: color-mix(in oklab, var(--primary) 8%, var(--surface-2));
   --accent-foreground: var(--foreground);
-  --destructive: #b3412c;
-  --border: #e4e2dc;
-  --input: #d6d3cb;
+  --destructive: #cf3f36;
+  --border: #e2e2ec;
+  --input: #cacbda;
   --ring: var(--primary);
-  --positive: #1e7a4e;
-  --negative: #b3412c;
+  --positive: #12824f;
+  --negative: #cf3f36;
   /* Late, not lost: a prayer prayed outside its window, and a day that holds
-     one. Amber sits between the evergreen and the red, and never stands for a
+     one. Amber sits between the green and the red, and never stands for a
      half-finished thing. */
-  --warning: #a9711c;
+  --warning: #a86a00;
   /* The unfilled half of a meter, a pill, or a day mark. */
-  --track: #eae8e2;
+  --track: #e8e8f0;
   /* Two shadows, and only two. Raised cards in the light theme; popovers and
      drawers anywhere. Dark separates with lightness instead. */
   --shadow-card: 0 1px 2px rgb(0 0 0 / 0.04);
   --shadow-overlay: 0 8px 24px rgb(0 0 0 / 0.16);
-  --chart-1: oklch(0.53 0.11 160);
-  --chart-2: oklch(0.65 0.1 220);
-  --chart-3: oklch(0.69 0.13 75);
-  --chart-4: oklch(0.58 0.12 295);
-  --chart-5: oklch(0.66 0.13 25);
-  --chart-6: oklch(0.69 0.02 250);
+  --chart-1: #5452d8;
+  --chart-2: #d23c86;
+  --chart-3: #0e9f6e;
+  --chart-4: #0d9a9a;
+  --chart-5: #c97a00;
+  --chart-6: #8a919c;
   --radius: 10px;
   --sidebar: var(--surface-2);
   --sidebar-foreground: var(--foreground);
@@ -117,28 +118,62 @@
 }
 
 [data-theme="dark"] {
-  --background: #131311;
-  --foreground: #edece8;
-  --card: #1c1c19;
-  --surface-2: #242421;
-  --primary: #58c39a;
-  --primary-foreground: #10251c;
-  --muted-foreground: #9c9a93;
+  --background: #0a0b13;
+  --foreground: #eceef2;
+  --card: #12131e;
+  --surface-2: #191a28;
+  --primary: #34d399;
+  --primary-foreground: #03241a;
+  --muted-foreground: #8e96a4;
   --accent: color-mix(in oklab, var(--primary) 12%, var(--surface-2));
-  --destructive: #e0765c;
-  --border: #34342f;
-  --input: #403f39;
-  --positive: #4fbf8b;
-  --negative: #e0765c;
-  --warning: #e0a75e;
-  --track: #2b2b27;
+  --destructive: #ff6b61;
+  --border: #1f2133;
+  --input: #30334b;
+  --positive: #3dd68c;
+  --negative: #ff6b61;
+  --warning: #f0b429;
+  --track: #1c1e2d;
   --shadow-card: none;
-  --chart-1: oklch(0.7 0.12 160);
-  --chart-2: oklch(0.73 0.1 220);
-  --chart-3: oklch(0.79 0.13 75);
-  --chart-4: oklch(0.73 0.12 295);
-  --chart-5: oklch(0.76 0.13 25);
-  --chart-6: oklch(0.53 0.02 250);
+  --chart-1: #8d8efa;
+  --chart-2: #f472b6;
+  --chart-3: #34d399;
+  --chart-4: #2dd4bf;
+  --chart-5: #fbbf24;
+  --chart-6: #5c6473;
+}
+
+/* The module hues. Tokens derived from `primary` are declared again here, or
+   they would keep the value they resolved to on the root. */
+[data-module] {
+  --ring: var(--primary);
+  --accent: color-mix(in oklab, var(--primary) 8%, var(--surface-2));
+}
+[data-theme="dark"] [data-module] {
+  --accent: color-mix(in oklab, var(--primary) 12%, var(--surface-2));
+}
+[data-module="nasr"] {
+  --primary: #077a52;
+  --primary-foreground: #ffffff;
+}
+[data-module="content"] {
+  --primary: #a5286a;
+  --primary-foreground: #ffffff;
+}
+[data-module="github"] {
+  --primary: #3f3db8;
+  --primary-foreground: #ffffff;
+}
+[data-theme="dark"] [data-module="nasr"] {
+  --primary: #34d399;
+  --primary-foreground: #03241a;
+}
+[data-theme="dark"] [data-module="content"] {
+  --primary: #f472b6;
+  --primary-foreground: #2b0718;
+}
+[data-theme="dark"] [data-module="github"] {
+  --primary: #8d8efa;
+  --primary-foreground: #0e0d33;
 }
 
 @layer base {
