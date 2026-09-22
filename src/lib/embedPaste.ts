@@ -128,17 +128,20 @@ export function planEmbedPaste(
  * read and the URL stays a bare link.
  *
  * A whole URL in one insertion is a clipboard or share-sheet insert, so it
- * gets the same plan a paste would, with one exception: text that ends in a
- * space no media matcher claims is typing. A word committed with the space
- * bar arrives that way, and a typed URL should stay a link; a clipboard or
- * share-sheet insert never carries a trailing space. A trailing newline is
- * a form a phone does hand over, so it still converts.
+ * gets the same plan a paste would, with one exception: text that ends in
+ * whitespace no media matcher claims is typing. A word committed with the
+ * space bar arrives that way, and a typed URL should stay a link; a
+ * clipboard or share-sheet insert never carries trailing whitespace. Any
+ * trailing whitespace counts, not the plain space alone, because the
+ * no-break spaces a French or iOS layout commits a word with are whitespace
+ * to the trim the matchers run first. A trailing newline is a form a phone
+ * does hand over, so it is the one exception and still converts.
  */
 export function planEmbedTextInput(
   text: string,
   current: { type: string; empty: boolean } | null,
 ): EmbedPastePlan {
-  if (/ $/.test(text) && !matchEmbed(text)) return { kind: "ignore" };
+  if (/[^\S\r\n]$/.test(text) && !matchEmbed(text)) return { kind: "ignore" };
   return planEmbedPaste(text, current);
 }
 

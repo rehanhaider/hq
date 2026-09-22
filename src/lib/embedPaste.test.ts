@@ -132,12 +132,25 @@ describe("planEmbedTextInput", () => {
     });
   });
 
-  it("reads a trailing space as typing, unless a media matcher claims the URL", () => {
+  it("reads trailing whitespace as typing, unless a media matcher claims the URL", () => {
     // A word committed with the space bar; a clipboard or share-sheet
     // insert never carries one.
     expect(planEmbedTextInput(`${LINK} `, empty)).toEqual({ kind: "ignore" });
     expect(planEmbedTextInput("https://example.com ", empty)).toEqual({ kind: "ignore" });
+    // A French or iOS layout commits a word with a no-break space. The trim
+    // the matchers run first strips those too, so the guard must see them.
+    expect(planEmbedTextInput("https://example.com\u00a0", empty)).toEqual({
+      kind: "ignore",
+    });
+    expect(planEmbedTextInput("https://example.com\u202f", empty)).toEqual({
+      kind: "ignore",
+    });
     expect(planEmbedTextInput(`${TWEET} `, empty)).toEqual({
+      kind: "replace",
+      type: "tweet",
+      url: CANONICAL,
+    });
+    expect(planEmbedTextInput(`${TWEET}\u00a0`, empty)).toEqual({
       kind: "replace",
       type: "tweet",
       url: CANONICAL,
