@@ -26,6 +26,10 @@ const useIsomorphicLayoutEffect =
 
 export function Shell() {
   const { pathname } = useLocation();
+  // Each module has its own colour; the stylesheet keys it off this.
+  const pageModule = (["nasr", "content", "github"] as const).find(
+    (module) => pathname === `/${module}` || pathname.startsWith(`/${module}/`),
+  );
   const drawer = useRef<HTMLElement>(null);
   const mobileTrigger = useRef<HTMLButtonElement>(null);
   const wasMobileOpen = useRef(false);
@@ -212,13 +216,29 @@ export function Shell() {
         >
           {[
             { to: "/" as const, title: "Home", icon: House },
-            { to: "/nasr" as const, title: "Nasr", icon: BookOpen },
-            { to: "/content" as const, title: "Content", icon: NotebookPen },
-            { to: "/github" as const, title: "GitHub", icon: FolderGit2 },
-          ].map(({ to, title, icon: Icon }) => (
+            {
+              to: "/nasr" as const,
+              title: "Nasr",
+              icon: BookOpen,
+              module: "nasr",
+            },
+            {
+              to: "/content" as const,
+              title: "Content",
+              icon: NotebookPen,
+              module: "content",
+            },
+            {
+              to: "/github" as const,
+              title: "GitHub",
+              icon: FolderGit2,
+              module: "github",
+            },
+          ].map(({ to, title, icon: Icon, module }) => (
             <Link
               key={to}
               to={to}
+              data-module={module}
               search={
                 to === "/github"
                   ? defaultFilters()
@@ -240,7 +260,9 @@ export function Shell() {
               className={navClass}
               onClick={() => setMobileOpen(false)}
             >
-              <Icon className="size-4 shrink-0" />
+              <Icon
+                className={`size-4 shrink-0 ${module ? "text-primary" : ""}`}
+              />
               <span className={labelClass}>{title}</span>
             </Link>
           ))}
@@ -269,6 +291,7 @@ export function Shell() {
       </aside>
       <div
         inert={mobileOpen}
+        data-module={pageModule}
         className={`sidebar-offset min-h-dvh min-w-0 transition-[margin] duration-150 motion-reduce:transition-none ${sidebarOpen ? "md:ml-64" : "md:ml-14"}`}
       >
         <div className="sticky top-0 z-10 bg-background/95 backdrop-blur">

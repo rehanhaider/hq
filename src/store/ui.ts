@@ -4,8 +4,8 @@ type Theme = "light" | "dark";
 
 /** The colours the browser paints its own chrome with, per theme. */
 const THEME_COLOR: Record<Theme, string> = {
-  dark: "#131311",
-  light: "#faf9f6",
+  dark: "#0a0b13",
+  light: "#f5f5f9",
 };
 
 /**

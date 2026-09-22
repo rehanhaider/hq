@@ -18,7 +18,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         { title: "HQ" },
         // Dark is the default, so the static value is the dark background.
         // `applyTheme` keeps it honest when the preference says otherwise.
-        { name: "theme-color", content: "#131311" },
+        { name: "theme-color", content: "#0a0b13" },
       ],
       links: [
         { rel: "stylesheet", href: appCss },
@@ -32,7 +32,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         // stored preference for light, so a stored value is the only thing
         // that can move it off the theme the server already rendered.
         {
-          children: `(function(){try{var t=localStorage.getItem('hq:theme')==='light'?'light':'dark';var r=document.documentElement;r.dataset.theme=t;r.style.colorScheme=t;var m=document.querySelector('meta[name=theme-color]');if(m)m.content=t==='dark'?'#131311':'#faf9f6'}catch(e){}})();`,
+          children: `(function(){try{var t=localStorage.getItem('hq:theme')==='light'?'light':'dark';var r=document.documentElement;r.dataset.theme=t;r.style.colorScheme=t;var m=document.querySelector('meta[name=theme-color]');if(m)m.content=t==='dark'?'#0a0b13':'#f5f5f9'}catch(e){}})();`,
         },
         // Same idea as the theme: the rail is open unless the browser holds
         // a stored collapsed value, and that has to land before the first
