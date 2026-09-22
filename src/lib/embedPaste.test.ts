@@ -209,18 +209,28 @@ describe("planEmbedTextInput", () => {
 describe("pasteTarget", () => {
   const text = [{ type: "text", text: "hello", styles: {} }];
 
-  it("treats a paragraph as empty when it has no text or its selection is about to go", () => {
+  it("treats a paragraph with no text as empty, whatever the selection does", () => {
+    expect(pasteTarget({ type: "paragraph", content: [] }, false)).toEqual({
+      type: "paragraph",
+      empty: true,
+    });
     expect(pasteTarget({ type: "paragraph", content: [] }, true)).toEqual({
       type: "paragraph",
       empty: true,
     });
+  });
+
+  it("treats a paragraph the selection empties as empty, and one that keeps text as not", () => {
+    // The whole paragraph is selected, so the embed replaces it.
     expect(pasteTarget({ type: "paragraph", content: text }, true)).toEqual({
       type: "paragraph",
-      empty: false,
+      empty: true,
     });
+    // Only part of it is selected, so text survives and the embed goes
+    // after the paragraph rather than over it.
     expect(pasteTarget({ type: "paragraph", content: text }, false)).toEqual({
       type: "paragraph",
-      empty: true,
+      empty: false,
     });
   });
 
@@ -229,6 +239,7 @@ describe("pasteTarget", () => {
       type: "heading",
       empty: false,
     });
+    expect(pasteTarget({ type: "heading", content: [] }, true).empty).toBe(false);
     expect(pasteTarget({ type: "codeBlock", content: [] }, true).empty).toBe(false);
   });
 });

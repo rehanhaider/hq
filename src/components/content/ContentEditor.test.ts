@@ -11,6 +11,32 @@ const addLine = source.slice(
   source.indexOf("function normalizedLink("),
 );
 
+const applyEmbedPlan = source.slice(
+  source.indexOf("function applyEmbedPlan("),
+  source.indexOf("const DefaultDropdownMenuTrigger"),
+);
+
+describe("embed plan", () => {
+  it("decides placement once, before the selection is deleted", () => {
+    // A second plan after the delete could say `ignore` and return false
+    // having already mutated, and `handleTextInput` would then insert the
+    // user's text at positions it resolved before that delete.
+    expect(applyEmbedPlan.match(/\bplan\(/g)).toHaveLength(1);
+    expect(applyEmbedPlan.indexOf("plan(text, cursor)")).toBeLessThan(
+      applyEmbedPlan.indexOf("deleteSelection()"),
+    );
+    expect(applyEmbedPlan).not.toMatch(/pasteTarget\(block, true\)/);
+  });
+
+  it("reads emptiness from a selection that covers the whole textblock", () => {
+    expect(source).toMatch(
+      /cursor = pasteTarget\(block, selectionLeavesBlockEmpty\(editor\)\)/,
+    );
+    expect(source).toMatch(/\$from\.parentOffset === 0/);
+    expect(source).toMatch(/\$to\.parentOffset === \$to\.parent\.content\.size/);
+  });
+});
+
 describe("side menu + button", () => {
   it("replaces BlockNote's add-block button, which opens the block-type menu", () => {
     expect(source).toMatch(/sideMenu=\{false\}/);

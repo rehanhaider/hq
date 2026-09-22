@@ -88,13 +88,30 @@ type NoteEditor = BlockNoteEditor<
 >;
 
 /**
+ * Whether deleting the selection would leave its paragraph with nothing in
+ * it, which is true only when the selection is the whole of one textblock's
+ * text. A selection of part of a paragraph, or one spanning two blocks,
+ * leaves text behind.
+ */
+function selectionLeavesBlockEmpty(editor: NoteEditor): boolean {
+  const { selection } = editor.prosemirrorState;
+  if (selection.empty) return false;
+  const { $from, $to } = selection;
+  if ($from.parent !== $to.parent || !$from.parent.isTextblock) return false;
+  return $from.parentOffset === 0 && $to.parentOffset === $to.parent.content.size;
+}
+
+/**
  * Puts a planned embed into the document, or reports that there was nothing
  * to plan so the caller can let the editor handle the text itself.
  *
- * A non-empty selection is deleted first, matching ordinary paste, and the
- * plan is made again on what is left: a paragraph emptied by that deletion
- * is replaced, a paragraph with text around the selection keeps its text
- * and takes the embed after it.
+ * The plan is made once, before anything is touched, on what the paragraph
+ * will hold after the selection goes: a paragraph the selection empties is
+ * replaced, a paragraph that keeps text around the selection takes the
+ * embed after it. Deciding first matters because the callers treat a false
+ * return as "the editor still owns this text" — `handleTextInput` inserts
+ * it at positions it resolved before this ran — so returning false after a
+ * mutation would drop or misplace what the user typed.
  */
 function applyEmbedPlan(
   editor: NoteEditor,
@@ -107,7 +124,7 @@ function applyEmbedPlan(
   let cursor: { type: string; empty: boolean } | null = null;
   try {
     const { block } = editor.getTextCursorPosition();
-    cursor = pasteTarget(block, editor.prosemirrorState.selection.empty);
+    cursor = pasteTarget(block, selectionLeavesBlockEmpty(editor));
   } catch {
     cursor = null;
   }
@@ -118,20 +135,18 @@ function applyEmbedPlan(
       if (!tr.selection.empty) tr.deleteSelection();
     });
     const { block } = editor.getTextCursorPosition();
-    const after = plan(planned.url, pasteTarget(block, true));
-    if (after.kind === "ignore") return false;
-    if (after.kind === "replace") {
+    if (planned.kind === "replace") {
       // replaceBlocks would drop indented children unless they travel with the embed.
       editor.replaceBlocks([block], [
         {
-          type: after.type,
-          props: { url: after.url },
+          type: planned.type,
+          props: { url: planned.url },
           children: block.children,
         },
       ]);
     } else {
       editor.insertBlocks(
-        [{ type: after.type, props: { url: after.url } }],
+        [{ type: planned.type, props: { url: planned.url } }],
         block,
         "after",
       );
