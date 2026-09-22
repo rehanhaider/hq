@@ -35,6 +35,7 @@ import {
   pasteTarget,
   planEmbedPaste,
   planEmbedTextInput,
+  uriListText,
   type EmbedBlockType,
   type EmbedPastePlan,
 } from "@/lib/embedPaste";
@@ -327,14 +328,14 @@ export function ContentEditor({
     // matcher claims, a bookmark card on an empty paragraph for anything
     // else. Mixed content and code blocks fall through so ordinary paste is
     // unchanged.
-    pasteHandler: ({ event, editor: current, defaultPasteHandler }) =>
-      applyEmbedPlan(
-        current,
-        event.clipboardData?.getData("text/plain") ||
-          event.clipboardData?.getData("text/uri-list") ||
-          "",
-        planEmbedPaste,
-      ) || defaultPasteHandler(),
+    pasteHandler: ({ event, editor: current, defaultPasteHandler }) => {
+      const plain = event.clipboardData?.getData("text/plain");
+      // Only the uri-list flavour carries `#` comment lines; a `#` in plain
+      // text is a hashtag or a heading and stays.
+      const text =
+        plain || uriListText(event.clipboardData?.getData("text/uri-list") || "");
+      return applyEmbedPlan(current, text, planEmbedPaste) || defaultPasteHandler();
+    },
     _tiptapOptions: {
       editorProps: {
         // Mobile keyboards deliver a clipboard URL as an insertion rather

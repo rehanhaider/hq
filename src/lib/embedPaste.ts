@@ -19,10 +19,23 @@ export function isEmptyParagraphContent(content: unknown): boolean {
 }
 
 /**
+ * Comment lines stripped from a `text/uri-list` payload, which is the one
+ * format that defines them (RFC 2483). Only the clipboard's `text/uri-list`
+ * flavour goes through here: in ordinary text a line opening with `#` is a
+ * hashtag or a markdown heading the user meant to keep.
+ */
+export function uriListText(data: string): string {
+  return data
+    .split(/\r?\n/)
+    .filter((line) => !line.trimStart().startsWith("#"))
+    .join("\n");
+}
+
+/**
  * The one bare token a pasted or inserted string reduces to, before any
- * matcher looks at it: the text trimmed, or the single real line of a
- * `text/uri-list`. Two or more real lines, or anything with whitespace
- * inside, means the user handed over more than a URL.
+ * matcher looks at it: the text trimmed, or its single real line. Two or
+ * more real lines, or anything with whitespace inside, means the user
+ * handed over more than a URL.
  */
 function loneToken(text: string): string | null {
   const trimmed = text.trim();
@@ -31,7 +44,7 @@ function loneToken(text: string): string | null {
   const lines = trimmed
     .split(/\r?\n/)
     .map((line) => line.trim())
-    .filter((line) => line.length > 0 && !line.startsWith("#"));
+    .filter((line) => line.length > 0);
   if (lines.length !== 1) return null;
   const line = lines[0] ?? "";
   if (/\s/.test(line)) return null;
@@ -39,8 +52,9 @@ function loneToken(text: string): string | null {
 }
 
 /**
- * Clipboard text that is one URL, possibly as a one-line `text/uri-list`.
- * Two or more real lines means the user copied more than a URL.
+ * Text that is one URL and nothing else. Two or more real lines means the
+ * user handed over more than a URL. A `text/uri-list` payload reaches this
+ * through `uriListText`, which takes its comment lines off first.
  */
 export function loneUrlFromPaste(text: string): string | null {
   const token = loneToken(text);

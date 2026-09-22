@@ -6,6 +6,7 @@ import {
   planEmbedPaste,
   planEmbedTextInput,
   multiLineInsertion,
+  uriListText,
 } from "./embedPaste";
 
 const ID = "1234567890123456789";
@@ -15,11 +16,33 @@ const LINK = "https://example.com/post?id=7";
 const REPO = "https://github.com/rehanhaider/hq";
 const VIDEO = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
 
+describe("uriListText", () => {
+  it("drops the comment lines a uri-list payload may carry", () => {
+    expect(uriListText(`# comment\n${LINK}\n`)).toBe(`${LINK}\n`);
+    expect(loneUrlFromPaste(uriListText(`# comment\n${LINK}\n`))).toBe(LINK);
+    expect(uriListText(`  # indented\n${LINK}`)).toBe(LINK);
+  });
+
+  it("leaves a payload with no comment lines as it found it", () => {
+    expect(uriListText(LINK)).toBe(LINK);
+    expect(uriListText(`${LINK}\nhttps://example.org`)).toBe(
+      `${LINK}\nhttps://example.org`,
+    );
+    expect(uriListText("")).toBe("");
+  });
+});
+
 describe("loneUrlFromPaste", () => {
-  it("accepts one http(s) URL, with whitespace or a uri-list comment around it", () => {
+  it("accepts one http(s) URL with whitespace around it", () => {
     expect(loneUrlFromPaste(`  ${LINK}  `)).toBe(LINK);
-    expect(loneUrlFromPaste(`# comment\n${LINK}\n`)).toBe(LINK);
     expect(loneUrlFromPaste("http://example.com/#frag")).toBe("http://example.com/");
+  });
+
+  it("keeps a hashtag or heading line as a second line, not a comment", () => {
+    // Only a uri-list payload has comment lines. In ordinary text the user
+    // meant to keep that line, so this is more than a URL.
+    expect(loneUrlFromPaste(`${LINK}\n#buildinpublic`)).toBeNull();
+    expect(loneUrlFromPaste(`# Heading\n${LINK}`)).toBeNull();
   });
 
   it("leaves prose, several lines, and other schemes alone", () => {
@@ -64,6 +87,16 @@ describe("planEmbedPaste", () => {
       kind: "ignore",
     });
     expect(planEmbedPaste(LINK, null)).toEqual({ kind: "ignore" });
+  });
+
+  it("leaves a URL followed by a hashtag or heading line to ordinary paste", () => {
+    // Both lines are the user's; reducing them to a card would drop one.
+    expect(
+      planEmbedPaste(`${LINK}\n#hashtag`, { type: "paragraph", empty: true }),
+    ).toEqual({ kind: "ignore" });
+    expect(
+      planEmbedPaste(`${TWEET}\n#hashtag`, { type: "paragraph", empty: true }),
+    ).toEqual({ kind: "ignore" });
   });
 
   it("does not intercept code blocks or ordinary text", () => {
@@ -130,6 +163,15 @@ describe("planEmbedTextInput", () => {
     expect(planEmbedTextInput(REPO, { type: "paragraph", empty: false })).toEqual({
       kind: "ignore",
     });
+  });
+
+  it("leaves a URL followed by a hashtag or heading line to ordinary paste", () => {
+    // The mobile insertion path reaches `pasteMarkdown` only when the plan
+    // ignores the text, so a card here would silently eat the second line.
+    expect(planEmbedTextInput("https://example.com\n#hashtag", empty)).toEqual({
+      kind: "ignore",
+    });
+    expect(planEmbedTextInput(`# Heading\n${LINK}`, empty)).toEqual({ kind: "ignore" });
   });
 
   it("reads trailing whitespace as typing, unless a media matcher claims the URL", () => {
