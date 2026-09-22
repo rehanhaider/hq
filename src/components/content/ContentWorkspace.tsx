@@ -418,6 +418,15 @@ export function ContentWorkspace() {
     [selectedId],
   );
 
+  // `loadedId` is what guards the open draft: while it still names the page
+  // in the editor, fresh detail cannot overwrite unsaved text. A navigation
+  // that is blocked has not moved the selection yet and may never move it, so
+  // the guard is dropped here, once the selection has actually changed, and
+  // never by the caller that asked to navigate.
+  useEffect(() => {
+    if (loadedId.current !== selectedId) loadedId.current = null;
+  }, [selectedId]);
+
   useEffect(() => {
     if (!detail.data) return;
     applyFreshDetail(detail.data);
@@ -550,15 +559,16 @@ export function ContentWorkspace() {
 
   const hasUnsaved =
     saveState !== "saved" || saved.current < changed.current || uploadBusy;
-  // The only drain that runs before a navigation, and every way of leaving an
-  // edited page goes through it: a row, the breadcrumb, the mobile back
-  // arrow, the browser's own back button. The navigation is held, the pending
-  // saves are drained, and the navigation then resumes on its own, so leaving
-  // normally costs nothing but the save it was going to make anyway. Only a
-  // drain that cannot succeed — a conflict, a trashed page, a page that is
-  // gone — reaches the user, as the dialog below. The drains that remain
-  // elsewhere are not about leaving: trashing a page persists its text before
-  // the page goes, and the failed-save banner retries on demand.
+  // The only drain that exists for the sake of leaving, and every way of
+  // leaving an edited page goes through it: a row, the breadcrumb, the mobile
+  // back arrow, the browser's own back button. The navigation is held, the
+  // pending saves are drained, and the navigation then resumes on its own, so
+  // leaving normally costs nothing but the save it was going to make anyway.
+  // Only a drain that cannot succeed — a conflict, a trashed page, a page
+  // that is gone — reaches the user, as the dialog below. The drains
+  // elsewhere guard a mutation rather than a navigation: creating, trashing
+  // and deleting all need the page's text persisted and its revision current
+  // before they run, and the failed-save banner retries on demand.
   const blocker = useBlocker({
     shouldBlockFn: ({ current, next }) => {
       const currentPage = (current.search as { page?: string }).page;
@@ -950,12 +960,15 @@ export function ContentWorkspace() {
   // navigation, drains, and resumes it.
   const selectPage = async (page: string | undefined) => {
     if (recoveringRef.current || page === selectedId) return;
-    loadedId.current = null;
     await navigate({ to: "/content", search: { ...search, page } });
   };
 
   const addPage = async (parentId: string | null) => {
     if (recoveringRef.current) return;
+    // This drain guards the creation, not the navigation that follows it: a
+    // page created here and then never reached, because the user chose to
+    // stay with a save that failed, would be an orphan in the index.
+    if (!(await drain())) return;
     try {
       const created = await createPage({ data: { title: "", parentId } });
       queryClient.setQueryData(contentKeys.detail(created.id), created);
@@ -963,7 +976,6 @@ export function ContentWorkspace() {
       // A move in flight shadows the list with its optimistic order; drop the
       // overlay so the created page is not hidden until that move lands.
       setLocalPages(null);
-      loadedId.current = null;
       setActionError("");
       await navigate({
         to: "/content",
@@ -974,8 +986,8 @@ export function ContentWorkspace() {
     }
   };
 
-  // The top bar's New page runs this flow so the list overlay is cleared
-  // before the created page opens; the blocker saves the page being left.
+  // The top bar's New page runs this flow so pending edits are saved before
+  // the page is created and the list overlay is cleared before it opens.
   const addPageRef = useRef(addPage);
   addPageRef.current = addPage;
   const setPageCreator = useUI((state) => state.setPageCreator);

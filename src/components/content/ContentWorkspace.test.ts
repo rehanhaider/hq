@@ -297,14 +297,27 @@ describe("Content leaving a page with unsaved text", () => {
     );
   });
 
-  it("leaves the drain to the blocker: nothing else saves before navigating", () => {
+  it("leaves the drain to the blocker and keeps the draft guarded meanwhile", () => {
     const select = source.slice(
       source.indexOf("const selectPage ="),
+      source.indexOf("const addPage ="),
+    );
+    expect(select).toMatch(
+      /const selectPage = async \(page: string \| undefined\) => \{\s+if \(recoveringRef\.current \|\| page === selectedId\) return;\s+await navigate\(/,
+    );
+    expect(select).not.toMatch(/drain\(\)/);
+    // A blocked navigation has not moved the selection and may never move it,
+    // so the caller must not drop the guard that stops fresh detail from
+    // overwriting the unsaved draft. Only an actual selection change does.
+    expect(select).not.toMatch(/loadedId/);
+    expect(source).toMatch(
+      /useEffect\(\(\) => \{\s+if \(loadedId\.current !== selectedId\) loadedId\.current = null;\s+\}, \[selectedId\]\);/,
+    );
+    const add = source.slice(
+      source.indexOf("const addPage ="),
       source.indexOf("const addPageRef"),
     );
-    expect(select).toMatch(/const selectPage = async \(page: string \| undefined\) => \{\s+if \(recoveringRef\.current \|\| page === selectedId\) return;\s+loadedId\.current = null;\s+await navigate\(/);
-    // selectPage and addPage both navigate; neither drains on the way.
-    expect(select).not.toMatch(/drain\(\)/);
+    expect(add).not.toMatch(/loadedId/);
     // The mobile back arrow and the empty-state link go through selectPage,
     // so they are blocked and drained like every other way out.
     expect(source).toMatch(
@@ -312,7 +325,15 @@ describe("Content leaving a page with unsaved text", () => {
     );
   });
 
-  it("keeps the drains that are not about leaving", () => {
+  it("keeps the drains that guard a mutation rather than a navigation", () => {
+    // A page created and then never reached, because the user stayed with a
+    // failed save, would be an orphan in the index.
+    const add = source.slice(
+      source.indexOf("const addPage ="),
+      source.indexOf("const addPageRef"),
+    );
+    expect(add.indexOf("await drain()")).toBeLessThan(add.indexOf("await createPage("));
+    expect(add).toMatch(/if \(!\(await drain\(\)\)\) return;/);
     // Trashing persists the page's text before the page goes, and needs a
     // current revision to trash against.
     const confirm = source.slice(source.indexOf("const confirmIndexDelete"));
