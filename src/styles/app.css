@@ -234,16 +234,10 @@
   [data-theme="dark"] .card {
     border-color: transparent;
   }
-  /* The HQ mark: a ring of the three module colours around the rail's own
-     surface. */
+  /* The HQ mark: a solid emerald ring around the rail's own surface. One
+     colour, no blend, and it stays emerald on every module's pages. */
   .brand-mark {
-    background: conic-gradient(
-      from 200deg,
-      var(--nasr),
-      var(--content),
-      var(--github),
-      var(--nasr)
-    );
+    background: var(--nasr);
   }
   /* Content read in place, grouped by a rule and air rather than a box. */
   .section {
