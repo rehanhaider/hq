@@ -1398,7 +1398,7 @@ function PageIndexLink({
       draggable={false}
       className="flex min-h-10 min-w-0 flex-1 items-center gap-2 rounded-lg px-2 text-left text-sm hover:bg-muted aria-[current=page]:bg-accent aria-[current=page]:font-medium"
       aria-current={selected ? "page" : undefined}
-      aria-disabled={disabled || undefined}
+      disabled={disabled}
       onClick={(event) => {
         // A modified click belongs to the browser: open in a new tab or
         // window, never a same-tab navigation.

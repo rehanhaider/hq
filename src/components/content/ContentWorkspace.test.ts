@@ -254,6 +254,11 @@ describe("Content page index rows", () => {
     expect(row).toMatch(/event\.preventDefault\(\);\n\s+if \(disabled\) return;\n\s+onSelect\(page\.id\);/);
   });
 
+  it("disables the link itself during recovery so no href or preload remains", () => {
+    expect(row).toMatch(/disabled=\{disabled\}/);
+    expect(row).not.toMatch(/aria-disabled/);
+  });
+
   it("stops the native link drag so a row can still be reordered", () => {
     expect(row).toMatch(/draggable=\{false\}/);
   });
