@@ -225,10 +225,37 @@ describe("Content page title save", () => {
 
 describe("Content page index icons", () => {
   it("draws every row from the list the page itself is typed by", () => {
-    const button = source.slice(source.indexOf("function PageIndexButton"));
-    expect(button).toMatch(/<PageIcon page=\{page\} properties=\{properties\} \/>/);
+    const row = source.slice(source.indexOf("function PageIndexLink"));
+    expect(row).toMatch(/<PageIcon page=\{page\} properties=\{properties\} \/>/);
     // The open page's icon follows the picker before the list is refetched.
     expect(source).toMatch(/subpageTypeId: draft\.subpageTypeId/);
+  });
+});
+
+describe("Content page index rows", () => {
+  const row = source.slice(
+    source.indexOf("function PageIndexLink"),
+    source.indexOf("function CollapseToggle"),
+  );
+
+  it("renders each row as a link so a click before hydration navigates", () => {
+    expect(row).toMatch(/<Link\n\s+to="\/content"/);
+    expect(row).toMatch(/search=\{\(prev\) => \(\{ \.\.\.prev, page: page\.id \}\)\}/);
+    expect(row).toMatch(/preload="intent"/);
+    expect(row).not.toMatch(/<button/);
+  });
+
+  it("keeps the selected row marked as the current page", () => {
+    expect(row).toMatch(/aria-current=\{selected \? "page" : undefined\}/);
+  });
+
+  it("hands a modified click back to the browser and drains the rest", () => {
+    expect(row).toMatch(/event\.metaKey/);
+    expect(row).toMatch(/event\.preventDefault\(\);\n\s+if \(disabled\) return;\n\s+onSelect\(page\.id\);/);
+  });
+
+  it("stops the native link drag so a row can still be reordered", () => {
+    expect(row).toMatch(/draggable=\{false\}/);
   });
 });
 
