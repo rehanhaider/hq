@@ -22,9 +22,13 @@ describe("embed plan", () => {
     // having already mutated, and `handleTextInput` would then insert the
     // user's text at positions it resolved before that delete.
     expect(applyEmbedPlan.match(/\bplan\(/g)).toHaveLength(1);
-    expect(applyEmbedPlan.indexOf("plan(text, cursor)")).toBeLessThan(
-      applyEmbedPlan.indexOf("deleteSelection()"),
-    );
+    // Both must be present, or `indexOf` returns -1 and the ordering below
+    // passes on two absent strings.
+    const planned = applyEmbedPlan.indexOf("plan(text, cursor)");
+    const deleted = applyEmbedPlan.indexOf("deleteSelection()");
+    expect(planned).toBeGreaterThanOrEqual(0);
+    expect(deleted).toBeGreaterThanOrEqual(0);
+    expect(planned).toBeLessThan(deleted);
     expect(applyEmbedPlan).not.toMatch(/pasteTarget\(block, true\)/);
   });
 
@@ -38,6 +42,12 @@ describe("embed plan", () => {
     // delete merges what it crosses, so only the ends say what survives.
     expect(source).not.toMatch(/\$from\.parent !== \$to\.parent/);
     expect(source).toMatch(/if \(selection\.empty\) return null;/);
+    // Select-all resolves both ends to the document, so the textblock guard
+    // has to stand aside or the card never replaces the emptied block.
+    expect(source).toMatch(
+      /const spansDocument = \$from\.depth === 0 && \$to\.depth === 0;/,
+    );
+    expect(source).toMatch(/if \(!spansDocument && \(!\$from\.parent\.isTextblock/);
   });
 });
 

@@ -93,18 +93,26 @@ type NoteEditor = BlockNoteEditor<
  *
  * The test is the offsets at both ends, not which blocks they sit in, so it
  * holds across a block boundary — `deleteSelection` merges what it crosses,
- * and only text outside the selection survives that merge. Three cases
+ * and only text outside the selection survives that merge. Four cases
  * follow: the whole of one textblock is empty afterwards; a selection from
  * the very start of one block to the very end of another leaves a single
- * empty block, so the card still lands; anything else — part of a block,
- * part of a block across a boundary, a node selection — leaves text behind
- * and is not empty, however blank the caret's own block looks.
+ * empty block, so the card still lands; select-all is the same answer by
+ * the same measure, its ends resolving to the document rather than to any
+ * textblock; anything else — part of a block, part of a block across a
+ * boundary, a node selection — leaves text behind and is not empty, however
+ * blank the caret's own block looks.
  */
 function selectionLeavesBlockEmpty(editor: NoteEditor): boolean | null {
   const { selection } = editor.prosemirrorState;
   if (selection.empty) return null;
   const { $from, $to } = selection;
-  if (!$from.parent.isTextblock || !$to.parent.isTextblock) return false;
+  // Ctrl/Cmd+A spans the document itself, so both ends sit at depth 0 with
+  // the document as their parent and the offset test below still reads
+  // true. Every other selection has to end inside text for the offsets to
+  // mean anything.
+  const spansDocument = $from.depth === 0 && $to.depth === 0;
+  if (!spansDocument && (!$from.parent.isTextblock || !$to.parent.isTextblock))
+    return false;
   return $from.parentOffset === 0 && $to.parentOffset === $to.parent.content.size;
 }
 
