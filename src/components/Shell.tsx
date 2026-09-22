@@ -189,8 +189,10 @@ export function Shell() {
             onClick={() => setMobileOpen(false)}
             className="flex min-w-0 flex-1 items-center gap-3"
           >
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary font-mono text-xs font-semibold text-primary-foreground">
-              hq
+            <span className="brand-mark flex size-8 shrink-0 items-center justify-center rounded-lg">
+              <span className="flex size-6 items-center justify-center rounded-[7px] bg-sidebar font-mono text-xs font-bold tracking-[-0.04em] text-foreground">
+                hq
+              </span>
             </span>
             <span className={labelClass}>
               <span className="block text-sm font-semibold">HQ</span>
@@ -331,7 +333,10 @@ export function Shell() {
                 Content registers its own handler so unsaved edits are flushed
                 before the new page opens. */}
             <div className="ml-auto flex items-center gap-2">
+              {/* Neutral on every page: it starts a page anywhere, so it
+                  does not take the module's colour. */}
               <Button
+                className="bg-foreground text-background hover:bg-foreground/85"
                 disabled={creating}
                 onClick={() => {
                   setCreating(true);
