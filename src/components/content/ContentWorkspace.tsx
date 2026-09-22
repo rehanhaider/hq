@@ -418,6 +418,15 @@ export function ContentWorkspace() {
     [selectedId],
   );
 
+  // `loadedId` is what guards the open draft: while it still names the page
+  // in the editor, fresh detail cannot overwrite unsaved text. A navigation
+  // that is blocked has not moved the selection yet and may never move it, so
+  // the guard is dropped here, once the selection has actually changed, and
+  // never by the caller that asked to navigate.
+  useEffect(() => {
+    if (loadedId.current !== selectedId) loadedId.current = null;
+  }, [selectedId]);
+
   useEffect(() => {
     if (!detail.data) return;
     applyFreshDetail(detail.data);
@@ -550,6 +559,16 @@ export function ContentWorkspace() {
 
   const hasUnsaved =
     saveState !== "saved" || saved.current < changed.current || uploadBusy;
+  // The only drain that exists for the sake of leaving, and every way of
+  // leaving an edited page goes through it: a row, the breadcrumb, the mobile
+  // back arrow, the browser's own back button. The navigation is held, the
+  // pending saves are drained, and the navigation then resumes on its own, so
+  // leaving normally costs nothing but the save it was going to make anyway.
+  // Only a drain that cannot succeed — a conflict, a trashed page, a page
+  // that is gone — reaches the user, as the dialog below. The drains
+  // elsewhere guard a mutation rather than a navigation: creating, trashing
+  // and deleting all need the page's text persisted and its revision current
+  // before they run, and the failed-save banner retries on demand.
   const blocker = useBlocker({
     shouldBlockFn: ({ current, next }) => {
       const currentPage = (current.search as { page?: string }).page;
@@ -559,6 +578,39 @@ export function ContentWorkspace() {
     enableBeforeUnload: () => hasUnsaved,
     withResolver: true,
   });
+  const [drainFailed, setDrainFailed] = useState(false);
+  // The blocked resolver this component is draining for. It is the identity
+  // of the attempt: a drain whose block has since been resolved, superseded
+  // by a later one, or unmounted must not resume a navigation that is no
+  // longer the one it was saving for.
+  const drainAttempt = useRef<unknown>(null);
+  useEffect(() => () => {
+    drainAttempt.current = null;
+  }, []);
+  useEffect(() => {
+    if (blocker.status !== "blocked") {
+      drainAttempt.current = null;
+      setDrainFailed(false);
+      return;
+    }
+    if (drainAttempt.current === blocker) return;
+    // A save that already failed would only fail the same way again, and the
+    // recovery flow owns the draft while it runs. Ask instead.
+    if (saveConflict || saveUnavailable || recovering) {
+      setDrainFailed(true);
+      return;
+    }
+    const proceed = blocker.proceed;
+    drainAttempt.current = blocker;
+    void drain().then((saved) => {
+      if (drainAttempt.current !== blocker) return;
+      // `proceed` resolves the very navigation that was held, so it runs
+      // without consulting shouldBlockFn again and cannot re-block on the
+      // `hasUnsaved` this render still sees.
+      if (saved) proceed();
+      else setDrainFailed(true);
+    });
+  }, [blocker, drain, recovering, saveConflict, saveUnavailable]);
 
   // The server already searched titles and body text, so only the property
   // filters are applied here. Filtering flattens the tree: a match whose parent
@@ -903,15 +955,19 @@ export function ContentWorkspace() {
       return null;
     }
   };
+  // Navigation only. Pending edits are the blocker's business, so this and
+  // the page rows leave a page the same way: the blocker holds the
+  // navigation, drains, and resumes it.
   const selectPage = async (page: string | undefined) => {
     if (recoveringRef.current || page === selectedId) return;
-    if (!(await drain())) return;
-    loadedId.current = null;
     await navigate({ to: "/content", search: { ...search, page } });
   };
 
   const addPage = async (parentId: string | null) => {
     if (recoveringRef.current) return;
+    // This drain guards the creation, not the navigation that follows it: a
+    // page created here and then never reached, because the user chose to
+    // stay with a save that failed, would be an orphan in the index.
     if (!(await drain())) return;
     try {
       const created = await createPage({ data: { title: "", parentId } });
@@ -920,7 +976,6 @@ export function ContentWorkspace() {
       // A move in flight shadows the list with its optimistic order; drop the
       // overlay so the created page is not hidden until that move lands.
       setLocalPages(null);
-      loadedId.current = null;
       setActionError("");
       await navigate({
         to: "/content",
@@ -931,8 +986,8 @@ export function ContentWorkspace() {
     }
   };
 
-  // The top bar's New page runs this flow so pending edits are saved and the
-  // list overlay is cleared before the created page opens.
+  // The top bar's New page runs this flow so pending edits are saved before
+  // the page is created and the list overlay is cleared before it opens.
   const addPageRef = useRef(addPage);
   addPageRef.current = addPage;
   const setPageCreator = useUI((state) => state.setPageCreator);
@@ -1052,7 +1107,6 @@ export function ContentWorkspace() {
                       showCollapse={!searching}
                       collapsed={collapsed}
                       onToggleCollapsed={toggleCollapsed}
-                      onSelect={(id) => void selectPage(id)}
                       onCreateSubpage={(id) => void addPage(id)}
                       onFilterTree={filterToTree}
                       onSetPinned={setPinned}
@@ -1076,7 +1130,6 @@ export function ContentWorkspace() {
                       disabled={recovering}
                       collapsed={collapsed}
                       onToggleCollapsed={toggleCollapsed}
-                      onSelect={(id) => void selectPage(id)}
                       onCreateSubpage={(id) => void addPage(id)}
                       onFilterTree={filterToTree}
                       onSetPinned={setPinned}
@@ -1093,7 +1146,6 @@ export function ContentWorkspace() {
                         hasChildren={false}
                         collapsed={false}
                         onToggleCollapsed={toggleCollapsed}
-                        onSelect={(id) => void selectPage(id)}
                         onCreateSubpage={(id) => void addPage(id)}
                         onFilterTree={filterToTree}
                         onSetPinned={setPinned}
@@ -1125,7 +1177,6 @@ export function ContentWorkspace() {
                   showCollapse={!searching}
                   collapsed={collapsed}
                   onToggleCollapsed={toggleCollapsed}
-                  onSelect={(id) => void selectPage(id)}
                   onCreateSubpage={(id) => void addPage(id)}
                   onFilterTree={filterToTree}
                   onSetPinned={setPinned}
@@ -1342,7 +1393,7 @@ export function ContentWorkspace() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <Dialog open={blocker.status === "blocked"} onOpenChange={(open) => { if (!open && blocker.status === "blocked") blocker.reset(); }}>
+      <Dialog open={blocker.status === "blocked" && drainFailed} onOpenChange={(open) => { if (!open && blocker.status === "blocked") blocker.reset(); }}>
         <DialogContent showCloseButton={false}>
           <DialogHeader>
             <DialogTitle>Save this page before leaving?</DialogTitle>
@@ -1371,24 +1422,24 @@ export function ContentWorkspace() {
 }
 
 /**
- * The row is an anchor, not a button, so a click that lands before hydration
- * is a real navigation the browser performs instead of an event React never
- * hears. Once hydrated the click is taken over here so pending editor saves
- * still drain before the page changes. `draggable={false}` keeps the native
- * link drag from stealing the pointer dnd-kit needs to reorder.
+ * The row is a plain anchor with nothing layered on top of it: a click that
+ * lands before hydration is a real navigation the browser performs, and a
+ * click after hydration is an ordinary router navigation. Pending editor
+ * saves are not this row's problem — the blocker in ContentWorkspace holds
+ * any navigation away from unsaved text and drains it first, so a modified
+ * click reaches the browser untouched as well. `draggable={false}` keeps the
+ * native link drag from stealing the pointer dnd-kit needs to reorder.
  */
 function PageIndexLink({
   page,
   properties,
   selected,
   disabled,
-  onSelect,
 }: {
   page: ContentPage;
   properties: ContentProperties;
   selected: boolean;
   disabled: boolean;
-  onSelect: (id: string) => void;
 }) {
   return (
     <Link
@@ -1399,21 +1450,6 @@ function PageIndexLink({
       className="flex min-h-10 min-w-0 flex-1 items-center gap-2 rounded-lg px-2 text-left text-sm hover:bg-muted aria-[current=page]:bg-accent aria-[current=page]:font-medium"
       aria-current={selected ? "page" : undefined}
       disabled={disabled}
-      onClick={(event) => {
-        // A modified click belongs to the browser: open in a new tab or
-        // window, never a same-tab navigation.
-        if (
-          event.button !== 0 ||
-          event.metaKey ||
-          event.ctrlKey ||
-          event.shiftKey ||
-          event.altKey
-        )
-          return;
-        event.preventDefault();
-        if (disabled) return;
-        onSelect(page.id);
-      }}
     >
       <PageIcon page={page} properties={properties} />
       <span className="truncate">{displayPageTitle(page.title)}</span>
@@ -1527,7 +1563,6 @@ function PageIndexRow({
   hasChildren,
   collapsed,
   onToggleCollapsed,
-  onSelect,
   onCreateSubpage,
   onFilterTree,
   onSetPinned,
@@ -1541,7 +1576,6 @@ function PageIndexRow({
   hasChildren: boolean;
   collapsed: boolean;
   onToggleCollapsed: (id: string) => void;
-  onSelect: (id: string) => void;
   onCreateSubpage: (id: string) => void;
   onFilterTree: (id: string) => void;
   onSetPinned: (id: string, pinned: boolean) => void;
@@ -1572,7 +1606,6 @@ function PageIndexRow({
           properties={properties}
           selected={selected}
           disabled={disabled}
-          onSelect={onSelect}
         />
       </div>
     </PageContextMenu>
@@ -1588,7 +1621,6 @@ function PageIndexList({
   showCollapse,
   collapsed,
   onToggleCollapsed,
-  onSelect,
   onCreateSubpage,
   onFilterTree,
   onSetPinned,
@@ -1602,7 +1634,6 @@ function PageIndexList({
   showCollapse: boolean;
   collapsed: ReadonlySet<string>;
   onToggleCollapsed: (id: string) => void;
-  onSelect: (id: string) => void;
   onCreateSubpage: (id: string) => void;
   onFilterTree: (id: string) => void;
   onSetPinned: (id: string, pinned: boolean) => void;
@@ -1624,7 +1655,6 @@ function PageIndexList({
             hasChildren={hasChildren}
             collapsed={collapsed.has(page.id)}
             onToggleCollapsed={onToggleCollapsed}
-            onSelect={onSelect}
             onCreateSubpage={onCreateSubpage}
             onFilterTree={onFilterTree}
             onSetPinned={onSetPinned}
@@ -1652,7 +1682,6 @@ function SortableGroup({
   disabled,
   collapsed,
   onToggleCollapsed,
-  onSelect,
   onCreateSubpage,
   onFilterTree,
   onSetPinned,
@@ -1666,7 +1695,6 @@ function SortableGroup({
   disabled: boolean;
   collapsed: ReadonlySet<string>;
   onToggleCollapsed: (id: string) => void;
-  onSelect: (id: string) => void;
   onCreateSubpage: (id: string) => void;
   onFilterTree: (id: string) => void;
   onSetPinned: (id: string, pinned: boolean) => void;
@@ -1687,7 +1715,6 @@ function SortableGroup({
         disabled={disabled}
         collapsed={collapsed}
         onToggleCollapsed={onToggleCollapsed}
-        onSelect={onSelect}
         onCreateSubpage={onCreateSubpage}
         onFilterTree={onFilterTree}
         onSetPinned={onSetPinned}
@@ -1702,7 +1729,6 @@ function SortableGroup({
         disabled={disabled}
         collapsed={collapsed}
         onToggleCollapsed={onToggleCollapsed}
-        onSelect={onSelect}
         onCreateSubpage={onCreateSubpage}
         onFilterTree={onFilterTree}
         onSetPinned={onSetPinned}
@@ -1721,7 +1747,6 @@ function SortableSiblingList({
   disabled,
   collapsed,
   onToggleCollapsed,
-  onSelect,
   onCreateSubpage,
   onFilterTree,
   onSetPinned,
@@ -1735,7 +1760,6 @@ function SortableSiblingList({
   disabled: boolean;
   collapsed: ReadonlySet<string>;
   onToggleCollapsed: (id: string) => void;
-  onSelect: (id: string) => void;
   onCreateSubpage: (id: string) => void;
   onFilterTree: (id: string) => void;
   onSetPinned: (id: string, pinned: boolean) => void;
@@ -1756,7 +1780,6 @@ function SortableSiblingList({
           hasChildren={(tree.children.get(page.id)?.length ?? 0) > 0}
           collapsed={collapsed.has(page.id)}
           onToggleCollapsed={onToggleCollapsed}
-          onSelect={onSelect}
           onCreateSubpage={onCreateSubpage}
           onFilterTree={onFilterTree}
           onSetPinned={onSetPinned}
@@ -1772,7 +1795,6 @@ function SortableSiblingList({
               disabled={disabled}
               collapsed={collapsed}
               onToggleCollapsed={onToggleCollapsed}
-              onSelect={onSelect}
               onCreateSubpage={onCreateSubpage}
               onFilterTree={onFilterTree}
               onSetPinned={onSetPinned}
@@ -1795,7 +1817,6 @@ function SortablePageRow({
   hasChildren,
   collapsed,
   onToggleCollapsed,
-  onSelect,
   onCreateSubpage,
   onFilterTree,
   onSetPinned,
@@ -1812,7 +1833,6 @@ function SortablePageRow({
   hasChildren: boolean;
   collapsed: boolean;
   onToggleCollapsed: (id: string) => void;
-  onSelect: (id: string) => void;
   onCreateSubpage: (id: string) => void;
   onFilterTree: (id: string) => void;
   onSetPinned: (id: string, pinned: boolean) => void;
@@ -1869,7 +1889,6 @@ function SortablePageRow({
               properties={properties}
               selected={selected}
               disabled={disabled}
-              onSelect={onSelect}
             />
           </div>
         </div>
