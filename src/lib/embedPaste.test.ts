@@ -12,6 +12,8 @@ const ID = "1234567890123456789";
 const TWEET = `https://x.com/alice/status/${ID}`;
 const CANONICAL = `https://x.com/i/web/status/${ID}`;
 const LINK = "https://example.com/post?id=7";
+const REPO = "https://github.com/rehanhaider/hq";
+const VIDEO = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
 
 describe("loneUrlFromPaste", () => {
   it("accepts one http(s) URL, with whitespace or a uri-list comment around it", () => {
@@ -118,9 +120,34 @@ describe("planEmbedTextInput", () => {
     });
   });
 
-  it("leaves every other URL to the paste path", () => {
-    expect(planEmbedTextInput(LINK, empty)).toEqual({ kind: "ignore" });
-    expect(planEmbedTextInput("https://x.com/alice", empty)).toEqual({ kind: "ignore" });
+  it("turns every other lone URL into a bookmark, on an empty paragraph only", () => {
+    for (const url of [LINK, REPO, VIDEO, "https://x.com/alice"])
+      expect(planEmbedTextInput(url, empty)).toEqual({
+        kind: "replace",
+        type: "bookmark",
+        url,
+      });
+    expect(planEmbedTextInput(REPO, { type: "paragraph", empty: false })).toEqual({
+      kind: "ignore",
+    });
+  });
+
+  it("reads a trailing space as typing, unless a media matcher claims the URL", () => {
+    // A word committed with the space bar; a clipboard or share-sheet
+    // insert never carries one.
+    expect(planEmbedTextInput(`${LINK} `, empty)).toEqual({ kind: "ignore" });
+    expect(planEmbedTextInput("https://example.com ", empty)).toEqual({ kind: "ignore" });
+    expect(planEmbedTextInput(`${TWEET} `, empty)).toEqual({
+      kind: "replace",
+      type: "tweet",
+      url: CANONICAL,
+    });
+    // A trailing newline is a form a phone does hand over.
+    expect(planEmbedTextInput(`${LINK}\n`, empty)).toEqual({
+      kind: "replace",
+      type: "bookmark",
+      url: LINK,
+    });
   });
 });
 

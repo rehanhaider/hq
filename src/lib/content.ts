@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { tweetStatusUrl } from "./tweet";
+import { EMBED_BLOCK_TYPES, embedMatchers } from "./embedPaste";
 import { linkPreviewUrl } from "./linkPreview";
 
 export type JsonValue =
@@ -275,13 +275,12 @@ const supportedBlockTypes = new Set([
   "image",
   "video",
   "file",
-  "tweet",
-  "bookmark",
+  ...EMBED_BLOCK_TYPES,
 ]);
 /** Blocks that hold a file rather than text: no inline content, a url instead. */
 const fileBlockTypes = new Set(["image", "video", "file"]);
 /** Blocks that hold a URL drawn as a card: no inline content either. */
-const embedBlockTypes = new Set(["tweet", "bookmark"]);
+const embedBlockTypes = new Set<string>(EMBED_BLOCK_TYPES);
 const alignments = new Set(["left", "center", "right", "justify"]);
 const allowedProtocols = new Set(["http:", "https:", "mailto:", "tel:"]);
 
@@ -384,9 +383,14 @@ function validateFileProps(type: string, value: Record<string, unknown>) {
 
 function validateEmbedProps(type: string, value: Record<string, unknown>) {
   if (!hasOnlyKeys(value, ["url", "textAlignment"])) return false;
-  if (typeof value.url !== "string") return false;
-  if (type === "tweet" && tweetStatusUrl(value.url) === null) return false;
-  if (type === "bookmark" && linkPreviewUrl(value.url) === null) return false;
+  const url = value.url;
+  if (typeof url !== "string") return false;
+  // A media embed answers for its own URLs; bookmark takes what is left, so
+  // any URL a card may link to passes.
+  const matcher = embedMatchers.find((entry) => entry.type === type);
+  if (matcher) {
+    if (matcher.match(url) === null) return false;
+  } else if (linkPreviewUrl(url) === null) return false;
   if (
     "textAlignment" in value &&
     (typeof value.textAlignment !== "string" || !alignments.has(value.textAlignment))

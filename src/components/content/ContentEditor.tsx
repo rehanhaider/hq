@@ -35,6 +35,7 @@ import {
   pasteTarget,
   planEmbedPaste,
   planEmbedTextInput,
+  type EmbedBlockType,
   type EmbedPastePlan,
 } from "@/lib/embedPaste";
 import { MAX_UPLOAD_BYTES, formatBytes, uploadRejection } from "@/lib/uploads";
@@ -60,11 +61,20 @@ const {
 } = defaultBlockSpecs;
 const { bold, italic, underline } = defaultStyleSpecs;
 
+/**
+ * A block for every type the paste planner can produce, keyed by that type,
+ * so a card the planner knows about but the schema does not is a compile
+ * error rather than a paste that silently drops its block.
+ */
+const embedBlockSpecs = {
+  tweet: tweetBlock(),
+  bookmark: bookmarkBlock(),
+} satisfies Record<EmbedBlockType, unknown>;
+
 const noteSchema = BlockNoteSchema.create({
   blockSpecs: {
     ...noteBlockSpecs,
-    tweet: tweetBlock(),
-    bookmark: bookmarkBlock(),
+    ...embedBlockSpecs,
   },
   inlineContentSpecs: defaultInlineContentSpecs,
   styleSpecs: { bold, italic, underline },
@@ -313,9 +323,10 @@ export function ContentEditor({
     },
     uploadFile,
     defaultStyles: true,
-    // A clipboard that is only a URL becomes an embed: a tweet block for a
-    // tweet, a bookmark card on an empty paragraph for anything else. Mixed
-    // content and code blocks fall through so ordinary paste is unchanged.
+    // A clipboard that is only a URL becomes an embed: the block its own
+    // matcher claims, a bookmark card on an empty paragraph for anything
+    // else. Mixed content and code blocks fall through so ordinary paste is
+    // unchanged.
     pasteHandler: ({ event, editor: current, defaultPasteHandler }) =>
       applyEmbedPlan(
         current,
@@ -327,9 +338,10 @@ export function ContentEditor({
     _tiptapOptions: {
       editorProps: {
         // Mobile keyboards deliver a clipboard URL as an insertion rather
-        // than a paste event, so `pasteHandler` above never runs and the
-        // tweet stays a bare link. ProseMirror reads such an insertion —
-        // whether it reaches it as `beforeinput` or as a DOM change — here.
+        // than a paste event, so `pasteHandler` above never runs and the URL
+        // stays a bare link. ProseMirror reads such an insertion — whether it
+        // reaches it as `beforeinput` or as a DOM change — here, and the
+        // planner sorts an insert from typing.
         handleTextInput: (_view, _from, _to, text) => {
           const current = editorRef.current;
           return current
@@ -350,8 +362,8 @@ export function ContentEditor({
             );
             if (!current || text === null) return false;
             event.preventDefault();
-            // A lone tweet URL with a trailing newline is one of the forms
-            // a phone hands over, so the embed plan gets first refusal.
+            // A lone URL with a trailing newline is one of the forms a phone
+            // hands over, so the embed plan gets first refusal.
             if (applyEmbedPlan(current, text, planEmbedTextInput)) return true;
             let inCodeBlock = false;
             try {
