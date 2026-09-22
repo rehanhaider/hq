@@ -39,10 +39,6 @@ const useIsomorphicLayoutEffect =
 
 export function Shell() {
   const { pathname } = useLocation();
-  // Each module has its own colour; the stylesheet keys it off this.
-  const pageModule = (["nasr", "content", "github"] as const).find(
-    (module) => pathname === `/${module}` || pathname.startsWith(`/${module}/`),
-  );
   const drawer = useRef<HTMLElement>(null);
   const mobileTrigger = useRef<HTMLButtonElement>(null);
   const wasMobileOpen = useRef(false);
@@ -64,7 +60,7 @@ export function Shell() {
     return () => desktop.removeEventListener("change", close);
   }, []);
   const navClass =
-    "flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground aria-[current=page]:text-foreground md:min-h-10";
+    "flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground aria-[current=page]:bg-sidebar-accent aria-[current=page]:text-foreground md:min-h-10";
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const expanded = sidebarOpen;
   // Stable hook for the first-paint stylesheet, which hides these labels
@@ -231,29 +227,13 @@ export function Shell() {
         >
           {[
             { to: "/" as const, title: "Home", icon: House },
-            {
-              to: "/nasr" as const,
-              title: "Nasr",
-              icon: MoonStar,
-              module: "nasr",
-            },
-            {
-              to: "/content" as const,
-              title: "Content",
-              icon: PenLine,
-              module: "content",
-            },
-            {
-              to: "/github" as const,
-              title: "GitHub",
-              icon: GitHub,
-              module: "github",
-            },
-          ].map(({ to, title, icon: Icon, module }) => (
+            { to: "/nasr" as const, title: "Nasr", icon: MoonStar },
+            { to: "/content" as const, title: "Content", icon: PenLine },
+            { to: "/github" as const, title: "GitHub", icon: GitHub },
+          ].map(({ to, title, icon: Icon }) => (
             <Link
               key={to}
               to={to}
-              data-module={module}
               search={
                 to === "/github"
                   ? defaultFilters()
@@ -272,12 +252,10 @@ export function Shell() {
                   ? "page"
                   : undefined
               }
-              className={`${navClass} ${module ? "aria-[current=page]:bg-primary/15" : "aria-[current=page]:bg-sidebar-accent"}`}
+              className={navClass}
               onClick={() => setMobileOpen(false)}
             >
-              <Icon
-                className={`size-4.5 shrink-0 ${module ? "text-primary" : ""}`}
-              />
+              <Icon className="size-4.5 shrink-0" />
               <span className={labelClass}>{title}</span>
             </Link>
           ))}
@@ -306,7 +284,6 @@ export function Shell() {
       </aside>
       <div
         inert={mobileOpen}
-        data-module={pageModule}
         className={`sidebar-offset min-h-dvh min-w-0 transition-[margin] duration-150 motion-reduce:transition-none ${sidebarOpen ? "md:ml-64" : "md:ml-14"}`}
       >
         <div className="sticky top-0 z-10 bg-background/95 backdrop-blur">
