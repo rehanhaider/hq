@@ -141,11 +141,7 @@ function HomePage() {
       </header>
 
       <div className="grid items-stretch gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1.1fr)] lg:gap-8">
-        <section
-          className="card flex flex-col p-5"
-          data-module="nasr"
-          aria-labelledby="nasr-heading"
-        >
+        <section className="card flex flex-col p-5" aria-labelledby="nasr-heading">
           <div className="flex items-center justify-between gap-3">
             <h2 id="nasr-heading" className="section-title">
               Nasr
@@ -413,7 +409,6 @@ function HomePage() {
             "card p-5",
             chart ? "flex min-h-[18rem] flex-col" : "self-start",
           )}
-          data-module="github"
           aria-labelledby="code-heading"
         >
           <div className="flex items-center justify-between gap-3">
@@ -514,11 +509,7 @@ function HomePage() {
         </section>
       </div>
 
-      <section
-        className="card p-5"
-        data-module="content"
-        aria-labelledby="flight-heading"
-      >
+      <section className="card p-5" aria-labelledby="flight-heading">
         <div className="flex items-center justify-between gap-3">
           <h2 id="flight-heading" className="section-title">
             In flight
@@ -624,7 +615,6 @@ function OpenWorkCard() {
   return (
     <section
       className="card flex min-w-0 flex-col p-5"
-      data-module="github"
       aria-labelledby="work-heading"
     >
       <div className="flex items-center justify-between gap-3">
