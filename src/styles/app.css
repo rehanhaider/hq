@@ -106,12 +106,13 @@
   --chart-5: #c97a00;
   --chart-6: #8a919c;
   --radius: 10px;
-  --sidebar: var(--surface-2);
+  /* The rail is a card beside the page. Hovering an item lays a well under
+     it; the selected module item takes its module's tint instead (Shell). */
+  --sidebar: var(--card);
   --sidebar-foreground: var(--foreground);
   --sidebar-primary: var(--primary);
   --sidebar-primary-foreground: var(--primary-foreground);
-  /* The selected rail item is a card sitting on the chrome. */
-  --sidebar-accent: var(--card);
+  --sidebar-accent: var(--surface-2);
   --sidebar-accent-foreground: var(--foreground);
   --sidebar-border: var(--border);
   --sidebar-ring: var(--ring);

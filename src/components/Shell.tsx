@@ -51,7 +51,7 @@ export function Shell() {
     return () => desktop.removeEventListener("change", close);
   }, []);
   const navClass =
-    "flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground aria-[current=page]:bg-sidebar-accent aria-[current=page]:font-medium aria-[current=page]:text-foreground md:min-h-9";
+    "flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground aria-[current=page]:text-foreground md:min-h-10";
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const expanded = sidebarOpen;
   // Stable hook for the first-paint stylesheet, which hides these labels
@@ -257,11 +257,11 @@ export function Shell() {
                   ? "page"
                   : undefined
               }
-              className={navClass}
+              className={`${navClass} ${module ? "aria-[current=page]:bg-primary/15" : "aria-[current=page]:bg-sidebar-accent"}`}
               onClick={() => setMobileOpen(false)}
             >
               <Icon
-                className={`size-4 shrink-0 ${module ? "text-primary" : ""}`}
+                className={`size-4.5 shrink-0 ${module ? "text-primary" : ""}`}
               />
               <span className={labelClass}>{title}</span>
             </Link>
@@ -282,8 +282,8 @@ export function Shell() {
             {/* Both icons and labels render; the stylesheet shows the pair for
                 the document's theme, so a stored light preference reads right
                 from the server's paint instead of after the store hydrates. */}
-            <Sun className="hidden size-4 shrink-0 dark:block" />
-            <Moon className="size-4 shrink-0 dark:hidden" />
+            <Sun className="hidden size-4.5 shrink-0 dark:block" />
+            <Moon className="size-4.5 shrink-0 dark:hidden" />
             <span className={`${labelClass} dark:hidden`}>Dark</span>
             <span className={`${labelClass} hidden dark:inline`}>Light</span>
           </button>
