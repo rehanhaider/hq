@@ -75,7 +75,10 @@
   --surface-2: #eeeef5;
   --popover: var(--card);
   --popover-foreground: var(--foreground);
-  --primary: #077a52;
+  --nasr: #077a52;
+  --content: #a5286a;
+  --github: #3f3db8;
+  --primary: var(--nasr);
   --primary-foreground: #ffffff;
   --secondary: var(--surface-2);
   --secondary-foreground: var(--foreground);
@@ -106,12 +109,13 @@
   --chart-5: #c97a00;
   --chart-6: #8a919c;
   --radius: 10px;
-  --sidebar: var(--surface-2);
+  /* The rail is a card beside the page. Hovering an item lays a well under
+     it; the selected module item takes its module's tint instead (Shell). */
+  --sidebar: var(--card);
   --sidebar-foreground: var(--foreground);
   --sidebar-primary: var(--primary);
   --sidebar-primary-foreground: var(--primary-foreground);
-  /* The selected rail item is a card sitting on the chrome. */
-  --sidebar-accent: var(--card);
+  --sidebar-accent: var(--surface-2);
   --sidebar-accent-foreground: var(--foreground);
   --sidebar-border: var(--border);
   --sidebar-ring: var(--ring);
@@ -122,7 +126,10 @@
   --foreground: #eceef2;
   --card: #12131e;
   --surface-2: #191a28;
-  --primary: #34d399;
+  --nasr: #34d399;
+  --content: #f472b6;
+  --github: #8d8efa;
+  --primary: var(--nasr);
   --primary-foreground: #03241a;
   --muted-foreground: #8e96a4;
   --accent: color-mix(in oklab, var(--primary) 12%, var(--surface-2));
@@ -152,27 +159,24 @@
   --accent: color-mix(in oklab, var(--primary) 12%, var(--surface-2));
 }
 [data-module="nasr"] {
-  --primary: #077a52;
+  --primary: var(--nasr);
   --primary-foreground: #ffffff;
 }
 [data-module="content"] {
-  --primary: #a5286a;
+  --primary: var(--content);
   --primary-foreground: #ffffff;
 }
 [data-module="github"] {
-  --primary: #3f3db8;
+  --primary: var(--github);
   --primary-foreground: #ffffff;
 }
 [data-theme="dark"] [data-module="nasr"] {
-  --primary: #34d399;
   --primary-foreground: #03241a;
 }
 [data-theme="dark"] [data-module="content"] {
-  --primary: #f472b6;
   --primary-foreground: #2b0718;
 }
 [data-theme="dark"] [data-module="github"] {
-  --primary: #8d8efa;
   --primary-foreground: #0e0d33;
 }
 
@@ -229,6 +233,11 @@
   }
   [data-theme="dark"] .card {
     border-color: transparent;
+  }
+  /* The HQ mark: a solid emerald ring around the rail's own surface. One
+     colour, no blend, and it stays emerald on every module's pages. */
+  .brand-mark {
+    background: var(--nasr);
   }
   /* Content read in place, grouped by a rule and air rather than a box. */
   .section {
