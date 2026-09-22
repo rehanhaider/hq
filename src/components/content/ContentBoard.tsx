@@ -29,7 +29,6 @@ import {
   filterPages,
   groupPages,
   hasFilters,
-  isSubpage,
   relativeTime,
   sortPages,
   type ContentGroupBucket,
@@ -44,14 +43,12 @@ import { PageIcon } from "./PageTypeIcon";
 
 const NONE = "none";
 const keyOf = (bucket: ContentGroupBucket) => bucket.id ?? NONE;
-/** The property a column stands for, or null for the column that collects the pages with none. */
+/** The status a column stands for, or null for the column that collects the pages with none. */
 const propertyOf = (column: string | null) => (column === NONE ? null : column);
 
 /**
- * A drag id is unique per card *slot*, not per page: grouped by tag, one page
- * sits in a column for every tag it carries, and dnd-kit keys its registry by
- * id — the same id twice leaves one of the two cards without a measured node,
- * so the wrong card moves.
+ * A drag id is unique per card *slot*: the column plus the page, so dnd-kit
+ * always measures the card being dragged.
  */
 const slotId = (column: string, pageId: string) => `${column}/${pageId}`;
 const pageOf = (id: string) => id.slice(id.indexOf("/") + 1);
@@ -60,12 +57,6 @@ type MovePatch = {
   id: string;
   orderedIds: string[];
   statusId?: string;
-  typeIds?: string[];
-  addTypeId?: string;
-  removeTypeId?: string;
-  addTagId?: string;
-  removeTagId?: string;
-  tagIds?: string[];
 };
 
 /** The column a drag id belongs to: a column id itself, or a card's column. */
@@ -92,18 +83,25 @@ export function ContentBoard() {
     tags: [],
     subpageTypes: [],
   };
-  const group = search.group ?? "status";
+  const group = "status" as const;
   const sort = search.sort ?? "manual";
+
+  // The board is the pipeline: statuses only apply to top-level pages, so
+  // subpages never show up here. They are managed from the page above them.
+  const topLevel = useMemo(
+    () => (pages.data ?? []).filter((page) => page.parentId === null),
+    [pages.data],
+  );
 
   const computed = useMemo(
     () =>
       groupPages(
-        sortPages(filterPages(pages.data ?? [], search), sort),
+        sortPages(filterPages(topLevel, search), sort),
         group,
         properties,
         { hideEmpty: search.columns === "filled" },
       ),
-    [pages.data, properties, group, sort, search],
+    [topLevel, properties, group, sort, search],
   );
   const buckets = local ?? computed;
 
@@ -119,19 +117,9 @@ export function ContentBoard() {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
-  // Cards show the page they sit under, so a subpage is not mistaken for a
-  // second copy of its parent's work.
-  const parentTitles = useMemo(() => {
-    const titles = new Map(
-      (pages.data ?? []).map((page) => [page.id, displayPageTitle(page.title)]),
-    );
-    return (page: ContentPage) =>
-      page.parentId ? titles.get(page.parentId) : undefined;
-  }, [pages.data]);
-
   const onDragStart = (event: DragStartEvent) => {
     const id = String(event.active.id);
-    const page = (pages.data ?? []).find((item) => item.id === pageOf(id)) ?? null;
+    const page = topLevel.find((item) => item.id === pageOf(id)) ?? null;
     setDragged(page);
     source.current = columnOf(computed, id);
     setLocal(computed);
@@ -182,9 +170,9 @@ export function ContentBoard() {
       setLocal(null);
       return;
     }
-    // A subpage carries a type from the subpage list, so a drop across the
-    // page-type columns is nothing: the card goes back where it was.
-    const activePage = (pages.data ?? []).find((page) => page.id === activeId);
+    // A top-level page dropped on the "No status" column has nowhere to go:
+    // the board cannot take its status away, so the card goes back.
+    const activePage = topLevel.find((page) => page.id === activeId);
     if (
       activePage &&
       !canDropOnColumn(activePage, group, propertyOf(source.current), propertyOf(target))
@@ -210,42 +198,20 @@ export function ContentBoard() {
     });
     setLocal(arranged);
     const column = arranged.find((bucket) => keyOf(bucket) === target)!;
-    const from = source.current;
     source.current = null;
-    void commit(activeId, target, from, column.pages.map((page) => page.id));
+    void commit(activeId, target, column.pages.map((page) => page.id));
   };
 
   const commit = async (
     id: string,
     target: string,
-    from: string | null,
     orderedIds: string[],
   ) => {
     const patch: MovePatch = {
       id,
       orderedIds: sort === "manual" ? orderedIds : [],
     };
-    if (group === "status" && target !== NONE) patch.statusId = target;
-    if (group === "type" && from !== target) {
-      // No type means no types at all. Dropping a card there while only
-      // dropping the column it came from would leave it in its other type
-      // columns and never in the one it was dragged to.
-      if (target === NONE) patch.typeIds = [];
-      else {
-        if (from && from !== NONE) patch.removeTypeId = from;
-        patch.addTypeId = target;
-      }
-    }
-    if (group === "tag" && from !== target) {
-      // Untagged means no tags at all. Dropping a card there while only
-      // dropping the column it came from would leave it in its other tag
-      // columns and never in the one it was dragged to.
-      if (target === NONE) patch.tagIds = [];
-      else {
-        if (from && from !== NONE) patch.removeTagId = from;
-        patch.addTagId = target;
-      }
-    }
+    if (target !== NONE) patch.statusId = target;
     try {
       const result = await movePageCard({ data: patch });
       if (!result.ok) setError("That card could not be moved. The board has been refreshed.");
@@ -259,15 +225,13 @@ export function ContentBoard() {
 
   const addCard = async (bucket: ContentGroupBucket) => {
     try {
-      // Created with its column's property, not created and then moved into
-      // it: a second request that fails would leave an untitled, untagged page
-      // behind and report that nothing was created.
+      // Created with its column's status, not created and then moved into
+      // it: a second request that fails would leave an untitled page behind
+      // and report that nothing was created.
       const created = await createPage({
         data: {
           title: "",
-          statusId: group === "status" ? bucket.id : null,
-          typeIds: group === "type" && bucket.id ? [bucket.id] : [],
-          tagIds: group === "tag" && bucket.id ? [bucket.id] : [],
+          statusId: bucket.id,
         },
       });
       queryClient.setQueryData(contentKeys.detail(created.id), created);
@@ -323,12 +287,10 @@ export function ContentBoard() {
                   bucket={bucket}
                   properties={properties}
                   sortable={sort === "manual"}
-                  parentTitle={parentTitles}
-                  // Nothing can be created without a status, and a subpage is
-                  // created from the page it belongs under, so the "No status"
-                  // column has nothing to offer here.
+                  // Nothing can be created without a status, so the
+                  // "No status" column has nothing to offer here.
                   onAdd={
-                    group === "status" && bucket.id === null
+                    bucket.id === null
                       ? undefined
                       : () => void addCard(bucket)
                   }
@@ -343,7 +305,6 @@ export function ContentBoard() {
                 <Card
                   page={dragged}
                   properties={properties}
-                  parentTitle={parentTitles(dragged)}
                   overlay
                 />
               ) : null}
@@ -359,14 +320,12 @@ function Column({
   bucket,
   properties,
   sortable,
-  parentTitle,
   onAdd,
   onOpen,
 }: {
   bucket: ContentGroupBucket;
   properties: ContentProperties;
   sortable: boolean;
-  parentTitle: (page: ContentPage) => string | undefined;
   /** Absent on a column that cannot be created into. */
   onAdd?: () => void;
   onOpen: (id: string) => void;
@@ -398,7 +357,6 @@ function Column({
               page={page}
               properties={properties}
               sortable={sortable}
-              parentTitle={parentTitle(page)}
               onOpen={onOpen}
             />
           ))}
@@ -428,14 +386,12 @@ function SortableCard({
   page,
   properties,
   sortable,
-  parentTitle,
   onOpen,
 }: {
   id: string;
   page: ContentPage;
   properties: ContentProperties;
   sortable: boolean;
-  parentTitle?: string;
   onOpen: (id: string) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
@@ -451,7 +407,6 @@ function SortableCard({
       <Card
         page={page}
         properties={properties}
-        parentTitle={parentTitle}
         onOpen={onOpen}
         hint={sortable ? undefined : "Switch sort to Manual to reorder cards by hand"}
       />
@@ -462,26 +417,19 @@ function SortableCard({
 function Card({
   page,
   properties,
-  parentTitle,
   onOpen,
   overlay = false,
   hint,
 }: {
   page: ContentPage;
   properties: ContentProperties;
-  parentTitle?: string;
   onOpen?: (id: string) => void;
   overlay?: boolean;
   hint?: string;
 }) {
-  // A subpage shows the one media type it carries; a page shows its own types.
-  const types = isSubpage(page)
-    ? [byId(properties.subpageTypes, page.subpageTypeId)].filter(
-        (type) => type !== undefined,
-      )
-    : page.typeIds
-        .map((id) => byId(properties.types, id))
-        .filter((type) => type !== undefined);
+  const types = page.typeIds
+    .map((id) => byId(properties.types, id))
+    .filter((type) => type !== undefined);
   return (
     <article
       className={`rounded-lg border bg-background p-2.5 text-left shadow-xs ${
@@ -494,11 +442,6 @@ function Card({
         className="block w-full text-left"
         onClick={() => onOpen?.(page.id)}
       >
-        {parentTitle && (
-          <span className="block truncate text-[0.7rem] text-muted-foreground">
-            {parentTitle}
-          </span>
-        )}
         <span className="flex items-start gap-1.5 text-sm font-medium break-words">
           <PageIcon page={page} properties={properties} className="mt-px" />
           <span className="min-w-0">{displayPageTitle(page.title)}</span>

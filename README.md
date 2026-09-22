@@ -112,11 +112,11 @@ Pages save after a short pause. The page shows Unsaved, Saving, Saved, or Save f
 
 ## Content board and properties
 
-Board draws one column per status, in the order Settings gives them. Cards show the title, the types and tags as coloured chips, when the page was last updated, and the parent page when it is nested. Clicking a card opens it in Pages. Dragging a card to another column sets that property; dragging within a column saves a manual order. `+ New` at the foot of a column creates a page already in that column and opens it. Group by switches the columns between Status, Type, and Tag, with "No type" and "Untagged" buckets for pages that have neither; dragging across those columns adds and removes the type or the tag. Drag and drop uses `@dnd-kit`.
+Board draws one column per status, in the order Settings gives them, and shows top-level pages only. Subpages never appear here; they are managed from the page above them in Pages. Cards show the title, the types and tags as coloured chips, and when the page was last updated. Clicking a card opens it in Pages. Dragging a card to another column sets its status; dragging within a column saves a manual order. `+ New` at the foot of a column creates a page already in that status and opens it. Drag and drop uses `@dnd-kit`.
 
 Filters — status, type, tag, and a title search — and the sort (Manual, Updated, Created, Title) live in the URL, so a filtered board is a link. They apply to the Pages list as well. Clear removes them.
 
-Settings owns the three property lists. Add, rename in place, recolour from a fixed palette, reorder, and delete. Deleting a status that holds pages asks which status they move to; deleting a type drops its links; deleting a tag drops its links. The last status cannot be deleted, because the board needs a column. A new page starts in the first status with no types and no tags, nested or not.
+Settings owns the three property lists. Add, rename in place, recolour from a fixed palette, reorder, and delete. Deleting a status that holds pages asks which status they move to; deleting a type drops its links; deleting a tag drops its links. The last status cannot be deleted, because the board needs a column. A new top-level page starts in the first status with no types and no tags; a subpage starts with no status.
 
 ## Date ranges and charts
 

@@ -29,8 +29,35 @@ describe("board columns", () => {
 
   it("offers no New button on the column that collects the pages with no status", () => {
     expect(source).toMatch(
-      /onAdd=\{\s*group === "status" && bucket\.id === null\s*\?\s*undefined\s*:\s*\(\) => void addCard\(bucket\)\s*\}/,
+      /onAdd=\{\s*bucket\.id === null\s*\?\s*undefined\s*:\s*\(\) => void addCard\(bucket\)\s*\}/,
     );
     expect(column).toMatch(/\{onAdd && \(/);
+  });
+
+  it("groups top-level pages by status, leaving subpages out", () => {
+    // Statuses only apply to top-level pages, so the board filters to them
+    // before anything else and never offers another grouping.
+    expect(source).toMatch(/filter\(\(page\) => page\.parentId === null\)/);
+    expect(source).toMatch(/groupPages\(\s*sortPages\(filterPages\(topLevel, search\), sort\),\s*group,/);
+    expect(source).toMatch(/const group = "status" as const;/);
+    expect(source).not.toMatch(/search\.group/);
+  });
+
+  it("commits a drop as a status change with the column's manual order", () => {
+    const commit = source.slice(
+      source.indexOf("const commit ="),
+      source.indexOf("const addCard ="),
+    );
+    expect(commit).toMatch(/if \(target !== NONE\) patch\.statusId = target;/);
+    expect(commit).not.toMatch(/addTypeId|addTagId|typeIds|tagIds/);
+  });
+
+  it("creates a card with its column's status and nothing else", () => {
+    const add = source.slice(
+      source.indexOf("const addCard ="),
+      source.indexOf("const total ="),
+    );
+    expect(add).toMatch(/statusId: bucket\.id,/);
+    expect(add).not.toMatch(/typeIds|tagIds/);
   });
 });
