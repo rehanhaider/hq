@@ -34,9 +34,7 @@ describe("Home Nasr card footer", () => {
 
   it("keeps the button stable while the card updates optimistically", () => {
     expect(source).toMatch(/onMutate: async \(\{ key, status \}\)/);
-    expect(source).toMatch(
-      /day: \{ \.\.\.current\.nasr\.day, \[key\]: status \}/,
-    );
+    expect(source).toMatch(/const day = \{ \.\.\.nasr\.day, \[key\]: status \}/);
     expect(source).toMatch(/onError: \(_error, _variables, context\)/);
     expect(nasr).toMatch(/className="w-16 rounded-r-none"/);
     expect(nasr).not.toMatch(/Logging…/);

@@ -12,15 +12,12 @@ import { getContentStore } from "./content";
 import { getUploadStore } from "./uploads";
 import {
   NASR_CONTENT,
-  calculateAdherence,
   dateString,
-  daysInWindow,
   nasrDayUpdateSchema,
-  fajrOnTimeStreak,
   getToday,
-  overallAdherence,
   resetRequestSchema,
   settingsUpdateSchema,
+  windowSummary,
 } from "../lib/nasr";
 import { z } from "zod";
 import { fetchTweetData, type TweetEmbedData } from "../lib/tweetEmbed";
@@ -48,31 +45,15 @@ function nasrSummary() {
   const settings = nasr.settings();
   const today = getToday(settings.timezone);
   const days = nasr.days();
-  // Everything with a denominator is measured over the rolling window: the
-  // last 40 days, ending today. `days` stays whole for the calendar and the
-  // day pager.
-  const windowed = daysInWindow(days, today);
-  // Fewer than 40 days logged scores against the days that exist, so a week
-  // of records is not read as a week out of forty.
-  const windowDays = windowed.length;
   return {
     settings,
     today,
     day: nasr.day(today),
+    // Stays whole for the calendar and the day pager. Everything with a
+    // denominator is measured over the rolling window: the last 40 days,
+    // ending today.
     days,
-    // How much of the window is actually logged, so the pages can tell an
-    // empty window apart from an empty history rather than inferring it from
-    // zeroes.
-    windowDays,
-    // Deliberately not windowed. A streak has no denominator, so it never had
-    // the mismatch the window exists to fix, and it runs to today.
-    fajrStreak: fajrOnTimeStreak(days, today),
-    adherence: calculateAdherence(
-      windowed,
-      windowDays,
-      settings.istighfar_target,
-    ),
-    overall: overallAdherence(windowed, windowDays, settings.istighfar_target),
+    ...windowSummary(days, today, settings.istighfar_target),
     content: NASR_CONTENT,
   };
 }

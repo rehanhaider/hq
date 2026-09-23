@@ -6,6 +6,8 @@ import {
   markLabel,
   overallAdherence,
   windowStrip,
+  windowSummary,
+  withDay,
 } from "./adherence";
 import { windowDates } from "./dates";
 import { emptyDay } from "./schemas";
@@ -173,6 +175,42 @@ describe("streaks against the adherence window", () => {
       current: 40,
       longest: 40,
     });
+  });
+});
+
+describe("windowSummary with a newly logged day", () => {
+  // The homepage's optimistic log: today had no row, then Fajr is logged.
+  const today = "2026-09-08";
+  const before = [makeDay("2026-09-07", { fajr: "ontime" })];
+  const day = makeDay(today, { fajr: "ontime" });
+
+  it("adds today to the window, the strip, and the ring", () => {
+    const days = withDay(before, day);
+    const summary = windowSummary(days, today, 100);
+    expect(windowSummary(before, today, 100).windowDays).toBe(1);
+    expect(summary.windowDays).toBe(2);
+    expect(summary.overall).toEqual(
+      overallAdherence(daysInWindow(days, today), 2, 100),
+    );
+    expect(summary.fajrStreak).toEqual({ current: 2, longest: 2 });
+    expect(windowStrip(days, today).at(-1)).toMatchObject({ ontime: 1 });
+  });
+
+  it("replaces today's row rather than adding a second one", () => {
+    const logged = withDay(before, day);
+    const days = withDay(logged, { ...day, dhuhr: "qada" });
+    expect(days.map((d) => d.date)).toEqual(["2026-09-07", today]);
+    expect(days.at(-1)).toMatchObject({ fajr: "ontime", dhuhr: "qada" });
+    expect(windowSummary(days, today, 100).windowDays).toBe(2);
+  });
+
+  it("keeps the list in date order", () => {
+    const later = [makeDay("2026-09-09"), makeDay("2026-09-10")];
+    expect(withDay(later, day).map((d) => d.date)).toEqual([
+      today,
+      "2026-09-09",
+      "2026-09-10",
+    ]);
   });
 });
 
