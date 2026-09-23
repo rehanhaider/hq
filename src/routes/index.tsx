@@ -15,6 +15,8 @@ import {
   markLabel,
   middayPrayerLabel,
   windowStrip,
+  windowSummary,
+  withDay,
   type PrayerStatus,
 } from "@/lib/nasr";
 import { defaultFilters } from "@/lib/model";
@@ -48,17 +50,24 @@ function HomePage() {
     onMutate: async ({ key, status }) => {
       await queryClient.cancelQueries({ queryKey: nasrKeys.home });
       const previous = queryClient.getQueryData(homeQuery.queryKey);
-      queryClient.setQueryData(homeQuery.queryKey, (current) =>
-        current
-          ? {
-              ...current,
-              nasr: {
-                ...current.nasr,
-                day: { ...current.nasr.day, [key]: status },
-              },
-            }
-          : current,
-      );
+      queryClient.setQueryData(homeQuery.queryKey, (current) => {
+        if (!current) return current;
+        const { nasr } = current;
+        const day = { ...nasr.day, [key]: status };
+        // The 40-day ring and strip read `days`, not `day`, so they are
+        // rebuilt here too. Otherwise they wait on the refetch, which also
+        // carries the GitHub summary and can land well after the tap.
+        const days = withDay(nasr.days, day);
+        return {
+          ...current,
+          nasr: {
+            ...nasr,
+            day,
+            days,
+            ...windowSummary(days, nasr.today, nasr.settings.istighfar_target),
+          },
+        };
+      });
       return { previous };
     },
     onError: (_error, _variables, context) => {

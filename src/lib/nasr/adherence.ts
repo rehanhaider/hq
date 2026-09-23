@@ -1,5 +1,6 @@
 import type { NasrDay } from "./schemas";
 import { windowDates } from "./dates";
+import { fajrOnTimeStreak } from "./streaks";
 
 export interface AdherenceResult {
   percentage: number;
@@ -102,6 +103,41 @@ export function overallAdherence(
     completed: totalCompleted,
     total: totalPossible,
   };
+}
+
+/**
+ * Everything the pages derive from the day list: the window count, the Fajr
+ * streak, and adherence over the window. The server builds its summary with
+ * this, and the homepage reruns it when it logs a prayer optimistically, so
+ * the ring and strip move with the prayer rather than a round trip later.
+ */
+export function windowSummary(
+  days: NasrDay[],
+  today: string,
+  istighfarTarget: number,
+) {
+  const windowed = daysInWindow(days, today);
+  // Fewer than 40 days logged scores against the days that exist, so a week
+  // of records is not read as a week out of forty.
+  const windowDays = windowed.length;
+  return {
+    // How much of the window is actually logged, so the pages can tell an
+    // empty window apart from an empty history rather than inferring it from
+    // zeroes.
+    windowDays,
+    // Deliberately not windowed. A streak has no denominator, so it never had
+    // the mismatch the window exists to fix, and it runs to today.
+    fajrStreak: fajrOnTimeStreak(days, today),
+    adherence: calculateAdherence(windowed, windowDays, istighfarTarget),
+    overall: overallAdherence(windowed, windowDays, istighfarTarget),
+  };
+}
+
+/** The day list with `day` in place of its date's row, still in date order. */
+export function withDay(days: NasrDay[], day: NasrDay): NasrDay[] {
+  return [...days.filter((d) => d.date !== day.date), day].sort((a, b) =>
+    a.date.localeCompare(b.date),
+  );
 }
 
 /**
