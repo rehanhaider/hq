@@ -134,8 +134,14 @@ describe("planEmbedPaste", () => {
       "https://gitlab.com/group/repo/-/blob/main/clip.mp4",
       "https://commons.wikimedia.org/wiki/File:Flower.jpg",
       "https://en.wikipedia.org/wiki/Image:Flower.jpg",
+      "https://bitbucket.org/team/repo/src/main/shot.png",
+      "https://codeberg.org/user/repo/src/branch/main/clip.webm",
     ])
       expect(planEmbedPaste(url, empty)).toMatchObject({ type: "bookmark" });
+    // Elsewhere `/src/` is an ordinary path to a real file.
+    expect(planEmbedPaste("https://example.com/src/img/logo.png", empty)).toMatchObject({
+      type: "image",
+    });
     expect(
       planEmbedPaste("https://raw.githubusercontent.com/rehanhaider/hq/main/docs/shot.png", empty),
     ).toMatchObject({ type: "image" });

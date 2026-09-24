@@ -109,9 +109,17 @@ const VIDEO_EXTENSION = /\.(?:m4v|mov|mp4|ogv|webm)$/i;
 /**
  * Paths that name a file but serve an HTML page about it: a GitHub or
  * GitLab file view, and a wiki's file description page. The file itself
- * lives elsewhere, so these stay bookmark cards.
+ * lives elsewhere, so these stay bookmark cards. Bitbucket and Codeberg
+ * view files under `/src/`, which is too common a path elsewhere to rule
+ * out on every host.
  */
 const VIEWER_PATH = /\/blob\/|\/wiki\/(?:File|Image):/i;
+const SRC_VIEWER_HOSTS = new Set(["bitbucket.org", "codeberg.org"]);
+
+function isViewerPage({ hostname, pathname }: URL): boolean {
+  if (VIEWER_PATH.test(pathname)) return true;
+  return SRC_VIEWER_HOSTS.has(hostname.replace(/^www\./, "")) && pathname.includes("/src/");
+}
 
 /**
  * A URL whose path names a file of the given kind. The extension is the
@@ -123,8 +131,8 @@ function fileUrl(extension: RegExp): (text: string) => string | null {
   return (text) => {
     const url = linkPreviewUrl(text);
     if (!url) return null;
-    const { pathname } = new URL(url);
-    return extension.test(pathname) && !VIEWER_PATH.test(pathname) ? url : null;
+    const parsed = new URL(url);
+    return extension.test(parsed.pathname) && !isViewerPage(parsed) ? url : null;
   };
 }
 
