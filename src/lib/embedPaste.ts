@@ -88,13 +88,39 @@ export function pasteTarget(
 }
 
 /**
- * Every block a lone URL can become. One list, shared with the document
- * validator and the editor's block specs, so a card cannot be added in one
- * place and forgotten in another.
+ * Every card block a lone URL can become. One list, shared with the
+ * document validator and the editor's block specs, so a card cannot be
+ * added in one place and forgotten in another.
  */
 export const EMBED_BLOCK_TYPES = ["tweet", "bookmark"] as const;
 
 export type EmbedBlockType = (typeof EMBED_BLOCK_TYPES)[number];
+
+/**
+ * Every block a pasted URL can become: the embeds above, plus the editor's
+ * own image and video blocks for a link straight to such a file. Those two
+ * are file blocks, validated as files, so they are not embed types.
+ */
+export type PasteBlockType = EmbedBlockType | "image" | "video";
+
+const IMAGE_EXTENSION = /\.(?:avif|gif|jpe?g|png|svg|webp)$/i;
+const VIDEO_EXTENSION = /\.(?:m4v|mov|mp4|ogv|webm)$/i;
+
+/**
+ * A URL whose path names a file of the given kind. The extension is the
+ * whole test: the paste has to be decided before anything could be fetched,
+ * and a link that names a `.jpg` is one the user expects to see as a picture.
+ */
+function fileUrl(extension: RegExp): (text: string) => string | null {
+  return (text) => {
+    const url = linkPreviewUrl(text);
+    if (!url) return null;
+    return extension.test(new URL(url).pathname) ? url : null;
+  };
+}
+
+export const imageFileUrl = fileUrl(IMAGE_EXTENSION);
+export const videoFileUrl = fileUrl(VIDEO_EXTENSION);
 
 /**
  * The media embeds, in the order a URL is offered to them. A hit wins
@@ -104,13 +130,15 @@ export type EmbedBlockType = (typeof EMBED_BLOCK_TYPES)[number];
  */
 export const embedMatchers = [
   { type: "tweet", match: tweetStatusUrl },
+  { type: "image", match: imageFileUrl },
+  { type: "video", match: videoFileUrl },
 ] as const satisfies readonly {
-  type: EmbedBlockType;
+  type: PasteBlockType;
   match: (text: string) => string | null;
 }[];
 
 /** The first media embed that claims this text, if any. */
-function matchEmbed(text: string): { type: EmbedBlockType; url: string } | null {
+function matchEmbed(text: string): { type: PasteBlockType; url: string } | null {
   const token = loneToken(text);
   if (!token) return null;
   for (const matcher of embedMatchers) {
@@ -122,8 +150,8 @@ function matchEmbed(text: string): { type: EmbedBlockType; url: string } | null 
 
 export type EmbedPastePlan =
   | { kind: "ignore" }
-  | { kind: "replace"; type: EmbedBlockType; url: string }
-  | { kind: "insert"; type: EmbedBlockType; url: string };
+  | { kind: "replace"; type: PasteBlockType; url: string }
+  | { kind: "insert"; type: PasteBlockType; url: string };
 
 export function planEmbedPaste(
   clipboardText: string,
