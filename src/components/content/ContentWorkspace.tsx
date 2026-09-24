@@ -363,6 +363,10 @@ export function ContentWorkspace() {
   const saved = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const drainPromise = useRef<Promise<boolean> | null>(null);
+  // Property saves go out one at a time. A picker that stays open sends each
+  // click's whole list, and two requests racing could let the older list land
+  // last and overwrite the newer one.
+  const propertySaves = useRef<Promise<void>>(Promise.resolve());
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [saveError, setSaveError] = useState("");
   const [saveConflict, setSaveConflict] = useState(false);
@@ -913,22 +917,27 @@ export function ContentWorkspace() {
       setDraft(restored);
       setActionError("The page properties could not be saved.");
     };
-    try {
-      const result = await setPageProperties({ data: { id: current.id, ...patch } });
-      if (!result.ok) {
+    const save = async () => {
+      try {
+        const result = await setPageProperties({ data: { id: current.id, ...patch } });
+        if (!result.ok) {
+          rollback();
+          return;
+        }
+        setActionError("");
+        const editing = draftRef.current?.id === current.id ? draftRef.current : null;
+        queryClient.setQueryData(contentKeys.detail(current.id), {
+          ...result.page,
+          document: editing?.document ?? current.document,
+        });
+        await invalidateContent(queryClient);
+      } catch {
         rollback();
-        return;
       }
-      setActionError("");
-      const editing = draftRef.current?.id === current.id ? draftRef.current : null;
-      queryClient.setQueryData(contentKeys.detail(current.id), {
-        ...result.page,
-        document: editing?.document ?? current.document,
-      });
-      await invalidateContent(queryClient);
-    } catch {
-      rollback();
-    }
+    };
+    const queued = propertySaves.current.then(save);
+    propertySaves.current = queued;
+    await queued;
   };
 
   const addTag = async (name: string): Promise<string[] | null> => {

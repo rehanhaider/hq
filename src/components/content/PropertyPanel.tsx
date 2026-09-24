@@ -91,10 +91,14 @@ export function PropertyPanel({
                       />
                     }
                     onSelect={() => {
+                      // Built from the types that still exist: an id deleted
+                      // in Settings while this page was open would make the
+                      // server refuse the whole list.
+                      const chosen = subpageTypes.map((type) => type.id);
                       onChange({
-                        subpageTypeIds: page.subpageTypeIds.includes(option.id)
-                          ? page.subpageTypeIds.filter((id) => id !== option.id)
-                          : [...page.subpageTypeIds, option.id],
+                        subpageTypeIds: chosen.includes(option.id)
+                          ? chosen.filter((id) => id !== option.id)
+                          : [...chosen, option.id],
                       });
                     }}
                   />

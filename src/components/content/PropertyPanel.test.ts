@@ -29,9 +29,18 @@ describe("subpage properties", () => {
       subpagePanel.indexOf("{properties.subpageTypes.length === 0"),
     );
     expect(select).toMatch(
-      /subpageTypeIds: page\.subpageTypeIds\.includes\(option\.id\)\s*\? page\.subpageTypeIds\.filter\(\(id\) => id !== option\.id\)\s*: \[\.\.\.page\.subpageTypeIds, option\.id\]/,
+      /subpageTypeIds: chosen\.includes\(option\.id\)\s*\? chosen\.filter\(\(id\) => id !== option\.id\)\s*: \[\.\.\.chosen, option\.id\]/,
     );
     expect(select).not.toMatch(/close\(\)/);
+  });
+
+  it("builds the next list only from types that still exist", () => {
+    // A type deleted elsewhere would otherwise ride along on every toggle and
+    // get the whole list refused.
+    expect(source).toMatch(
+      /const subpageTypes = page\.subpageTypeIds\s*\.map\(\(id\) => properties\.subpageTypes\.find\(\(entry\) => entry\.id === id\)\)\s*\.filter\(\(type\) => type !== undefined\);/,
+    );
+    expect(subpagePanel).toMatch(/const chosen = subpageTypes\.map\(\(type\) => type\.id\);/);
   });
 
   it("shows each option's glyph in the picker and beside every chosen type", () => {
