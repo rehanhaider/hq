@@ -13,7 +13,7 @@ import {
   pageTreeIds,
   pageTypeIcons,
   persistedPageTitle,
-  subpageTypeIcon,
+  subpageTypeIcons,
   relativeTime,
   compareIndexPages,
   sortPages,
@@ -38,7 +38,7 @@ const page = (
   statusId: "idea",
   typeIds: [],
   tagIds: [],
-  subpageTypeId: null,
+  subpageTypeIds: [],
   position: 0,
   pinned: false,
   ...overrides,
@@ -432,7 +432,7 @@ describe("pageTypeIcons", () => {
   });
 });
 
-describe("subpageTypeIcon", () => {
+describe("subpageTypeIcons", () => {
   const subpageTypes: Property[] = [
     { id: "website", name: "Website", color: "blue", position: 0 },
     { id: "github", name: "GitHub", color: "violet", position: 1 },
@@ -443,58 +443,78 @@ describe("subpageTypeIcon", () => {
   ];
 
   it("gives each seeded media type its own glyph in the type's colour", () => {
-    expect(subpageTypeIcon("website", subpageTypes)).toEqual({
-      kind: "website",
-      color: "blue",
-    });
-    expect(subpageTypeIcon("github", subpageTypes)).toEqual({
-      kind: "github",
-      color: "violet",
-    });
-    expect(subpageTypeIcon("tweet", subpageTypes)).toEqual({
-      kind: "tweet",
-      color: "teal",
-    });
-    expect(subpageTypeIcon("image", subpageTypes)).toEqual({
-      kind: "image",
-      color: "amber",
-    });
-    expect(subpageTypeIcon("video", subpageTypes)).toEqual({
-      kind: "video",
-      color: "red",
-    });
+    expect(subpageTypeIcons(["website"], subpageTypes)).toEqual([
+      { kind: "website", color: "blue" },
+    ]);
+    expect(subpageTypeIcons(["github"], subpageTypes)).toEqual([
+      { kind: "github", color: "violet" },
+    ]);
+    expect(subpageTypeIcons(["tweet"], subpageTypes)).toEqual([
+      { kind: "tweet", color: "teal" },
+    ]);
+    expect(subpageTypeIcons(["image"], subpageTypes)).toEqual([
+      { kind: "image", color: "amber" },
+    ]);
+    expect(subpageTypeIcons(["video"], subpageTypes)).toEqual([
+      { kind: "video", color: "red" },
+    ]);
+  });
+
+  it("draws one glyph per type, in a stable order whatever order they were picked", () => {
+    const expected = [
+      { kind: "github", color: "violet" },
+      { kind: "video", color: "red" },
+    ];
+    expect(subpageTypeIcons(["github", "video"], subpageTypes)).toEqual(expected);
+    expect(subpageTypeIcons(["video", "github"], subpageTypes)).toEqual(expected);
+  });
+
+  it("draws two types that share a glyph once, in the first one's colour", () => {
+    const types: Property[] = [
+      ...subpageTypes,
+      { id: "clip", name: "  VIDEO ", color: "green", position: 6 },
+    ];
+    expect(subpageTypeIcons(["clip", "video"], types)).toEqual([
+      { kind: "video", color: "green" },
+    ]);
+    expect(subpageTypeIcons(["podcast", "website"], subpageTypes)).toEqual([
+      { kind: "website", color: "blue" },
+      { kind: "file", color: "pink" },
+    ]);
   });
 
   it("matches a seeded name without regard to case or extra spaces", () => {
     expect(
-      subpageTypeIcon("x", [{ id: "x", name: "  GITHUB ", color: "violet", position: 0 }]),
-    ).toEqual({ kind: "github", color: "violet" });
+      subpageTypeIcons(["x"], [{ id: "x", name: "  GITHUB ", color: "violet", position: 0 }]),
+    ).toEqual([{ kind: "github", color: "violet" }]);
     expect(
-      subpageTypeIcon("x", [{ id: "x", name: " TWEET ", color: "teal", position: 0 }]),
-    ).toEqual({ kind: "tweet", color: "teal" });
+      subpageTypeIcons(["x"], [{ id: "x", name: " TWEET ", color: "teal", position: 0 }]),
+    ).toEqual([{ kind: "tweet", color: "teal" }]);
   });
 
   it("draws a type someone added as a file, still in its own colour", () => {
-    expect(subpageTypeIcon("podcast", subpageTypes)).toEqual({
-      kind: "file",
-      color: "pink",
-    });
+    expect(subpageTypeIcons(["podcast"], subpageTypes)).toEqual([
+      { kind: "file", color: "pink" },
+    ]);
   });
 
   it("does not mistake an inherited property for a glyph", () => {
     // "constructor" finds a function on Object.prototype in a plain lookup.
     for (const name of ["constructor", "toString", "__proto__"])
       expect(
-        subpageTypeIcon("x", [{ id: "x", name, color: "pink", position: 0 }]),
-      ).toEqual({ kind: "file", color: "pink" });
+        subpageTypeIcons(["x"], [{ id: "x", name, color: "pink", position: 0 }]),
+      ).toEqual([{ kind: "file", color: "pink" }]);
   });
 
-  it("is neutral when the subpage has no type, or a type that is gone", () => {
-    expect(subpageTypeIcon(null, subpageTypes)).toEqual({ kind: "file", color: "slate" });
-    expect(subpageTypeIcon("missing", subpageTypes)).toEqual({
-      kind: "file",
-      color: "slate",
-    });
+  it("is neutral when the subpage has no type, or only types that are gone", () => {
+    expect(subpageTypeIcons([], subpageTypes)).toEqual([{ kind: "file", color: "slate" }]);
+    expect(subpageTypeIcons(["missing"], subpageTypes)).toEqual([
+      { kind: "file", color: "slate" },
+    ]);
+    // A type that is gone draws nothing beside one that is still there.
+    expect(subpageTypeIcons(["missing", "tweet"], subpageTypes)).toEqual([
+      { kind: "tweet", color: "teal" },
+    ]);
   });
 });
 

@@ -647,7 +647,7 @@ export function ContentWorkspace() {
     if (!draft || draft.id !== selectedId) return source;
     return source.map((page) =>
       page.id === draft.id
-        ? { ...page, typeIds: draft.typeIds, subpageTypeId: draft.subpageTypeId }
+        ? { ...page, typeIds: draft.typeIds, subpageTypeIds: draft.subpageTypeIds }
         : page,
     );
   }, [localPages, list.data, draft, selectedId]);
@@ -886,8 +886,7 @@ export function ContentWorkspace() {
       ...patch,
       typeIds: patch.typeIds ?? current.typeIds,
       tagIds: patch.tagIds ?? current.tagIds,
-      subpageTypeId:
-        patch.subpageTypeId !== undefined ? patch.subpageTypeId : current.subpageTypeId,
+      subpageTypeIds: patch.subpageTypeIds ?? current.subpageTypeIds,
     };
     draftRef.current = next;
     setDraft(next);
@@ -906,10 +905,10 @@ export function ContentWorkspace() {
       if (patch.tagIds !== undefined && latest.tagIds.join() === next.tagIds.join())
         restored.tagIds = current.tagIds;
       if (
-        patch.subpageTypeId !== undefined &&
-        latest.subpageTypeId === next.subpageTypeId
+        patch.subpageTypeIds !== undefined &&
+        latest.subpageTypeIds.join() === next.subpageTypeIds.join()
       )
-        restored.subpageTypeId = current.subpageTypeId;
+        restored.subpageTypeIds = current.subpageTypeIds;
       draftRef.current = restored;
       setDraft(restored);
       setActionError("The page properties could not be saved.");

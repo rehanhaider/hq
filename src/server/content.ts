@@ -94,11 +94,11 @@ type PageRow = {
   revision: number;
   deletion_group: string | null;
   status_id: string | null;
-  subpage_type_id: string | null;
   position: number;
   pinned: number;
   type_ids: string | null;
   tag_ids: string | null;
+  subpage_type_ids: string | null;
 };
 
 type PageListRow = Omit<PageRow, "document" | "search_text" | "deletion_group"> & {
@@ -182,7 +182,7 @@ function pageFromRow(row: Omit<PageListRow, "preview"> & { preview: string }): C
     statusId: row.status_id,
     typeIds: tagIdsFrom(row.type_ids),
     tagIds: tagIdsFrom(row.tag_ids),
-    subpageTypeId: row.subpage_type_id,
+    subpageTypeIds: tagIdsFrom(row.subpage_type_ids),
     position: row.position,
     pinned: Boolean(row.pinned),
   };
@@ -190,10 +190,11 @@ function pageFromRow(row: Omit<PageListRow, "preview"> & { preview: string }): C
 
 const LIST_COLUMNS = `pages.id, pages.title, substr(pages.search_text, 1, 180) AS preview,
         pages.parent_id, pages.display_order, pages.created_at, pages.updated_at,
-        pages.deleted_at, pages.revision, pages.status_id, pages.subpage_type_id,
+        pages.deleted_at, pages.revision, pages.status_id,
         pages.position, pages.pinned,
         (SELECT group_concat(type_id ORDER BY rowid) FROM page_types WHERE page_id = pages.id) AS type_ids,
-        (SELECT group_concat(tag_id) FROM page_tags WHERE page_id = pages.id) AS tag_ids`;
+        (SELECT group_concat(tag_id) FROM page_tags WHERE page_id = pages.id) AS tag_ids,
+        (SELECT group_concat(subpage_type_id ORDER BY rowid) FROM page_subpage_types WHERE page_id = pages.id) AS subpage_type_ids`;
 
 export class ContentStore {
   readonly db: DatabaseSync;
@@ -287,6 +288,12 @@ export class ContentStore {
         PRIMARY KEY (page_id, type_id)
       );
       CREATE INDEX IF NOT EXISTS page_types_type ON page_types(type_id);
+      CREATE TABLE IF NOT EXISTS page_subpage_types (
+        page_id TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+        subpage_type_id TEXT NOT NULL REFERENCES subpage_types(id) ON DELETE CASCADE,
+        PRIMARY KEY (page_id, subpage_type_id)
+      );
+      CREATE INDEX IF NOT EXISTS page_subpage_types_type ON page_subpage_types(subpage_type_id);
       CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS uploads (
         id TEXT NOT NULL,
@@ -336,12 +343,6 @@ export class ContentStore {
         WHERE pages.id = ordered.id
       `);
     }
-    // A subpage's own type. Nullable: the column arrives on databases full of
-    // subpages that predate it, and "no type yet" is the honest value for them.
-    if (!columns.has("subpage_type_id"))
-      this.db.exec(
-        "ALTER TABLE pages ADD COLUMN subpage_type_id TEXT REFERENCES subpage_types(id) ON DELETE SET NULL",
-      );
     if (!columns.has("pinned"))
       this.db.exec("ALTER TABLE pages ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0");
     this.db.exec(
@@ -443,7 +444,7 @@ export class ContentStore {
     statusId?: string | null;
     addTypeId?: string;
     addTagId?: string;
-    subpageTypeId?: string | null;
+    subpageTypeIds?: string[];
   }) {
     if (
       input.statusId !== undefined &&
@@ -455,11 +456,7 @@ export class ContentStore {
       return "unknown-type" as const;
     if (input.addTagId !== undefined && !this.propertyExists("tag", input.addTagId))
       return "unknown-tag" as const;
-    if (
-      input.subpageTypeId !== undefined &&
-      input.subpageTypeId !== null &&
-      !this.propertyExists("subpageType", input.subpageTypeId)
-    )
+    if (input.subpageTypeIds?.some((id) => !this.propertyExists("subpageType", id)))
       return "unknown-subpage-type" as const;
     return null;
   }
@@ -496,6 +493,16 @@ export class ContentStore {
     );
     for (const typeId of new Set(typeIds))
       if (this.propertyExists("type", typeId)) link.run(pageId, typeId);
+  }
+
+  /** Replaces a subpage's types. Types that no longer exist are dropped. */
+  private setSubpageTypes(pageId: string, subpageTypeIds: string[]) {
+    this.db.prepare("DELETE FROM page_subpage_types WHERE page_id = ?").run(pageId);
+    const link = this.db.prepare(
+      "INSERT OR IGNORE INTO page_subpage_types (page_id, subpage_type_id) VALUES (?, ?)",
+    );
+    for (const id of new Set(subpageTypeIds))
+      if (this.propertyExists("subpageType", id)) link.run(pageId, id);
   }
 
   /** Replaces a page's tags. Tags that no longer exist are dropped. */
@@ -547,7 +554,8 @@ export class ContentStore {
       .prepare(
         `SELECT pages.*,
           (SELECT group_concat(type_id ORDER BY rowid) FROM page_types WHERE page_id = pages.id) AS type_ids,
-          (SELECT group_concat(tag_id) FROM page_tags WHERE page_id = pages.id) AS tag_ids
+          (SELECT group_concat(tag_id) FROM page_tags WHERE page_id = pages.id) AS tag_ids,
+          (SELECT group_concat(subpage_type_id ORDER BY rowid) FROM page_subpage_types WHERE page_id = pages.id) AS subpage_type_ids
          FROM pages WHERE id = ?`,
       )
       .get(id) as PageRow | undefined;
@@ -561,10 +569,10 @@ export class ContentStore {
     statusId: string | null = null,
     typeIds: string[] = [],
     tagIds: string[] = [],
-    subpageTypeId: string | null = null,
+    subpageTypeIds: string[] = [],
   ): PageDetail {
     return this.transaction(() =>
-      this.insert(title, parentId, document, statusId, typeIds, tagIds, subpageTypeId),
+      this.insert(title, parentId, document, statusId, typeIds, tagIds, subpageTypeIds),
     );
   }
 
@@ -575,7 +583,7 @@ export class ContentStore {
     statusId: string | null,
     typeIds: string[],
     tagIds: string[],
-    subpageTypeId: string | null,
+    subpageTypeIds: string[],
   ): PageDetail {
     if (parentId) {
       const parent = this.get(parentId);
@@ -629,11 +637,8 @@ export class ContentStore {
     );
     if (validTypes.length) this.setTypes(id, validTypes);
     if (tagIds.length) this.setTags(id, tagIds);
-    // Only a subpage carries one, and only a type that still exists.
-    if (parentId && subpageTypeId && this.propertyExists("subpageType", subpageTypeId))
-      this.db
-        .prepare("UPDATE pages SET subpage_type_id = ? WHERE id = ?")
-        .run(subpageTypeId, id);
+    // Only a subpage carries them, and only types that still exist.
+    if (parentId && subpageTypeIds.length) this.setSubpageTypes(id, subpageTypeIds);
     this.adoptUploads(id, document);
     return this.get(id)!;
   }
@@ -691,7 +696,7 @@ export class ContentStore {
     statusId?: string | null;
     typeIds?: string[];
     tagIds?: string[];
-    subpageTypeId?: string | null;
+    subpageTypeIds?: string[];
   }) {
     return this.transaction(() => {
       const page = this.get(input.id);
@@ -700,14 +705,11 @@ export class ContentStore {
       if (unknown) return { ok: false as const, code: unknown };
       // The subpage list describes media under a page. A top-level page is not
       // media, so it is refused rather than quietly given a type nothing shows.
-      if (input.subpageTypeId !== undefined && page.parentId === null)
+      if (input.subpageTypeIds !== undefined && page.parentId === null)
         return { ok: false as const, code: "not-subpage" as const };
       if (this.pageTypesOnSubpage(page, input) || this.statusOnSubpage(page, input))
         return { ok: false as const, code: "not-page" as const };
-      if (input.subpageTypeId !== undefined)
-        this.db
-          .prepare("UPDATE pages SET subpage_type_id = ? WHERE id = ?")
-          .run(input.subpageTypeId, input.id);
+      if (input.subpageTypeIds) this.setSubpageTypes(input.id, input.subpageTypeIds);
       if (input.statusId !== undefined)
         this.db.prepare("UPDATE pages SET status_id = ? WHERE id = ?").run(input.statusId, input.id);
       if (input.typeIds) this.setTypes(input.id, input.typeIds);
@@ -932,7 +934,7 @@ export class ContentStore {
 
   /**
    * Deleting a property never deletes a page. A status hands its pages to
-   * another one, a type drops its links, and a tag drops its links.
+   * another one; a type, a subpage type, and a tag drop their links.
    */
   deleteProperty(kind: PropertyKind, id: string, moveToId: string | null = null) {
     return this.transaction(() => {
@@ -961,9 +963,7 @@ export class ContentStore {
       if (kind === "type")
         this.db.prepare("DELETE FROM page_types WHERE type_id = ?").run(id);
       if (kind === "subpageType")
-        this.db
-          .prepare("UPDATE pages SET subpage_type_id = NULL WHERE subpage_type_id = ?")
-          .run(id);
+        this.db.prepare("DELETE FROM page_subpage_types WHERE subpage_type_id = ?").run(id);
       if (kind === "tag") this.db.prepare("DELETE FROM page_tags WHERE tag_id = ?").run(id);
       this.db.prepare(`DELETE FROM ${PROPERTY_TABLES[kind]} WHERE id = ?`).run(id);
       return { ok: true as const };

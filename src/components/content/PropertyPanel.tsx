@@ -15,7 +15,7 @@ export type PropertyPatch = {
   statusId?: string;
   typeIds?: string[];
   tagIds?: string[];
-  subpageTypeId?: string | null;
+  subpageTypeIds?: string[];
 };
 
 /**
@@ -44,13 +44,14 @@ export function PropertyPanel({
   const tags = page.tagIds
     .map((id) => properties.tags.find((entry) => entry.id === id))
     .filter((tag) => tag !== undefined);
-  const subpageType = properties.subpageTypes.find(
-    (entry) => entry.id === page.subpageTypeId,
-  );
+  const subpageTypes = page.subpageTypeIds
+    .map((id) => properties.subpageTypes.find((entry) => entry.id === id))
+    .filter((type) => type !== undefined);
 
-  // A subpage is one piece of media under a page, not a step in the publishing
-  // pipeline, so it carries its own single type and neither the status list nor
-  // the page types are offered on it.
+  // A subpage is media under a page, not a step in the publishing pipeline, so
+  // it carries its own types and neither the status list nor the page types
+  // are offered on it. It can be more than one kind at once — a GitHub repo
+  // with a demo video — so the picker toggles, the way the page types do.
   if (isSubpage(page))
     return (
       <dl className="mt-4 space-y-0.5">
@@ -59,16 +60,20 @@ export function PropertyPanel({
             disabled={disabled}
             label="Type"
             value={
-              subpageType ? (
-                <span className="flex items-center gap-1.5">
-                  <SubpageTypeIcon
-                    subpageTypeId={subpageType.id}
-                    subpageTypes={properties.subpageTypes}
-                  />
-                  <Pill property={subpageType} />
-                </span>
-              ) : (
+              subpageTypes.length === 0 ? (
                 <Empty>Empty</Empty>
+              ) : (
+                <span className="flex flex-wrap items-center gap-1.5">
+                  {subpageTypes.map((type) => (
+                    <span key={type.id} className="flex items-center gap-1.5">
+                      <SubpageTypeIcon
+                        subpageTypeIds={[type.id]}
+                        subpageTypes={properties.subpageTypes}
+                      />
+                      <Pill property={type} />
+                    </span>
+                  ))}
+                </span>
               )
             }
           >
@@ -78,16 +83,19 @@ export function PropertyPanel({
                   <Option
                     key={option.id}
                     property={option}
-                    selected={option.id === page.subpageTypeId}
+                    selected={page.subpageTypeIds.includes(option.id)}
                     icon={
                       <SubpageTypeIcon
-                        subpageTypeId={option.id}
+                        subpageTypeIds={[option.id]}
                         subpageTypes={properties.subpageTypes}
                       />
                     }
                     onSelect={() => {
-                      onChange({ subpageTypeId: option.id });
-                      close();
+                      onChange({
+                        subpageTypeIds: page.subpageTypeIds.includes(option.id)
+                          ? page.subpageTypeIds.filter((id) => id !== option.id)
+                          : [...page.subpageTypeIds, option.id],
+                      });
                     }}
                   />
                 ))}
@@ -96,12 +104,12 @@ export function PropertyPanel({
                     No subpage types yet. Add them in Content settings.
                   </p>
                 )}
-                {page.subpageTypeId && (
+                {page.subpageTypeIds.length > 0 && (
                   <button
                     type="button"
                     className="flex min-h-8 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-muted-foreground hover:bg-muted"
                     onClick={() => {
-                      onChange({ subpageTypeId: null });
+                      onChange({ subpageTypeIds: [] });
                       close();
                     }}
                   >

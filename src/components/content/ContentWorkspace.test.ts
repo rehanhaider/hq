@@ -98,7 +98,7 @@ describe("Content page index delete", () => {
     statusId: null,
     typeIds: [],
     tagIds: [],
-    subpageTypeId: null,
+    subpageTypeIds: [],
     position: 0,
     pinned: false,
     ...overrides,
@@ -228,7 +228,7 @@ describe("Content page index icons", () => {
     const row = source.slice(source.indexOf("function PageIndexLink"));
     expect(row).toMatch(/<PageIcon page=\{page\} properties=\{properties\} \/>/);
     // The open page's icon follows the picker before the list is refetched.
-    expect(source).toMatch(/subpageTypeId: draft\.subpageTypeId/);
+    expect(source).toMatch(/subpageTypeIds: draft\.subpageTypeIds/);
   });
 });
 
@@ -395,7 +395,7 @@ describe("Content page index reorder under a tree filter", () => {
     statusId: null,
     typeIds: [],
     tagIds: [],
-    subpageTypeId: null,
+    subpageTypeIds: [],
     position: 0,
     pinned: false,
     ...overrides,
@@ -504,7 +504,7 @@ describe("Content page index collapse", () => {
     statusId: null,
     typeIds: [],
     tagIds: [],
-    subpageTypeId: null,
+    subpageTypeIds: [],
     position: 0,
     pinned: false,
     ...overrides,

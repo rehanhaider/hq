@@ -70,8 +70,8 @@ export type ContentPage = {
   statusId: string | null;
   typeIds: string[];
   tagIds: string[];
-  /** A subpage's single type, from the subpage list. Null on a top-level page. */
-  subpageTypeId: string | null;
+  /** A subpage's types, from the subpage list. Empty on a top-level page. */
+  subpageTypeIds: string[];
   /** Manual order within a board column. */
   position: number;
   /** When true, the page sits above its unpinned siblings in the Pages index. */
@@ -170,7 +170,7 @@ export const createPageSchema = z.object({
   statusId: idSchema.nullable().optional().default(null),
   typeIds: z.array(idSchema).max(60).optional().default([]),
   tagIds: z.array(idSchema).max(60).optional().default([]),
-  subpageTypeId: idSchema.nullable().optional().default(null),
+  subpageTypeIds: z.array(idSchema).max(60).optional().default([]),
   document: z
     .custom<ContentBlock[]>(validateContentDocument, {
       message: "The page contains unsupported or invalid content.",
@@ -196,8 +196,8 @@ export const setPagePropertiesSchema = z.object({
   statusId: idSchema.nullable().optional(),
   typeIds: z.array(idSchema).max(60).optional(),
   tagIds: z.array(idSchema).max(60).optional(),
-  /** One type, or null to clear it. Only a subpage carries one. */
-  subpageTypeId: idSchema.nullable().optional(),
+  /** The subpage's whole type list; empty clears it. Only a subpage carries one. */
+  subpageTypeIds: z.array(idSchema).max(60).optional(),
 });
 
 /**
@@ -859,26 +859,41 @@ const SUBPAGE_TYPE_NAME_ICONS: Record<string, SubpageTypeIconKind> = {
   video: "video",
 };
 
-/**
- * The glyph and colour for a subpage's type. An unknown or renamed type keeps
- * its own colour behind the neutral file; a subpage with no type yet is
- * neutral in both.
- */
-export function subpageTypeIcon(
-  subpageTypeId: string | null,
-  subpageTypes: Property[],
-): { kind: SubpageTypeIconKind; color: PropertyColor } {
-  const type = subpageTypeId
-    ? subpageTypes.find((candidate) => candidate.id === subpageTypeId)
-    : undefined;
-  if (!type) return { kind: "file", color: "slate" };
+/** A subpage glyph in the colour of the type it stands for. */
+export type SubpageTypeIcon = { kind: SubpageTypeIconKind; color: PropertyColor };
+
+function subpageKindForType(type: Property): SubpageTypeIconKind {
   // Own keys only: a type named "constructor" or "toString" would otherwise
   // find something on Object.prototype and draw nothing at all.
   const name = typeNameKey(type.name);
-  const kind = Object.hasOwn(SUBPAGE_TYPE_NAME_ICONS, name)
+  return Object.hasOwn(SUBPAGE_TYPE_NAME_ICONS, name)
     ? SUBPAGE_TYPE_NAME_ICONS[name]!
     : "file";
-  return { kind, color: type.color };
+}
+
+/**
+ * Glyphs for a subpage's type selection, the same way `pageTypeIcons` draws a
+ * page's: in a stable order, one per glyph, each in the colour of the first
+ * selected type that maps onto it. An unknown or renamed type keeps its own
+ * colour behind the neutral file. A subpage with no type, or only types that
+ * are gone, gets one neutral file.
+ */
+export function subpageTypeIcons(
+  subpageTypeIds: string[],
+  subpageTypes: Property[],
+): SubpageTypeIcon[] {
+  const colors = new Map<SubpageTypeIconKind, PropertyColor>();
+  for (const id of subpageTypeIds) {
+    const type = subpageTypes.find((candidate) => candidate.id === id);
+    if (!type) continue;
+    const kind = subpageKindForType(type);
+    if (!colors.has(kind)) colors.set(kind, type.color);
+  }
+  if (colors.size === 0) return [{ kind: "file", color: "slate" }];
+  return SUBPAGE_TYPE_ICONS.flatMap((kind) => {
+    const color = colors.get(kind);
+    return color ? [{ kind, color }] : [];
+  });
 }
 
 /** True when the page hangs under another one, so it is typed as media. */

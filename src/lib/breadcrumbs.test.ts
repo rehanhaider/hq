@@ -15,7 +15,7 @@ const page = (id: string, title: string, parentId: string | null): ContentPage =
   statusId: null,
   typeIds: [],
   tagIds: [],
-  subpageTypeId: null,
+  subpageTypeIds: [],
   position: 0,
   pinned: false,
 });
