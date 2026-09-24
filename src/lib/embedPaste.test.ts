@@ -132,6 +132,8 @@ describe("planEmbedPaste", () => {
     for (const url of [
       "https://github.com/rehanhaider/hq/blob/main/docs/shot.png",
       "https://gitlab.com/group/repo/-/blob/main/clip.mp4",
+      "https://github.com/rehanhaider/hq/blame/main/docs/shot.png",
+      "https://gitlab.com/group/repo/-/blame/main/clip.mp4",
       "https://commons.wikimedia.org/wiki/File:Flower.jpg",
       "https://en.wikipedia.org/wiki/Image:Flower.jpg",
       "https://bitbucket.org/team/repo/src/main/shot.png",
