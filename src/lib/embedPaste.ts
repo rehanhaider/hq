@@ -107,15 +107,24 @@ const IMAGE_EXTENSION = /\.(?:avif|gif|jpe?g|png|svg|webp)$/i;
 const VIDEO_EXTENSION = /\.(?:m4v|mov|mp4|ogv|webm)$/i;
 
 /**
+ * Paths that name a file but serve an HTML page about it: a GitHub or
+ * GitLab file view, and a wiki's file description page. The file itself
+ * lives elsewhere, so these stay bookmark cards.
+ */
+const VIEWER_PATH = /\/blob\/|\/wiki\/(?:File|Image):/i;
+
+/**
  * A URL whose path names a file of the given kind. The extension is the
- * whole test: the paste has to be decided before anything could be fetched,
- * and a link that names a `.jpg` is one the user expects to see as a picture.
+ * test, since the paste has to be decided before anything could be
+ * fetched, and a link that names a `.jpg` is one the user expects to see
+ * as a picture — unless the path is a known viewer page for that file.
  */
 function fileUrl(extension: RegExp): (text: string) => string | null {
   return (text) => {
     const url = linkPreviewUrl(text);
     if (!url) return null;
-    return extension.test(new URL(url).pathname) ? url : null;
+    const { pathname } = new URL(url);
+    return extension.test(pathname) && !VIEWER_PATH.test(pathname) ? url : null;
   };
 }
 

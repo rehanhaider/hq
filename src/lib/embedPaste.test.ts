@@ -128,6 +128,17 @@ describe("planEmbedPaste", () => {
       type: "bookmark",
     });
     expect(planEmbedPaste(VIDEO, empty)).toMatchObject({ type: "bookmark" });
+    // Viewer pages name the file but serve HTML about it.
+    for (const url of [
+      "https://github.com/rehanhaider/hq/blob/main/docs/shot.png",
+      "https://gitlab.com/group/repo/-/blob/main/clip.mp4",
+      "https://commons.wikimedia.org/wiki/File:Flower.jpg",
+      "https://en.wikipedia.org/wiki/Image:Flower.jpg",
+    ])
+      expect(planEmbedPaste(url, empty)).toMatchObject({ type: "bookmark" });
+    expect(
+      planEmbedPaste("https://raw.githubusercontent.com/rehanhaider/hq/main/docs/shot.png", empty),
+    ).toMatchObject({ type: "image" });
     expect(planEmbedPaste("https://example.com/a.png", { type: "codeBlock", empty: true })).toEqual({
       kind: "ignore",
     });
