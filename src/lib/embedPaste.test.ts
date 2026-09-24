@@ -89,6 +89,69 @@ describe("planEmbedPaste", () => {
     expect(planEmbedPaste(LINK, null)).toEqual({ kind: "ignore" });
   });
 
+  it("turns a link to an image or video file into that block, anywhere", () => {
+    const IMAGE = "https://upload.wikimedia.org/wikipedia/commons/3/3f/Flower.JPG";
+    const CLIP = "https://example.com/media/flower.mp4?t=3";
+    expect(planEmbedPaste(IMAGE, { type: "paragraph", empty: true })).toEqual({
+      kind: "replace",
+      type: "image",
+      url: IMAGE,
+    });
+    expect(planEmbedPaste(CLIP, { type: "paragraph", empty: false })).toEqual({
+      kind: "insert",
+      type: "video",
+      url: CLIP,
+    });
+    for (const [url, type] of [
+      ["https://example.com/a.png", "image"],
+      ["https://example.com/a.jpeg", "image"],
+      ["https://example.com/a.webp", "image"],
+      ["https://example.com/a.gif", "image"],
+      ["https://example.com/a.avif", "image"],
+      ["https://example.com/a.svg", "image"],
+      ["https://example.com/a.webm", "video"],
+      ["https://example.com/a.mov", "video"],
+    ] as const)
+      expect(planEmbedPaste(url, { type: "paragraph", empty: true })).toMatchObject({
+        type,
+      });
+  });
+
+  it("reads the file extension from the path, not the query or fragment", () => {
+    const empty = { type: "paragraph", empty: true };
+    expect(planEmbedPaste("https://example.com/view?file=a.png", empty)).toEqual({
+      kind: "replace",
+      type: "bookmark",
+      url: "https://example.com/view?file=a.png",
+    });
+    expect(planEmbedPaste("https://example.com/page#a.mp4", empty)).toMatchObject({
+      type: "bookmark",
+    });
+    expect(planEmbedPaste(VIDEO, empty)).toMatchObject({ type: "bookmark" });
+    // Viewer pages name the file but serve HTML about it.
+    for (const url of [
+      "https://github.com/rehanhaider/hq/blob/main/docs/shot.png",
+      "https://gitlab.com/group/repo/-/blob/main/clip.mp4",
+      "https://github.com/rehanhaider/hq/blame/main/docs/shot.png",
+      "https://gitlab.com/group/repo/-/blame/main/clip.mp4",
+      "https://commons.wikimedia.org/wiki/File:Flower.jpg",
+      "https://en.wikipedia.org/wiki/Image:Flower.jpg",
+      "https://bitbucket.org/team/repo/src/main/shot.png",
+      "https://codeberg.org/user/repo/src/branch/main/clip.webm",
+    ])
+      expect(planEmbedPaste(url, empty)).toMatchObject({ type: "bookmark" });
+    // Elsewhere `/src/` is an ordinary path to a real file.
+    expect(planEmbedPaste("https://example.com/src/img/logo.png", empty)).toMatchObject({
+      type: "image",
+    });
+    expect(
+      planEmbedPaste("https://raw.githubusercontent.com/rehanhaider/hq/main/docs/shot.png", empty),
+    ).toMatchObject({ type: "image" });
+    expect(planEmbedPaste("https://example.com/a.png", { type: "codeBlock", empty: true })).toEqual({
+      kind: "ignore",
+    });
+  });
+
   it("leaves a URL followed by a hashtag or heading line to ordinary paste", () => {
     // Both lines are the user's; reducing them to a card would drop one.
     expect(

@@ -373,11 +373,17 @@ export function ContentEditor({
         // stays a bare link. ProseMirror reads such an insertion — whether it
         // reaches it as `beforeinput` or as a DOM change — here, and the
         // planner sorts an insert from typing.
-        handleTextInput: (_view, _from, _to, text) => {
+        handleTextInput: (view, from, _to, text, deflt) => {
           const current = editorRef.current;
-          return current
-            ? applyEmbedPlan(current, text, planEmbedTextInput)
-            : false;
+          if (current && applyEmbedPlan(current, text, planEmbedTextInput)) return true;
+          // What is left is inserted as text. A keystroke is one character;
+          // anything longer that could hold a link is a keyboard's clipboard
+          // or suggestion insert, and it gets the link paste rule a paste
+          // would, so a URL inside it is a link rather than bare text. Other
+          // insertions stay with the editor and its input rules.
+          if (text.length < 2 || !/:\/\/|\.\S/.test(text)) return false;
+          view.dispatch(deflt().setMeta("applyPasteRules", { from, text }));
+          return true;
         },
         handleDOMEvents: {
           // A multi-line insertion from a mobile keyboard never reaches
