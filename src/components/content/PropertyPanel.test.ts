@@ -15,8 +15,7 @@ const subpagePanel = source.slice(
 describe("subpage properties", () => {
   it("offers the subpage type list, and only that list", () => {
     expect(subpagePanel).toMatch(/properties\.subpageTypes\.map\(\(option\) => \(/);
-    expect(subpagePanel).toMatch(/selected=\{option\.id === page\.subpageTypeId\}/);
-    expect(subpagePanel).toMatch(/onChange\(\{ subpageTypeId: option\.id \}\)/);
+    expect(subpagePanel).toMatch(/selected=\{page\.subpageTypeIds\.includes\(option\.id\)\}/);
     // A subpage is not a step in the publishing pipeline, so neither the
     // statuses — where Idea lives — nor the page types are offered on it.
     expect(subpagePanel).not.toMatch(/properties\.statuses/);
@@ -24,13 +23,34 @@ describe("subpage properties", () => {
     expect(subpagePanel).not.toMatch(/page\.typeIds/);
   });
 
-  it("shows each option's glyph in the picker and beside the chosen type", () => {
-    expect(subpagePanel).toMatch(/<SubpageTypeIcon\s+subpageTypeId=\{option\.id\}/);
-    expect(subpagePanel).toMatch(/<SubpageTypeIcon\s+subpageTypeId=\{subpageType\.id\}/);
+  it("toggles a type in and out of the list, leaving the picker open for the next", () => {
+    const select = subpagePanel.slice(
+      subpagePanel.indexOf("onSelect={() => {"),
+      subpagePanel.indexOf("{properties.subpageTypes.length === 0"),
+    );
+    expect(select).toMatch(
+      /subpageTypeIds: chosen\.includes\(option\.id\)\s*\? chosen\.filter\(\(id\) => id !== option\.id\)\s*: \[\.\.\.chosen, option\.id\]/,
+    );
+    expect(select).not.toMatch(/close\(\)/);
+  });
+
+  it("builds the next list only from types that still exist", () => {
+    // A type deleted elsewhere would otherwise ride along on every toggle and
+    // get the whole list refused.
+    expect(source).toMatch(
+      /const subpageTypes = page\.subpageTypeIds\s*\.map\(\(id\) => properties\.subpageTypes\.find\(\(entry\) => entry\.id === id\)\)\s*\.filter\(\(type\) => type !== undefined\);/,
+    );
+    expect(subpagePanel).toMatch(/const chosen = subpageTypes\.map\(\(type\) => type\.id\);/);
+  });
+
+  it("shows each option's glyph in the picker and beside every chosen type", () => {
+    expect(subpagePanel).toMatch(/<SubpageTypeIcon\s+subpageTypeIds=\{\[option\.id\]\}/);
+    expect(subpagePanel).toMatch(/subpageTypes\.map\(\(type\) =>/);
+    expect(subpagePanel).toMatch(/<SubpageTypeIcon\s+subpageTypeIds=\{\[type\.id\]\}/);
   });
 
   it("lets a subpage go back to having no type", () => {
-    expect(subpagePanel).toMatch(/onChange\(\{ subpageTypeId: null \}\)/);
+    expect(subpagePanel).toMatch(/onChange\(\{ subpageTypeIds: \[\] \}\)/);
   });
 
   it("keeps the page panel on the page lists", () => {
@@ -39,6 +59,6 @@ describe("subpage properties", () => {
     );
     expect(pagePanel).toMatch(/properties\.statuses\.map/);
     expect(pagePanel).toMatch(/properties\.types\.map/);
-    expect(pagePanel).not.toMatch(/subpageTypeId/);
+    expect(pagePanel).not.toMatch(/subpageTypeIds/);
   });
 });

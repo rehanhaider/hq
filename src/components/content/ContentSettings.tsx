@@ -87,7 +87,7 @@ export function ContentSettings() {
         : kind === "type"
           ? page.typeIds.includes(id)
           : kind === "subpageType"
-            ? page.subpageTypeId === id
+            ? page.subpageTypeIds.includes(id)
             : page.tagIds.includes(id),
     ).length;
 

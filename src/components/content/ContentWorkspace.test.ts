@@ -98,7 +98,7 @@ describe("Content page index delete", () => {
     statusId: null,
     typeIds: [],
     tagIds: [],
-    subpageTypeId: null,
+    subpageTypeIds: [],
     position: 0,
     pinned: false,
     ...overrides,
@@ -223,12 +223,29 @@ describe("Content page title save", () => {
   });
 });
 
+describe("Content property saves", () => {
+  it("sends one property save at a time, in the order they were made", () => {
+    const apply = source.slice(
+      source.indexOf("const applyProperties = async"),
+      source.indexOf("const addTag = async"),
+    );
+    // Each save waits for the one before it, so an older list can never land
+    // after a newer one from the same open picker.
+    expect(apply).toMatch(/const queued = propertySaves\.current\.then\(save\);/);
+    expect(apply).toMatch(/propertySaves\.current = queued;/);
+    expect(apply).toMatch(/await queued;/);
+    expect(apply.slice(apply.indexOf("const save = async"))).toMatch(
+      /await setPageProperties\(/,
+    );
+  });
+});
+
 describe("Content page index icons", () => {
   it("draws every row from the list the page itself is typed by", () => {
     const row = source.slice(source.indexOf("function PageIndexLink"));
     expect(row).toMatch(/<PageIcon page=\{page\} properties=\{properties\} \/>/);
     // The open page's icon follows the picker before the list is refetched.
-    expect(source).toMatch(/subpageTypeId: draft\.subpageTypeId/);
+    expect(source).toMatch(/subpageTypeIds: draft\.subpageTypeIds/);
   });
 });
 
@@ -395,7 +412,7 @@ describe("Content page index reorder under a tree filter", () => {
     statusId: null,
     typeIds: [],
     tagIds: [],
-    subpageTypeId: null,
+    subpageTypeIds: [],
     position: 0,
     pinned: false,
     ...overrides,
@@ -504,7 +521,7 @@ describe("Content page index collapse", () => {
     statusId: null,
     typeIds: [],
     tagIds: [],
-    subpageTypeId: null,
+    subpageTypeIds: [],
     position: 0,
     pinned: false,
     ...overrides,

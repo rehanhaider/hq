@@ -216,7 +216,7 @@ export const createPage = createServerFn({ method: "POST" })
       data.statusId,
       data.typeIds,
       data.tagIds,
-      data.subpageTypeId,
+      data.subpageTypeIds,
     ),
   );
 export const setPageProperties = createServerFn({ method: "POST" })

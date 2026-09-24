@@ -6,7 +6,7 @@ import { cn } from "cn";
 import {
   isSubpage,
   pageTypeIcons,
-  subpageTypeIcon,
+  subpageTypeIcons,
   type ContentPage,
   type ContentProperties,
   type PageTypeIconKind,
@@ -65,8 +65,8 @@ function Tile({
 
 /**
  * The glyph for whatever the page is: its page types when it stands on its
- * own, its single media type when it hangs under another page. The two lists
- * never mix, so neither does the iconography.
+ * own, its media types when it hangs under another page. The two lists never
+ * mix, so neither does the iconography.
  */
 export function PageIcon({
   page,
@@ -90,7 +90,7 @@ export function PageIcon({
     );
   return (
     <SubpageTypeIcon
-      subpageTypeId={page.subpageTypeId}
+      subpageTypeIds={page.subpageTypeIds}
       subpageTypes={properties.subpageTypes}
       size={size}
       className={className}
@@ -98,22 +98,34 @@ export function PageIcon({
   );
 }
 
-/** A subpage's single media glyph, on a tile in its type's colour. */
+/**
+ * A subpage's media glyphs, each on a tile in its type's colour. Mixed types
+ * draw one tile each, side by side, like a page's types do.
+ */
 export function SubpageTypeIcon({
-  subpageTypeId,
+  subpageTypeIds,
   subpageTypes,
   size = "list",
   className,
 }: {
-  subpageTypeId: string | null;
+  subpageTypeIds: string[];
   subpageTypes: Property[];
   size?: IconSize;
   className?: string;
 }) {
-  const { kind, color } = subpageTypeIcon(subpageTypeId, subpageTypes);
+  const icons = subpageTypeIcons(subpageTypeIds, subpageTypes);
   return (
-    <span aria-hidden className={cn("inline-flex shrink-0 items-center", className)}>
-      <Tile Icon={SUBPAGE_ICONS[kind]} color={color} size={size} />
+    <span
+      aria-hidden
+      className={cn(
+        "inline-flex shrink-0 items-center",
+        size === "title" ? "gap-1.5" : "gap-1",
+        className,
+      )}
+    >
+      {icons.map(({ kind, color }) => (
+        <Tile key={kind} Icon={SUBPAGE_ICONS[kind]} color={color} size={size} />
+      ))}
     </span>
   );
 }
