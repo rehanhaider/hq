@@ -166,55 +166,61 @@ function HomePage() {
             </span>
           </div>
 
-          <ul
-            className="mt-4 grid grid-cols-5 gap-1.5 sm:gap-2"
-            aria-label="Today's prayers"
-          >
-            {prayers.map(([key, label, status]) => {
-              const next = key === nextPrayer?.[0];
-              const tone = TILE_TONE[status ?? (next ? "next" : "unset")];
-              const Icon = tone.icon;
-              const state = tone.label;
-              return (
-                <li key={key} className="min-w-0">
-                  <button
-                    type="button"
-                    disabled={logPrayer.isPending}
-                    aria-label={`${label}: ${state}. Change`}
-                    onClick={() =>
-                      logPrayer.mutate({
-                        date: nasr.today,
-                        key,
-                        status: nextStatus(status),
-                      })
-                    }
-                    className={cn(
-                      "flex w-full flex-col items-center gap-2 rounded-lg border px-0.5 pt-3 pb-2.5 transition-colors disabled:cursor-progress sm:px-1.5 sm:pt-4 sm:pb-3.5",
-                      tone.tile,
-                    )}
-                  >
-                    <span className="text-xs font-semibold sm:text-sm">
-                      {label}
-                    </span>
-                    <span
-                      aria-hidden
+          {/* Laid out by the card's width, not the viewport's: in the three
+              column desktop grid this card is narrower than a phone. Below
+              22rem five tiles cannot hold their labels, so each prayer is a
+              row instead. */}
+          <div className="@container mt-4">
+            <ul
+              className="grid gap-1.5 @[22rem]:grid-cols-5 @[22rem]:gap-2"
+              aria-label="Today's prayers"
+            >
+              {prayers.map(([key, label, status]) => {
+                const next = key === nextPrayer?.[0];
+                const tone = TILE_TONE[status ?? (next ? "next" : "unset")];
+                const Icon = tone.icon;
+                const state = tone.label;
+                return (
+                  <li key={key} className="min-w-0">
+                    <button
+                      type="button"
+                      disabled={logPrayer.isPending}
+                      aria-label={`${label}: ${state}. Change`}
+                      onClick={() =>
+                        logPrayer.mutate({
+                          date: nasr.today,
+                          key,
+                          status: nextStatus(status),
+                        })
+                      }
                       className={cn(
-                        "grid size-7 place-items-center rounded-full sm:size-8",
-                        tone.mark,
+                        "flex min-h-11 w-full items-center gap-3 rounded-lg border px-3 py-1.5 text-left transition-colors disabled:cursor-progress @[22rem]:flex-col @[22rem]:gap-2 @[22rem]:px-1 @[22rem]:pt-4 @[22rem]:pb-3.5 @[22rem]:text-center",
+                        tone.tile,
                       )}
                     >
-                      <Icon className="size-4" />
-                    </span>
-                    <span
-                      className={cn("text-[0.6875rem] sm:text-xs", tone.text)}
-                    >
-                      {state}
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+                      <span className="text-sm font-semibold @[22rem]:text-[0.8125rem]">
+                        {label}
+                      </span>
+                      <span
+                        aria-hidden
+                        className={cn(
+                          "order-first grid size-7 shrink-0 place-items-center rounded-full @[22rem]:order-none @[22rem]:size-8",
+                          tone.mark,
+                        )}
+                      >
+                        <Icon className="size-4" />
+                      </span>
+                      <span
+                        className={cn("ml-auto text-xs @[22rem]:ml-0", tone.text)}
+                      >
+                        {state}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
           <p className="mt-2.5 text-xs text-muted-foreground">
             Tap a prayer to cycle: on time, qada, missed, clear.
           </p>

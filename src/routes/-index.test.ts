@@ -47,6 +47,12 @@ describe("Home Nasr card footer", () => {
     expect(source).not.toMatch(/translate-y|active:scale/);
   });
 
+  it("lays the prayers out by the card's width, as rows until tiles fit", () => {
+    expect(nasr).toContain('className="@container mt-4"');
+    expect(nasr).toContain("@[22rem]:grid-cols-5");
+    expect(nasr).toMatch(/min-h-11 w-full items-center[^"]*@\[22rem\]:flex-col/);
+  });
+
   it("updates the tiles optimistically", () => {
     expect(source).toMatch(/onMutate: async \(\{ key, status \}\)/);
     expect(source).toMatch(/const day = \{ \.\.\.nasr\.day, \[key\]: status \}/);
