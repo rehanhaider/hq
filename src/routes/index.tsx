@@ -1,14 +1,21 @@
 import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Check, ChevronDown, Circle, FilePlus2 } from "lucide-react";
+import {
+  ArrowRight,
+  Check,
+  Circle,
+  Clock,
+  FilePlus2,
+  Plus,
+  X,
+} from "lucide-react";
 import { homeQuery, nasrKeys } from "@/queries/nasr";
 import { openWorkQuery } from "@/queries/dashboard";
 import { age, countKinds } from "@/lib/openWork";
 import { useNewPage } from "@/queries/content";
 import { updateNasrDay } from "@/server/fns";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/ui/menu";
 import { Dot } from "@/components/content/properties";
 import { relativeTime } from "@/lib/content";
 import {
@@ -29,7 +36,6 @@ export const Route = createFileRoute("/")({
 
 const WORDS = ["No", "One", "Two", "Three", "Four", "Five"] as const;
 type PrayerKey = "fajr" | "dhuhr" | "asr" | "maghrib" | "isha";
-type LoggedStatus = "ontime" | "qada";
 
 function number(value: number) {
   return value.toLocaleString("en-GB");
@@ -45,7 +51,7 @@ function HomePage() {
   const newPage = useNewPage();
   const [creating, setCreating] = useState(false);
   const logPrayer = useMutation({
-    mutationFn: ({ date, key, status }: { date: string; key: PrayerKey; status: LoggedStatus }) =>
+    mutationFn: ({ date, key, status }: { date: string; key: PrayerKey; status: PrayerStatus }) =>
       updateNasrDay({ data: { date, [key]: status } }),
     onMutate: async ({ key, status }) => {
       await queryClient.cancelQueries({ queryKey: nasrKeys.home });
@@ -153,115 +159,65 @@ function HomePage() {
         <section className="card flex flex-col p-5" aria-labelledby="nasr-heading">
           <div className="flex items-center justify-between gap-3">
             <h2 id="nasr-heading" className="section-title">
-              Nasr
+              Salah today
             </h2>
             <span className="font-mono text-[0.8125rem] text-muted-foreground tabular-nums">
-              {logged} / 5 salah
+              {logged} / 5
             </span>
           </div>
 
-          <ul className="mt-4 grid grid-cols-5 gap-2" aria-label="Today's prayers">
-            {prayers.map(([, label, status]) => (
-              <li key={label} className="text-center">
-                <span
-                  aria-hidden
-                  title={`${label} — ${statusLabel(status)}`}
-                  className={cn(
-                    "block h-1.5 rounded-full",
-                    status === "ontime"
-                      ? "bg-positive"
-                      : status === "qada"
-                        ? "bg-warning"
-                        : status === "missed"
-                          ? "bg-negative"
-                          : "bg-track",
-                  )}
-                />
-                <span className="mt-2 block text-xs text-muted-foreground">
-                  {label}
-                </span>
-                <span className="sr-only">{statusLabel(status)}</span>
-              </li>
-            ))}
-          </ul>
-
-          <div className="mt-4 flex min-h-11 items-center justify-between gap-3 rounded-lg bg-muted/70 px-3 py-2">
-            <div className="min-w-0">
-              <p className="text-xs font-medium">
-                {nextPrayer ? `Log ${nextPrayer[1]}` : "All prayers logged"}
-              </p>
-              <p className="mt-0.5 text-[0.6875rem] text-muted-foreground">
-                {nextPrayer
-                  ? "One click logs on time. Open the menu for qada."
-                  : "Today's salah is complete"}
-              </p>
-            </div>
-            <div className="flex shrink-0" role="group" aria-label="Log prayer">
-              <Button
-                type="button"
-                className="w-16 rounded-r-none"
-                disabled={!nextPrayer || logPrayer.isPending}
-                aria-label={
-                  nextPrayer ? `Log ${nextPrayer[1]} as on time` : undefined
-                }
-                onClick={() => {
-                  if (!nextPrayer) return;
-                  logPrayer.mutate({
-                    date: nasr.today,
-                    key: nextPrayer[0],
-                    status: "ontime",
-                  });
-                }}
-              >
-                {nextPrayer ? "Log" : "Done"}
-              </Button>
-              <Menu>
-                <MenuTrigger
-                  render={
-                    <Button
-                      type="button"
-                      size="icon"
-                      className="rounded-l-none border-l border-primary-foreground/20 -ml-px max-sm:min-h-11 max-sm:min-w-11 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
-                      disabled={!nextPrayer || logPrayer.isPending}
-                      aria-label={
-                        nextPrayer
-                          ? `Choose how to log ${nextPrayer[1]}`
-                          : "Choose how to log"
-                      }
+          <ul
+            className="mt-4 grid grid-cols-5 gap-1.5 sm:gap-2"
+            aria-label="Today's prayers"
+          >
+            {prayers.map(([key, label, status]) => {
+              const next = key === nextPrayer?.[0];
+              const tone = TILE_TONE[status ?? (next ? "next" : "unset")];
+              const Icon = tone.icon;
+              const state = tone.label;
+              return (
+                <li key={key} className="min-w-0">
+                  <button
+                    type="button"
+                    disabled={logPrayer.isPending}
+                    aria-label={`${label}: ${state}. Change`}
+                    onClick={() =>
+                      logPrayer.mutate({
+                        date: nasr.today,
+                        key,
+                        status: nextStatus(status),
+                      })
+                    }
+                    className={cn(
+                      "flex w-full flex-col items-center gap-2 rounded-lg border px-0.5 pt-3 pb-2.5 transition-colors disabled:cursor-progress sm:px-1.5 sm:pt-4 sm:pb-3.5",
+                      tone.tile,
+                    )}
+                  >
+                    <span className="text-xs font-semibold sm:text-sm">
+                      {label}
+                    </span>
+                    <span
+                      aria-hidden
+                      className={cn(
+                        "grid size-7 place-items-center rounded-full sm:size-8",
+                        tone.mark,
+                      )}
                     >
-                      <ChevronDown />
-                    </Button>
-                  }
-                />
-                <MenuContent align="end" className="min-w-36">
-                  <MenuItem
-                    onClick={() => {
-                      if (!nextPrayer) return;
-                      logPrayer.mutate({
-                        date: nasr.today,
-                        key: nextPrayer[0],
-                        status: "ontime",
-                      });
-                    }}
-                  >
-                    On time
-                  </MenuItem>
-                  <MenuItem
-                    onClick={() => {
-                      if (!nextPrayer) return;
-                      logPrayer.mutate({
-                        date: nasr.today,
-                        key: nextPrayer[0],
-                        status: "qada",
-                      });
-                    }}
-                  >
-                    Qada
-                  </MenuItem>
-                </MenuContent>
-              </Menu>
-            </div>
-          </div>
+                      <Icon className="size-4" />
+                    </span>
+                    <span
+                      className={cn("text-[0.6875rem] sm:text-xs", tone.text)}
+                    >
+                      {state}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          <p className="mt-2.5 text-xs text-muted-foreground">
+            Tap a prayer to cycle: on time, qada, missed, clear.
+          </p>
           {logPrayer.isError && (
             <p role="alert" className="mt-2 text-xs text-negative">
               The prayer could not be saved. {logPrayer.error.message}
@@ -726,14 +682,56 @@ function OpenWorkCard() {
   );
 }
 
-function statusLabel(status: PrayerStatus) {
-  return status === "ontime"
-    ? "on time"
-    : status === "qada"
+// One entry per tile state, modelled on the Nasr page's statusTone: a bordered
+// tile tinted in its status colour. Every tile is a button, so every tile
+// answers hover the same way: its border steps up in its own colour.
+const TILE_TONE = {
+  ontime: {
+    label: "On time",
+    icon: Check,
+    tile: "border-positive/30 bg-positive/10 hover:border-positive/60",
+    mark: "bg-positive/15 text-positive",
+    text: "text-positive",
+  },
+  qada: {
+    label: "Qada",
+    icon: Clock,
+    tile: "border-warning/30 bg-warning/15 hover:border-warning/60",
+    mark: "bg-warning/20 text-warning",
+    text: "text-warning",
+  },
+  missed: {
+    label: "Missed",
+    icon: X,
+    tile: "border-negative/30 bg-negative/10 hover:border-negative/60",
+    mark: "bg-negative/15 text-negative",
+    text: "text-negative",
+  },
+  next: {
+    label: "Next",
+    icon: Plus,
+    tile: "border-primary/60 hover:border-primary",
+    mark: "border border-primary/40 text-primary",
+    text: "font-medium text-primary",
+  },
+  unset: {
+    label: "Not set",
+    icon: Plus,
+    tile: "hover:border-primary/40",
+    mark: "border text-muted-foreground",
+    text: "text-muted-foreground",
+  },
+} as const;
+
+// A tap moves a prayer one step along on time, qada, missed, then back to unset.
+function nextStatus(status: PrayerStatus): PrayerStatus {
+  return status === null
+    ? "ontime"
+    : status === "ontime"
       ? "qada"
-      : status === "missed"
+      : status === "qada"
         ? "missed"
-        : "not logged";
+        : null;
 }
 
 function weekday(day: string) {
