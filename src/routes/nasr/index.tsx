@@ -88,7 +88,7 @@ function TodayPage() {
   }
   return (
     <div className="space-y-8">
-      <div className="flex min-h-10 items-center justify-between gap-2 sm:justify-end">
+      <div className="flex min-h-10 items-center justify-between gap-2 sm:-ml-2.5 sm:justify-start">
         <Button
           variant="ghost"
           size="icon"
