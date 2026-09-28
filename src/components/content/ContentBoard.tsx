@@ -31,6 +31,7 @@ import {
   hasFilters,
   relativeTime,
   sortPages,
+  visibleBoardBuckets,
   type ContentGroupBucket,
   type ContentPage,
   type ContentProperties,
@@ -93,16 +94,30 @@ export function ContentBoard() {
     [pages.data],
   );
 
-  const computed = useMemo(
-    () =>
-      groupPages(
-        sortPages(filterPages(topLevel, search), sort),
-        group,
-        properties,
-        { hideEmpty: search.columns === "filled" },
-      ),
-    [topLevel, properties, group, sort, search],
-  );
+  const computed = useMemo(() => {
+    const grouped = groupPages(
+      sortPages(filterPages(topLevel, search), sort),
+      group,
+      properties,
+    );
+    const visible = visibleBoardBuckets(grouped, properties, search);
+    // "Filled columns only" applies after Archived is revealed, so an
+    // explicitly requested Archived column still shows when it is empty.
+    if (search.columns !== "filled") return visible;
+    const archivedIds = new Set(
+      properties.statuses
+        .filter((status) => status.name.trim().toLowerCase() === "archived")
+        .map((status) => status.id),
+    );
+    const archivedRequested =
+      search.archived === "show" ||
+      (search.status?.some((id) => archivedIds.has(id)) ?? false);
+    return visible.filter(
+      (bucket) =>
+        bucket.pages.length > 0 ||
+        (archivedRequested && bucket.id !== null && archivedIds.has(bucket.id)),
+    );
+  }, [topLevel, properties, group, sort, search]);
   const buckets = local ?? computed;
 
   const update = (patch: ToolbarPatch) =>
@@ -243,6 +258,11 @@ export function ContentBoard() {
   };
 
   const total = buckets.reduce((sum, bucket) => sum + bucket.pages.length, 0);
+  const archivedSelected = properties.statuses.some(
+    (status) =>
+      status.name.trim().toLowerCase() === "archived" &&
+      search.status?.includes(status.id),
+  );
 
   return (
     <section aria-label="Board" className="space-y-5">
@@ -259,7 +279,7 @@ export function ContentBoard() {
       )}
       {pages.isPending || propertyQuery.isPending ? (
         <div className="h-[28rem] animate-pulse rounded-xl bg-muted" aria-label="Loading board" />
-      ) : total === 0 && hasFilters(search) ? (
+      ) : total === 0 && hasFilters(search) && !archivedSelected ? (
         <p className="card p-10 text-center text-muted-foreground">
           No pages match these filters.
         </p>

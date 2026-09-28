@@ -96,6 +96,18 @@ export function ContentToolbar({
             >
               Hide empty columns
             </MenuCheckboxItem>
+            {properties.statuses.some(
+              (status) => status.name.trim().toLowerCase() === "archived",
+            ) && (
+              <MenuCheckboxItem
+                checked={search.archived === "show"}
+                onCheckedChange={(checked) =>
+                  onChange({ archived: checked ? "show" : undefined })
+                }
+              >
+                Show archived
+              </MenuCheckboxItem>
+            )}
           </MenuContent>
         </Menu>
       )}

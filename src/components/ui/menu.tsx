@@ -77,9 +77,9 @@ function MenuCheckboxItem({
   );
 }
 
-function MenuLabel({ className, ...props }: MenuPrimitive.GroupLabel.Props) {
+function MenuLabel({ className, ...props }: React.ComponentProps<"div">) {
   return (
-    <MenuPrimitive.GroupLabel
+    <div
       data-slot="menu-label"
       className={cn("px-2.5 py-1.5 text-xs font-medium text-muted-foreground", className)}
       {...props}

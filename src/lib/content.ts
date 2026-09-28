@@ -155,6 +155,8 @@ export const contentSearchSchema = z.object({
   sort: z.enum(SORTS).optional().catch(undefined),
   /** "filled" hides columns with no cards. */
   columns: z.enum(["all", "filled"]).optional().catch(undefined),
+  /** Show the Archived status column on the board. */
+  archived: z.literal("show").optional().catch(undefined),
 });
 
 export type ContentSearch = z.infer<typeof contentSearchSchema>;
@@ -705,6 +707,26 @@ export function groupPages(
   return options.hideEmpty
     ? buckets.filter((bucket) => bucket.pages.length > 0)
     : buckets;
+}
+
+/** Keep Archived out of the default board, unless it was requested explicitly. */
+export function visibleBoardBuckets(
+  buckets: ContentGroupBucket[],
+  properties: ContentProperties,
+  search: ContentSearch,
+) {
+  const archivedIds = new Set(
+    properties.statuses
+      .filter((status) => status.name.trim().toLowerCase() === "archived")
+      .map((status) => status.id),
+  );
+  return buckets.filter(
+    (bucket) =>
+      bucket.id === null ||
+      !archivedIds.has(bucket.id) ||
+      search.archived === "show" ||
+      search.status?.includes(bucket.id),
+  );
 }
 
 /** Compact "3h ago" for card timestamps. Exact dates live in the editor. */
