@@ -268,6 +268,22 @@ describe("visibleBoardBuckets", () => {
     );
   });
 
+  it("keeps an explicitly requested Archived column when it is empty and filled-only columns apply", () => {
+    // Mirrors the board composition: group without hideEmpty, reveal
+    // Archived, then drop empty columns except a requested Archived one.
+    const onlyDraft = [page("Draft")];
+    const grouped = groupPages(onlyDraft, "status", boardProperties);
+    const visible = visibleBoardBuckets(
+      grouped,
+      boardProperties,
+      { archived: "show" },
+    );
+    const filled = visible.filter(
+      (bucket) => bucket.pages.length > 0 || bucket.id === "archive",
+    );
+    expect(filled.map((bucket) => bucket.label)).toContain("Archived");
+  });
+
   it("does not hide a renamed status", () => {
     const renamed = {
       ...boardProperties,

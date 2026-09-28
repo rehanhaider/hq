@@ -94,20 +94,30 @@ export function ContentBoard() {
     [pages.data],
   );
 
-  const computed = useMemo(
-    () =>
-      visibleBoardBuckets(
-        groupPages(
-          sortPages(filterPages(topLevel, search), sort),
-          group,
-          properties,
-          { hideEmpty: search.columns === "filled" },
-        ),
-        properties,
-        search,
-      ),
-    [topLevel, properties, group, sort, search],
-  );
+  const computed = useMemo(() => {
+    const grouped = groupPages(
+      sortPages(filterPages(topLevel, search), sort),
+      group,
+      properties,
+    );
+    const visible = visibleBoardBuckets(grouped, properties, search);
+    // "Filled columns only" applies after Archived is revealed, so an
+    // explicitly requested Archived column still shows when it is empty.
+    if (search.columns !== "filled") return visible;
+    const archivedIds = new Set(
+      properties.statuses
+        .filter((status) => status.name.trim().toLowerCase() === "archived")
+        .map((status) => status.id),
+    );
+    const archivedRequested =
+      search.archived === "show" ||
+      (search.status?.some((id) => archivedIds.has(id)) ?? false);
+    return visible.filter(
+      (bucket) =>
+        bucket.pages.length > 0 ||
+        (archivedRequested && bucket.id !== null && archivedIds.has(bucket.id)),
+    );
+  }, [topLevel, properties, group, sort, search]);
   const buckets = local ?? computed;
 
   const update = (patch: ToolbarPatch) =>
