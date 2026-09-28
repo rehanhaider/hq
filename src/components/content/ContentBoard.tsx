@@ -31,6 +31,7 @@ import {
   hasFilters,
   relativeTime,
   sortPages,
+  visibleBoardBuckets,
   type ContentGroupBucket,
   type ContentPage,
   type ContentProperties,
@@ -95,11 +96,15 @@ export function ContentBoard() {
 
   const computed = useMemo(
     () =>
-      groupPages(
-        sortPages(filterPages(topLevel, search), sort),
-        group,
+      visibleBoardBuckets(
+        groupPages(
+          sortPages(filterPages(topLevel, search), sort),
+          group,
+          properties,
+          { hideEmpty: search.columns === "filled" },
+        ),
         properties,
-        { hideEmpty: search.columns === "filled" },
+        search,
       ),
     [topLevel, properties, group, sort, search],
   );
@@ -243,6 +248,11 @@ export function ContentBoard() {
   };
 
   const total = buckets.reduce((sum, bucket) => sum + bucket.pages.length, 0);
+  const archivedSelected = properties.statuses.some(
+    (status) =>
+      status.name.trim().toLowerCase() === "archived" &&
+      search.status?.includes(status.id),
+  );
 
   return (
     <section aria-label="Board" className="space-y-5">
@@ -259,7 +269,7 @@ export function ContentBoard() {
       )}
       {pages.isPending || propertyQuery.isPending ? (
         <div className="h-[28rem] animate-pulse rounded-xl bg-muted" aria-label="Loading board" />
-      ) : total === 0 && hasFilters(search) ? (
+      ) : total === 0 && hasFilters(search) && !archivedSelected ? (
         <p className="card p-10 text-center text-muted-foreground">
           No pages match these filters.
         </p>

@@ -39,6 +39,7 @@ describe("board columns", () => {
     // before anything else and never offers another grouping.
     expect(source).toMatch(/filter\(\(page\) => page\.parentId === null\)/);
     expect(source).toMatch(/groupPages\(\s*sortPages\(filterPages\(topLevel, search\), sort\),\s*group,/);
+    expect(source).toMatch(/visibleBoardBuckets\(/);
     expect(source).toMatch(/const group = "status" as const;/);
     expect(source).not.toMatch(/search\.group/);
   });

@@ -10,6 +10,7 @@ import {
   filterPages,
   groupPages,
   hasFilters,
+  visibleBoardBuckets,
   pageTreeIds,
   pageTypeIcons,
   persistedPageTitle,
@@ -238,6 +239,50 @@ describe("groupPages", () => {
   });
 });
 
+describe("visibleBoardBuckets", () => {
+  const boardProperties: ContentProperties = {
+    ...properties,
+    statuses: [
+      ...properties.statuses,
+      { id: "archive", name: "Archived", color: "slate", position: 2 },
+    ],
+  };
+  const pages = [
+    page("Draft"),
+    page("Old post", { statusId: "archive" }),
+  ];
+  const buckets = groupPages(pages, "status", boardProperties);
+
+  it("hides Archived by default and keeps other columns", () => {
+    expect(
+      visibleBoardBuckets(buckets, boardProperties, {}).map((bucket) => bucket.label),
+    ).toEqual(["Idea", "Published"]);
+  });
+
+  it("shows Archived when requested or selected by a status filter", () => {
+    expect(visibleBoardBuckets(buckets, boardProperties, { archived: "show" })).toEqual(
+      buckets,
+    );
+    expect(visibleBoardBuckets(buckets, boardProperties, { status: ["archive"] })).toEqual(
+      buckets,
+    );
+  });
+
+  it("does not hide a renamed status", () => {
+    const renamed = {
+      ...boardProperties,
+      statuses: boardProperties.statuses.map((status) =>
+        status.id === "archive" ? { ...status, name: "Past work" } : status,
+      ),
+    };
+    expect(
+      visibleBoardBuckets(groupPages(pages, "status", renamed), renamed, {}).map(
+        (bucket) => bucket.label,
+      ),
+    ).toContain("Past work");
+  });
+});
+
 describe("page title placeholder", () => {
   it("stores a blank editor title as empty rather than the default label", () => {
     expect(persistedPageTitle("")).toBe("");
@@ -273,6 +318,7 @@ describe("contentSearchSchema", () => {
         group: "type",
         sort: "updated",
         columns: "filled",
+        archived: "show",
       }),
     ).toMatchObject({
       q: "stream",
@@ -281,6 +327,7 @@ describe("contentSearchSchema", () => {
       group: "type",
       sort: "updated",
       columns: "filled",
+      archived: "show",
     });
     expect(
       contentSearchSchema.parse({ group: "nonsense", sort: "nonsense", tag: ["nope"] }),
