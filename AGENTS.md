@@ -35,3 +35,7 @@ The body follows `.github/pull_request_template.md`. Passing `--body` to
 `gh pr create` skips the template, so paste its headings and fill each one.
 Before and after screenshots for UI changes go on the `assets` branch under
 `pr-<number>/`, linked from the body by their raw GitHub URL.
+
+Videos go in the same table as a GIF `<img>` (plays inline) linked to the
+`.mp4` on `cdn.jsdelivr.net/gh/<owner>/<repo>@<commit>/` (plays on click).
+Never link a raw `.mp4`: it downloads instead of playing.

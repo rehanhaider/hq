@@ -27,7 +27,8 @@ we may close it without merging it, or never review it.
      Do not put before and after side by side.
      Capture the colour mode you worked in. Add a second table for the other
      mode only when the change touches theming or colours.
-     If the change involves motion or interaction, include a short video.
+     For motion or interaction, add a video row: a GIF <img> linked to the
+     .mp4 on jsDelivr. See AGENTS.md.
      Delete this section if not applicable. -->
 
 | | |
@@ -40,4 +41,4 @@ we may close it without merging it, or never review it.
 - [ ] This PR is small and focused
 - [ ] I explained what changed and why
 - [ ] I included before/after screenshots for any UI changes
-- [ ] I included a video for animation/interaction changes
+- [ ] I included a video (animated GIF) for animation/interaction changes
