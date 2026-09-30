@@ -36,9 +36,22 @@ The body follows `.github/pull_request_template.md`. Passing `--body` to
 Before and after screenshots for UI changes go on the `assets` branch under
 `pr-<number>/`, linked from the body by their raw GitHub URL.
 
-Recordings of motion or interaction go in the body as animated GIFs, embedded
-with `<img>` so they play inline. A video file (`.mp4`, `.webm`) linked from
-the `assets` branch does not play: `raw.githubusercontent.com` serves it as
-`application/octet-stream`, so it downloads instead. Convert the
-recording with ffmpeg, trim it to the interaction itself, and keep it under
-5 MB. Before publishing, check that the raw URL returns `content-type: image/gif`.
+Recordings of motion or interaction go in the same before/after table as
+the screenshots, and must play without being downloaded:
+
+- Push an `.mp4` (H.264) and an animated `.gif` of it to `assets` under
+  `pr-<number>/`, both trimmed to the interaction itself, with the GIF under
+  5 MB.
+- Embed the GIF with `<img>`, served from
+  `raw.githubusercontent.com/<owner>/<repo>/<commit>/...`, so it plays inline.
+- Wrap it in a link to the `.mp4`, served from
+  `cdn.jsdelivr.net/gh/<owner>/<repo>@<commit>/...`, so a click plays the full
+  video in the browser.
+- Pin both URLs to the `assets` commit that added the files, not to the
+  branch name, so later pushes and CDN caching never change what the PR shows.
+
+Never link an `.mp4` by its `raw.githubusercontent.com` URL:
+`raw.githubusercontent.com` serves it as `application/octet-stream`, so it
+downloads instead of playing. Before publishing, check that the GIF URL
+returns `content-type: image/gif` and that the `.mp4` URL returns
+`content-type: video/mp4`.

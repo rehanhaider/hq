@@ -27,11 +27,14 @@ we may close it without merging it, or never review it.
      Do not put before and after side by side.
      Capture the colour mode you worked in. Add a second table for the other
      mode only when the change touches theming or colours.
-     If the change involves motion or interaction, include a short video as
-     an animated GIF in an <img> tag, in the same before/after table layout.
-     An .mp4 or .webm pushed to `assets` does not play: raw.githubusercontent.com
-     serves it as a download. Trim the GIF to the interaction itself and keep
-     it under 5 MB so it loads inline.
+     If the change involves motion or interaction, include a short video in
+     the same before/after table layout: an animated GIF in an <img> tag so it
+     plays inline, wrapped in a link to the .mp4 so a click plays it at full
+     quality. Serve the GIF from raw.githubusercontent.com and the .mp4 from
+     cdn.jsdelivr.net/gh/<owner>/<repo>@<assets commit>/..., both pinned to
+     the commit that added them. raw.githubusercontent.com serves an .mp4 as
+     a download, so it never plays from there. Trim both to the interaction
+     itself and keep the GIF under 5 MB.
      Delete this section if not applicable. -->
 
 | | |
