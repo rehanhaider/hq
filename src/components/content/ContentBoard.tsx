@@ -16,6 +16,7 @@ import {
 } from "@dnd-kit/core";
 import {
   SortableContext,
+  arrayMove,
   sortableKeyboardCoordinates,
   useSortable,
   verticalListSortingStrategy,
@@ -47,24 +48,24 @@ const keyOf = (bucket: ContentGroupBucket) => bucket.id ?? NONE;
 /** The status a column stands for, or null for the column that collects the pages with none. */
 const propertyOf = (column: string | null) => (column === NONE ? null : column);
 
-/**
- * A drag id is unique per card *slot*: the column plus the page, so dnd-kit
- * always measures the card being dragged.
- */
-const slotId = (column: string, pageId: string) => `${column}/${pageId}`;
-const pageOf = (id: string) => id.slice(id.indexOf("/") + 1);
-
 type MovePatch = {
   id: string;
   orderedIds: string[];
   statusId?: string;
 };
 
-/** The column a drag id belongs to: a column id itself, or a card's column. */
+/**
+ * The column a drag id belongs to: a column id itself, or the column holding
+ * that card. A card's drag id is its page id, which stays the same when the
+ * preview carries it into another column, so dnd-kit never loses the card
+ * being dragged. The board groups by status, so a page is in one column only.
+ */
 function columnOf(list: ContentGroupBucket[], id: string) {
-  const separator = id.indexOf("/");
-  const key = separator < 0 ? id : id.slice(0, separator);
-  return list.some((bucket) => keyOf(bucket) === key) ? key : null;
+  const column = list.find(
+    (bucket) =>
+      keyOf(bucket) === id || bucket.pages.some((page) => page.id === id),
+  );
+  return column ? keyOf(column) : null;
 }
 
 export function ContentBoard() {
@@ -134,7 +135,7 @@ export function ContentBoard() {
 
   const onDragStart = (event: DragStartEvent) => {
     const id = String(event.active.id);
-    const page = topLevel.find((item) => item.id === pageOf(id)) ?? null;
+    const page = topLevel.find((item) => item.id === id) ?? null;
     setDragged(page);
     source.current = columnOf(computed, id);
     setLocal(computed);
@@ -143,19 +144,23 @@ export function ContentBoard() {
   const onDragOver = (event: DragOverEvent) => {
     const { active, over } = event;
     if (!over) return;
+    // Past the middle of the card it is over, the card goes after it.
+    const translated = active.rect.current.translated;
+    const below =
+      translated !== null && translated.top > over.rect.top + over.rect.height / 2;
     setLocal((current) => {
       const list = current ?? computed;
       const from = columnOf(list, String(active.id));
       const to = columnOf(list, String(over.id));
       if (!from || !to || from === to) return list;
-      const activePage = pageOf(String(active.id));
+      const activePage = String(active.id);
       const moving = list
         .find((bucket) => keyOf(bucket) === from)!
         .pages.find((page) => page.id === activePage);
       if (!moving) return list;
       // The preview never shows a move the drop would refuse.
       if (!canDropOnColumn(moving, group, propertyOf(from), propertyOf(to))) return list;
-      const overPage = pageOf(String(over.id));
+      const overPage = String(over.id);
       return list.map((bucket) => {
         if (keyOf(bucket) === from)
           return {
@@ -165,7 +170,7 @@ export function ContentBoard() {
         if (keyOf(bucket) !== to) return bucket;
         const overIndex = bucket.pages.findIndex((page) => page.id === overPage);
         const next = [...bucket.pages];
-        next.splice(overIndex < 0 ? next.length : overIndex, 0, moving);
+        next.splice(overIndex < 0 ? next.length : overIndex + (below ? 1 : 0), 0, moving);
         return { ...bucket, pages: next };
       });
     });
@@ -173,7 +178,7 @@ export function ContentBoard() {
 
   const onDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
-    const activeId = pageOf(String(active.id));
+    const activeId = String(active.id);
     setDragged(null);
     if (!over) {
       setLocal(null);
@@ -196,20 +201,17 @@ export function ContentBoard() {
       setLocal(null);
       return;
     }
-    const overPage = pageOf(String(over.id));
-    // Placed rather than swapped: a card that crossed columns was already put
-    // where it is being shown by `onDragOver`, and moving it again from there
-    // would land it one place past what the drag preview promised. Lifting it
-    // out and dropping it at the card it is over says the same thing for a
-    // reorder inside one column, and the same thing twice for a crossing.
+    const overPage = String(over.id);
+    // A card that crossed columns was already put in its new column by
+    // `onDragOver`; what is left is the move within the column, which is what
+    // the sortable preview shows: the card takes the place of the one it is
+    // over. Dropped on the column itself, it stays where the preview put it.
     const arranged = list.map((bucket) => {
       if (keyOf(bucket) !== target) return bucket;
-      const moving = bucket.pages.find((page) => page.id === activeId);
-      if (!moving) return bucket;
-      const rest = bucket.pages.filter((page) => page.id !== activeId);
-      const at = rest.findIndex((page) => page.id === overPage);
-      rest.splice(at < 0 ? rest.length : at, 0, moving);
-      return { ...bucket, pages: rest };
+      const from = bucket.pages.findIndex((page) => page.id === activeId);
+      const to = bucket.pages.findIndex((page) => page.id === overPage);
+      if (from < 0 || to < 0 || from === to) return bucket;
+      return { ...bucket, pages: arrayMove(bucket.pages, from, to) };
     });
     setLocal(arranged);
     const column = arranged.find((bucket) => keyOf(bucket) === target)!;
@@ -367,13 +369,13 @@ function Column({
       </header>
       <div ref={setNodeRef} className="min-h-24 flex-1 space-y-2 px-2 pb-2">
         <SortableContext
-          items={bucket.pages.map((page) => slotId(keyOf(bucket), page.id))}
+          items={bucket.pages.map((page) => page.id)}
           strategy={verticalListSortingStrategy}
         >
           {bucket.pages.map((page) => (
             <SortableCard
               key={page.id}
-              id={slotId(keyOf(bucket), page.id)}
+              id={page.id}
               page={page}
               properties={properties}
               sortable={sortable}
