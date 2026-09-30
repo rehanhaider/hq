@@ -27,6 +27,13 @@ describe("board columns", () => {
     );
   });
 
+  it("keeps a card's drag id when the preview carries it into another column", () => {
+    // A drag id that named the column would change mid-drag as the card
+    // crossed over, and dnd-kit would lose the card it is dragging.
+    expect(column).toMatch(/items=\{bucket\.pages\.map\(\(page\) => page\.id\)\}/);
+    expect(column).toMatch(/<SortableCard\s+key=\{page\.id\}\s+id=\{page\.id\}/);
+  });
+
   it("offers no New button on the column that collects the pages with no status", () => {
     expect(source).toMatch(
       /onAdd=\{\s*bucket\.id === null\s*\?\s*undefined\s*:\s*\(\) => void addCard\(bucket\)\s*\}/,
