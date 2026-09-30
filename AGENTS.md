@@ -35,3 +35,10 @@ The body follows `.github/pull_request_template.md`. Passing `--body` to
 `gh pr create` skips the template, so paste its headings and fill each one.
 Before and after screenshots for UI changes go on the `assets` branch under
 `pr-<number>/`, linked from the body by their raw GitHub URL.
+
+Recordings of motion or interaction go in the body as animated GIFs, embedded
+with `<img>` so they play inline. A video file (`.mp4`, `.webm`) linked from
+the `assets` branch does not play: `raw.githubusercontent.com` serves it as
+`application/octet-stream`, so it downloads instead. Convert the
+recording with ffmpeg, trim it to the interaction itself, and keep it under
+5 MB. Before publishing, check that the raw URL returns `content-type: image/gif`.
