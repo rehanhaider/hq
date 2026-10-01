@@ -166,9 +166,9 @@ describe("Pages archive filtering", () => {
     filterPageSearchResults(pages, pages, search, archiveProperties);
 
   it("hides archived notes by default and restores hiding after toggling off", () => {
-    expect(filter().map((item) => item.id)).toEqual([active.id, child.id]);
+    expect(filter().map((item) => item.id)).toEqual([active.id]);
     expect(filter({ archived: "show" }).map((item) => item.id)).toEqual(pages.map((item) => item.id));
-    expect(filter({ archived: undefined }).map((item) => item.id)).toEqual([active.id, child.id]);
+    expect(filter({ archived: undefined }).map((item) => item.id)).toEqual([active.id]);
   });
 
   it("reveals an explicitly selected Archived status, like Board", () => {
@@ -187,12 +187,23 @@ describe("Pages archive filtering", () => {
   });
 
   it("filters body-search matches without applying title search again", () => {
-    expect(filter({ q: "body-only phrase" })).toEqual([active, child]);
+    expect(filter({ q: "body-only phrase" })).toEqual([active]);
     expect(filter({ q: "body-only phrase", archived: "show" })).toEqual(pages);
   });
 
   it("uses status names rather than assuming a fixed Archived id", () => {
     expect(filterPageSearchResults(pages, pages, {}, properties)).toEqual(pages);
+  });
+
+  it("hides a matched grandchild when its archived ancestor did not match the search", () => {
+    const grandchild = page("Grandchild", { parentId: child.id, statusId: null });
+    const hierarchy = [...pages, grandchild];
+    expect(filterPageSearchResults([grandchild], hierarchy, { q: "body phrase" }, archiveProperties))
+      .toEqual([]);
+    expect(filterPageSearchResults([grandchild], hierarchy, { q: "body phrase", archived: "show" }, archiveProperties))
+      .toEqual([grandchild]);
+    expect(filterPageSearchResults([grandchild], hierarchy, { tree: child.id }, archiveProperties))
+      .toEqual([]);
   });
 });
 

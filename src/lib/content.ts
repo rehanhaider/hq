@@ -581,9 +581,10 @@ export function hasFilters(search: {
   );
 }
 
-/** The selected page and every page reachable below it. */
-export function pageTreeIds(pages: ContentPage[], rootId: string) {
-  if (!pages.some((page) => page.id === rootId)) return new Set<string>();
+/** The selected pages and every page reachable below them. */
+export function pageTreeIds(pages: ContentPage[], rootId: string | string[]) {
+  const roots = typeof rootId === "string" ? [rootId] : rootId;
+  const pageIds = new Set(pages.map((page) => page.id));
   const children = new Map<string, string[]>();
   for (const page of pages) {
     if (page.parentId === null) continue;
@@ -592,7 +593,7 @@ export function pageTreeIds(pages: ContentPage[], rootId: string) {
     children.set(page.parentId, group);
   }
   const ids = new Set<string>();
-  const pending = [rootId];
+  const pending = roots.filter((id) => pageIds.has(id));
   while (pending.length) {
     const id = pending.pop()!;
     if (ids.has(id)) continue;
@@ -641,6 +642,18 @@ export function filterPageSearchResults(
       .filter((status) => status.name.trim().toLowerCase() === "archived")
       .map((status) => status.id),
   );
+  const hiddenIds = pageTreeIds(
+    hierarchy,
+    search.archived === "show"
+      ? []
+      : hierarchy
+          .filter((page) =>
+            page.statusId !== null &&
+            archivedIds.has(page.statusId) &&
+            !search.status?.includes(page.statusId),
+          )
+          .map((page) => page.id),
+  );
   return filterPages(matches, {
     status: search.status,
     type: search.type,
@@ -648,6 +661,7 @@ export function filterPageSearchResults(
   }).filter(
     (page) =>
       (!treeIds || treeIds.has(page.id)) &&
+      !hiddenIds.has(page.id) &&
       (page.statusId === null ||
         !archivedIds.has(page.statusId) ||
         search.archived === "show" ||

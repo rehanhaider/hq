@@ -343,10 +343,7 @@ export function ContentWorkspace() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const list = useQuery(pagesQuery(search.q));
-  const hierarchy = useQuery({
-    ...pagesQuery(),
-    enabled: Boolean(search.tree),
-  });
+  const hierarchy = useQuery(pagesQuery());
   const propertyQuery = useQuery(contentPropertiesQuery);
   const properties: ContentProperties = propertyQuery.data ?? {
     statuses: [],
@@ -616,9 +613,9 @@ export function ContentWorkspace() {
     });
   }, [blocker, drain, recovering, saveConflict, saveUnavailable]);
 
-  // The server already searched titles and body text, so only the property
-  // filters are applied here. Filtering flattens the tree: a match whose parent
-  // was filtered out still has to be reachable.
+  // The server already searched titles and body text. Apply property filters
+  // here, and use the complete hierarchy to hide archived subtrees. Other
+  // filters flatten matches whose parents were filtered out.
   const searching =
     Boolean(search.q) ||
     hasFilters({ ...search, q: undefined, tree: undefined });
@@ -1086,18 +1083,18 @@ export function ContentWorkspace() {
       <div className="content-workspace mt-4">
         <aside className={`${selectedId ? "hidden lg:flex" : "flex"} min-h-136 flex-col border-r bg-card`} aria-label="Content pages">
           <div className="min-h-0 flex-1 overflow-y-auto px-2 py-3 lg:sticky lg:top-12 lg:max-h-[calc(100dvh-3rem)] lg:flex-none">
-            {list.isPending || (search.tree && hierarchy.isPending) ? (
+            {list.isPending || hierarchy.isPending || propertyQuery.isPending ? (
               <p className="p-3 text-muted-foreground">Loading pages…</p>
-            ) : search.tree && hierarchy.isError ? (
+            ) : hierarchy.isError || propertyQuery.isError ? (
               <div className="p-4 text-center">
                 <p className="text-sm text-destructive" role="alert">
-                  The page tree could not load.
+                  The page tree or statuses could not load.
                 </p>
                 <Button
                   className="mt-3"
                   variant="outline"
                   size="sm"
-                  onClick={() => void hierarchy.refetch()}
+                  onClick={() => void Promise.all([hierarchy.refetch(), propertyQuery.refetch()])}
                 >
                   Reload pages
                 </Button>
