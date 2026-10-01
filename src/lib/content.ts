@@ -633,13 +633,26 @@ export function filterPageSearchResults(
   matches: ContentPage[],
   hierarchy: ContentPage[],
   search: ContentSearch,
+  properties: ContentProperties,
 ) {
   const treeIds = search.tree ? pageTreeIds(hierarchy, search.tree) : null;
+  const archivedIds = new Set(
+    properties.statuses
+      .filter((status) => status.name.trim().toLowerCase() === "archived")
+      .map((status) => status.id),
+  );
   return filterPages(matches, {
     status: search.status,
     type: search.type,
     tag: search.tag,
-  }).filter((page) => !treeIds || treeIds.has(page.id));
+  }).filter(
+    (page) =>
+      (!treeIds || treeIds.has(page.id)) &&
+      (page.statusId === null ||
+        !archivedIds.has(page.statusId) ||
+        search.archived === "show" ||
+        search.status?.includes(page.statusId)),
+  );
 }
 
 /**

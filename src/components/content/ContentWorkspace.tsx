@@ -667,8 +667,8 @@ export function ContentWorkspace() {
   // otherwise race and the earlier drag's order could land last in SQLite.
   const orderChain = useRef<Promise<void>>(Promise.resolve());
   const visiblePages = useMemo(
-    () => filterPageSearchResults(indexPages, hierarchy.data ?? [], search),
-    [hierarchy.data, indexPages, search],
+    () => filterPageSearchResults(indexPages, hierarchy.data ?? [], search, properties),
+    [hierarchy.data, indexPages, search, properties],
   );
   const treeRootId = search.tree ?? null;
   const rows = useMemo(

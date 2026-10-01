@@ -137,7 +137,7 @@ describe("filterPages", () => {
       filterPageSearchResults([child, outside], [root, child, outside], {
         q: "body phrase",
         tree: "root",
-      }).map((item) => item.id),
+      }, properties).map((item) => item.id),
     ).toEqual(["child"]);
   });
 
@@ -146,6 +146,53 @@ describe("filterPages", () => {
     expect(filterPages([untitled], { q: "untitled" }).map((item) => item.id)).toEqual([
       "blank",
     ]);
+  });
+});
+
+describe("Pages archive filtering", () => {
+  const archiveProperties: ContentProperties = {
+    ...properties,
+    statuses: [...properties.statuses, {
+      id: "archive", name: " Archived ", color: "slate", position: 2,
+    }],
+  };
+  const active = page("Active", { typeIds: ["video"], tagIds: ["sqlite"] });
+  const archived = page("Archived", {
+    statusId: "archive", typeIds: ["video"], tagIds: ["sqlite"],
+  });
+  const child = page("Child", { parentId: archived.id, statusId: null });
+  const pages = [active, archived, child];
+  const filter = (search = {}) =>
+    filterPageSearchResults(pages, pages, search, archiveProperties);
+
+  it("hides archived notes by default and restores hiding after toggling off", () => {
+    expect(filter().map((item) => item.id)).toEqual([active.id, child.id]);
+    expect(filter({ archived: "show" }).map((item) => item.id)).toEqual(pages.map((item) => item.id));
+    expect(filter({ archived: undefined }).map((item) => item.id)).toEqual([active.id, child.id]);
+  });
+
+  it("reveals an explicitly selected Archived status, like Board", () => {
+    expect(filter({ status: ["archive"] })).toEqual([archived]);
+    expect(filter({ status: ["idea", "archive"] })).toEqual([active, archived]);
+    expect(filter({ archived: "show", status: ["idea"] })).toEqual([active]);
+  });
+
+  it("combines archive visibility with types, tags, tree and sorting", () => {
+    const search = { archived: "show" as const, type: ["video"], tag: ["sqlite"], tree: archived.id };
+    expect(filter(search)).toEqual([archived]);
+    expect(filter({ ...search, archived: undefined })).toEqual([]);
+    expect(filter({ ...search, tag: ["missing"] })).toEqual([]);
+    expect(sortPages(filter({ archived: "show" }), "title").map((item) => item.id))
+      .toEqual([active.id, archived.id, child.id]);
+  });
+
+  it("filters body-search matches without applying title search again", () => {
+    expect(filter({ q: "body-only phrase" })).toEqual([active, child]);
+    expect(filter({ q: "body-only phrase", archived: "show" })).toEqual(pages);
+  });
+
+  it("uses status names rather than assuming a fixed Archived id", () => {
+    expect(filterPageSearchResults(pages, pages, {}, properties)).toEqual(pages);
   });
 });
 

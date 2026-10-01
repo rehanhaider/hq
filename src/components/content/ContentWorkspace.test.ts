@@ -430,6 +430,7 @@ describe("Content page index reorder under a tree filter", () => {
       pages,
       pages,
       contentSearchSchema.parse({ tree, ...rest }),
+      { statuses: [], types: [], tags: [], subpageTypes: [] },
     );
 
   it("keeps the filtered index sortable", () => {
@@ -437,6 +438,22 @@ describe("Content page index reorder under a tree filter", () => {
     // The gate is the siblings a search or a property filter hides, not the
     // tree filter.
     expect(canSortIndex(pageTree(filtered(root.id), root.id), true)).toBe(false);
+  });
+
+  it("keeps hidden archived siblings out of a reorder and leaves their slots intact", () => {
+    const archived = { ...second, statusId: "archive" };
+    const all = [root, first, archived, third];
+    const visible = filterPageSearchResults(all, all, {}, {
+      statuses: [{ id: "archive", name: "Archived", color: "slate", position: 0 }],
+      types: [], tags: [], subpageTypes: [],
+    });
+    expect(pageRows(visible, false).map((row) => [row.page.id, row.depth])).toEqual([
+      [root.id, 0], [first.id, 1], [third.id, 1],
+    ]);
+    const move = reorderedSiblings(pageTree(visible), third, first.id);
+    expect(move?.orderedIds).toEqual([third.id, first.id]);
+    expect([...(move?.orderOf ?? [])]).toEqual([[third.id, 0], [first.id, 2]]);
+    expect(archived.order).toBe(1);
   });
 
   it("saves the whole sibling group when a subpage is dragged", () => {
@@ -478,6 +495,7 @@ describe("Content page index reorder under a tree filter", () => {
       all,
       all,
       contentSearchSchema.parse({ tree: first.id }),
+      { statuses: [], types: [], tags: [], subpageTypes: [] },
     );
     const tree = pageTree(nested, first.id);
     expect(tree.orphans).toEqual([]);
