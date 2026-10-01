@@ -381,16 +381,17 @@ describe("Content leaving a page with unsaved text", () => {
 });
 
 describe("Content page tree loading", () => {
-  it("only fetches the complete hierarchy for an active tree filter", () => {
+  it("fetches the complete hierarchy so search cannot reveal archived subpages", () => {
     expect(source).toMatch(
-      /const hierarchy = useQuery\(\{[\s\S]*?\.\.\.pagesQuery\(\),[\s\S]*?enabled: Boolean\(search\.tree\),[\s\S]*?\}\);/,
+      /const hierarchy = useQuery\(pagesQuery\(\)\);/,
     );
   });
 
   it("shows hierarchy failures separately from an empty filter result", () => {
-    expect(source).toMatch(/search\.tree && hierarchy\.isError/);
-    expect(source).toMatch(/The page tree could not load\./);
-    expect(source).toMatch(/onClick=\{\(\) => void hierarchy\.refetch\(\)\}/);
+    expect(source).toMatch(/hierarchy\.isError \|\| propertyQuery\.isError/);
+    expect(source).toMatch(/The page tree or statuses could not load\./);
+    expect(source).toMatch(/list\.isPending \|\| hierarchy\.isPending \|\| propertyQuery\.isPending/);
+    expect(source).toMatch(/Promise\.all\(\[hierarchy\.refetch\(\), propertyQuery\.refetch\(\)\]\)/);
     expect(source).toMatch(/Reload pages/);
   });
 });
@@ -430,6 +431,7 @@ describe("Content page index reorder under a tree filter", () => {
       pages,
       pages,
       contentSearchSchema.parse({ tree, ...rest }),
+      { statuses: [], types: [], tags: [], subpageTypes: [] },
     );
 
   it("keeps the filtered index sortable", () => {
@@ -437,6 +439,22 @@ describe("Content page index reorder under a tree filter", () => {
     // The gate is the siblings a search or a property filter hides, not the
     // tree filter.
     expect(canSortIndex(pageTree(filtered(root.id), root.id), true)).toBe(false);
+  });
+
+  it("keeps hidden archived siblings out of a reorder and leaves their slots intact", () => {
+    const archived = { ...second, statusId: "archive" };
+    const all = [root, first, archived, third];
+    const visible = filterPageSearchResults(all, all, {}, {
+      statuses: [{ id: "archive", name: "Archived", color: "slate", position: 0 }],
+      types: [], tags: [], subpageTypes: [],
+    });
+    expect(pageRows(visible, false).map((row) => [row.page.id, row.depth])).toEqual([
+      [root.id, 0], [first.id, 1], [third.id, 1],
+    ]);
+    const move = reorderedSiblings(pageTree(visible), third, first.id);
+    expect(move?.orderedIds).toEqual([third.id, first.id]);
+    expect([...(move?.orderOf ?? [])]).toEqual([[third.id, 0], [first.id, 2]]);
+    expect(archived.order).toBe(1);
   });
 
   it("saves the whole sibling group when a subpage is dragged", () => {
@@ -478,6 +496,7 @@ describe("Content page index reorder under a tree filter", () => {
       all,
       all,
       contentSearchSchema.parse({ tree: first.id }),
+      { statuses: [], types: [], tags: [], subpageTypes: [] },
     );
     const tree = pageTree(nested, first.id);
     expect(tree.orphans).toEqual([]);

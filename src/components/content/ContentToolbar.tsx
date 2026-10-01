@@ -1,4 +1,4 @@
-import { Columns3, ListFilter, Search, SlidersHorizontal, X } from "lucide-react";
+import { Archive, Columns3, ListFilter, Search, SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -110,6 +110,20 @@ export function ContentToolbar({
             )}
           </MenuContent>
         </Menu>
+      )}
+      {!board && properties.statuses.some(
+        (status) => status.name.trim().toLowerCase() === "archived",
+      ) && (
+        <Button
+          variant={search.archived === "show" ? "secondary" : "outline"}
+          size="sm"
+          aria-pressed={search.archived === "show"}
+          onClick={() =>
+            onChange({ archived: search.archived === "show" ? undefined : "show" })
+          }
+        >
+          <Archive /> Show archived
+        </Button>
       )}
       <Menu>
         <MenuTrigger
