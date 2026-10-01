@@ -637,16 +637,29 @@ export function filterPageSearchResults(
   properties: ContentProperties,
 ) {
   const treeIds = search.tree ? pageTreeIds(hierarchy, search.tree) : null;
+  // Search and hierarchy refresh independently. Status writes update updatedAt,
+  // so neither query's older status should undo the other's archive visibility.
+  const latestStatuses = new Map<string, ContentPage>();
+  for (const page of [...hierarchy, ...matches]) {
+    const current = latestStatuses.get(page.id);
+    if (!current || page.updatedAt >= current.updatedAt) latestStatuses.set(page.id, page);
+  }
+  const currentHierarchy = hierarchy.map((page) => ({
+    ...page, statusId: latestStatuses.get(page.id)!.statusId,
+  }));
+  const currentMatches = matches.map((page) => ({
+    ...page, statusId: latestStatuses.get(page.id)!.statusId,
+  }));
   const archivedIds = new Set(
     properties.statuses
       .filter((status) => status.name.trim().toLowerCase() === "archived")
       .map((status) => status.id),
   );
   const hiddenIds = pageTreeIds(
-    hierarchy,
+    currentHierarchy,
     search.archived === "show"
       ? []
-      : hierarchy
+      : currentHierarchy
           .filter((page) =>
             page.statusId !== null &&
             archivedIds.has(page.statusId) &&
@@ -654,7 +667,7 @@ export function filterPageSearchResults(
           )
           .map((page) => page.id),
   );
-  return filterPages(matches, {
+  return filterPages(currentMatches, {
     status: search.status,
     type: search.type,
     tag: search.tag,

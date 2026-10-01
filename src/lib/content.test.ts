@@ -205,6 +205,26 @@ describe("Pages archive filtering", () => {
     expect(filterPageSearchResults([grandchild], hierarchy, { tree: child.id }, archiveProperties))
       .toEqual([]);
   });
+
+  it("uses newer search statuses while the hierarchy is still refreshing", () => {
+    const oldParent = { ...archived, statusId: "idea" };
+    const freshParent = { ...archived, updatedAt: "2026-01-02T00:00:00.000Z" };
+    expect(filterPageSearchResults([freshParent, child], [oldParent, child], {}, archiveProperties))
+      .toEqual([]);
+    const unarchived = { ...freshParent, statusId: "idea" };
+    expect(filterPageSearchResults([unarchived, child], [archived, child], {}, archiveProperties))
+      .toEqual([unarchived, child]);
+  });
+
+  it("does not let older search statuses override a newer hierarchy", () => {
+    const oldParent = { ...archived, statusId: "idea" };
+    const freshParent = { ...archived, updatedAt: "2026-01-02T00:00:00.000Z" };
+    expect(filterPageSearchResults([oldParent, child], [freshParent, child], {}, archiveProperties))
+      .toEqual([]);
+    const unarchived = { ...freshParent, statusId: "idea" };
+    expect(filterPageSearchResults([archived, child], [unarchived, child], {}, archiveProperties))
+      .toEqual([archived, child].map((item) => item.id === archived.id ? { ...item, statusId: "idea" } : item));
+  });
 });
 
 describe("compareIndexPages", () => {

@@ -927,6 +927,13 @@ export function ContentWorkspace() {
           ...result.page,
           document: editing?.document ?? current.document,
         });
+        // A body-search result may omit this parent. Publish its confirmed
+        // status to the hierarchy before the two list queries refresh.
+        queryClient.setQueryData<ContentPage[]>(contentKeys.list(), (pages) =>
+          pages?.map((page) => page.id === current.id
+            ? { ...page, statusId: result.page.statusId, updatedAt: result.page.updatedAt }
+            : page),
+        );
         await invalidateContent(queryClient);
       } catch {
         rollback();
