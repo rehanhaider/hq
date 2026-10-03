@@ -144,3 +144,11 @@ export const NASR_CONTENT: readonly NasrContent[] = [
     id: 'istighfar-full', item_key: 'istighfar', title: 'Fuller form', repetitions: 'As preferred within the daily count', sort_order: 20, grade: 'sahih', reference: 'The daily volume is established in Sahih Muslim 2702 and Sahih al-Bukhari 6307.', arabic: 'أَسْتَغْفِرُ اللَّهَ الْعَظِيمَ الَّذِي لَا إِلَهَ إِلَّا هُوَ الْحَيُّ الْقَيُّومُ وَأَتُوبُ إِلَيْهِ', transliteration: "Astaghfirullahal-'Azim alladhi la ilaha illa Huwal-Hayyul-Qayyumu wa atubu ilayh.", meaning: 'I seek the forgiveness of Allah the Magnificent, besides whom there is no god, the Ever-Living, the Sustainer, and I turn to Him in repentance.', note: 'Surah Nuh 71:10–12 is the rationale for tracking volume; it is not part of the recitation.',
   },
 ]
+
+export const ADHKAR_KEYS = ['morning_adhkar', 'evening_adhkar'] as const
+export type AdhkarKey = (typeof ADHKAR_KEYS)[number]
+
+/** The guide items, in display order, that a practice is ticked off by. */
+export function adhkarItemIds(key: AdhkarKey): string[] {
+  return NASR_CONTENT.filter((item) => item.item_key === key).map((item) => item.id)
+}

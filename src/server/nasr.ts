@@ -3,7 +3,11 @@ import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import {
+  ADHKAR_KEYS,
+  adhkarItemIds,
   emptyDay,
+  type AdhkarKey,
+  type NasrAdhkarTick,
   type NasrDay,
   type NasrDayUpdate,
   type Observation,
@@ -36,6 +40,12 @@ CREATE TABLE IF NOT EXISTS nasr_days (
   ruqyah INTEGER NOT NULL DEFAULT 0,
   istighfar_count INTEGER NOT NULL DEFAULT 0,
   note TEXT
+);
+CREATE TABLE IF NOT EXISTS nasr_adhkar_ticks (
+  date TEXT NOT NULL,
+  practice TEXT NOT NULL,
+  item_id TEXT NOT NULL,
+  PRIMARY KEY (date, item_id)
 );
 CREATE TABLE IF NOT EXISTS observations (
   id TEXT PRIMARY KEY,
@@ -76,7 +86,7 @@ function prayer(value: unknown): NasrDay["fajr"] {
     : null;
 }
 
-function normalizeDay(row: DayRow): NasrDay {
+function normalizeDay(row: DayRow | NasrDay, stored: Set<string>): NasrDay {
   return {
     date: row.date,
     fajr: prayer(row.fajr),
@@ -90,6 +100,10 @@ function normalizeDay(row: DayRow): NasrDay {
     night_baqarah: asBool(row.night_baqarah),
     night_three_suras: asBool(row.night_three_suras),
     ruqyah: asBool(row.ruqyah),
+    // Days logged before item ticks existed still show every item as done.
+    adhkar_ticks: ADHKAR_KEYS.flatMap((key) =>
+      adhkarItemIds(key).filter((id) => asBool(row[key]) || stored.has(id)),
+    ),
     istighfar_count: row.istighfar_count ?? 0,
     note: row.note ?? null,
   };
@@ -103,6 +117,17 @@ export class NasrStore {
     if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
     this.db = new DatabaseSync(path);
     this.db.exec(schema);
+  }
+  private transaction<T>(work: () => T): T {
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const result = work();
+      this.db.exec("COMMIT");
+      return result;
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
   }
   setting(key: string): string | null {
     const row = this.db
@@ -136,37 +161,70 @@ export class NasrStore {
     const rows = this.db
       .prepare("SELECT * FROM nasr_days ORDER BY date")
       .all() as DayRow[];
-    return rows.map(normalizeDay);
+    const ticks = this.db
+      .prepare("SELECT date, item_id FROM nasr_adhkar_ticks")
+      .all() as { date: string; item_id: string }[];
+    const stored = new Map<string, Set<string>>();
+    for (const tick of ticks) {
+      const ids = stored.get(tick.date) ?? new Set<string>();
+      ids.add(tick.item_id);
+      stored.set(tick.date, ids);
+    }
+    return rows.map((row) =>
+      normalizeDay(row, stored.get(row.date) ?? new Set<string>()),
+    );
   }
   day(date: string): NasrDay {
     const row = this.db
       .prepare("SELECT * FROM nasr_days WHERE date = ?")
       .get(date) as DayRow | undefined;
-    return row ? normalizeDay(row) : emptyDay(date);
+    const ticks = this.db
+      .prepare("SELECT item_id FROM nasr_adhkar_ticks WHERE date = ?")
+      .all(date) as { item_id: string }[];
+    return normalizeDay(
+      row ?? emptyDay(date),
+      new Set(ticks.map((tick) => tick.item_id)),
+    );
   }
   upsertDay(data: NasrDayUpdate): NasrDay {
-    const existing = this.day(data.date);
-    const pick = <T>(next: T | undefined, prev: T): T =>
-      next !== undefined ? next : prev;
-    const merged: NasrDay = {
-      date: data.date,
-      fajr: pick(data.fajr, existing.fajr),
-      dhuhr: pick(data.dhuhr, existing.dhuhr),
-      asr: pick(data.asr, existing.asr),
-      maghrib: pick(data.maghrib, existing.maghrib),
-      isha: pick(data.isha, existing.isha),
-      morning_adhkar: pick(data.morning_adhkar, existing.morning_adhkar),
-      evening_adhkar: pick(data.evening_adhkar, existing.evening_adhkar),
-      night_ayat_kursi: pick(data.night_ayat_kursi, existing.night_ayat_kursi),
-      night_baqarah: pick(data.night_baqarah, existing.night_baqarah),
-      night_three_suras: pick(
-        data.night_three_suras,
-        existing.night_three_suras,
-      ),
-      ruqyah: pick(data.ruqyah, existing.ruqyah),
-      istighfar_count: pick(data.istighfar_count, existing.istighfar_count),
-      note: pick(data.note, existing.note),
-    };
+    return this.transaction(() => {
+      const existing = this.day(data.date);
+      const pick = <T>(next: T | undefined, prev: T): T =>
+        next !== undefined ? next : prev;
+      const merged: NasrDay = {
+        date: data.date,
+        fajr: pick(data.fajr, existing.fajr),
+        dhuhr: pick(data.dhuhr, existing.dhuhr),
+        asr: pick(data.asr, existing.asr),
+        maghrib: pick(data.maghrib, existing.maghrib),
+        isha: pick(data.isha, existing.isha),
+        morning_adhkar: pick(data.morning_adhkar, existing.morning_adhkar),
+        evening_adhkar: pick(data.evening_adhkar, existing.evening_adhkar),
+        night_ayat_kursi: pick(data.night_ayat_kursi, existing.night_ayat_kursi),
+        night_baqarah: pick(data.night_baqarah, existing.night_baqarah),
+        night_three_suras: pick(
+          data.night_three_suras,
+          existing.night_three_suras,
+        ),
+        ruqyah: pick(data.ruqyah, existing.ruqyah),
+        adhkar_ticks: existing.adhkar_ticks,
+        istighfar_count: pick(data.istighfar_count, existing.istighfar_count),
+        note: pick(data.note, existing.note),
+      };
+      this.writeDay(merged);
+      for (const key of ADHKAR_KEYS) {
+        if (data[key] !== undefined) {
+          this.writeAdhkarTicks(
+            data.date,
+            key,
+            data[key] ? adhkarItemIds(key) : [],
+          );
+        }
+      }
+      return this.day(data.date);
+    });
+  }
+  private writeDay(day: NasrDay) {
     this.db
       .prepare(
         `INSERT INTO nasr_days (
@@ -186,22 +244,48 @@ export class NasrStore {
           note=excluded.note`,
       )
       .run(
-        merged.date,
-        merged.fajr,
-        merged.dhuhr,
-        merged.asr,
-        merged.maghrib,
-        merged.isha,
-        merged.morning_adhkar ? 1 : 0,
-        merged.evening_adhkar ? 1 : 0,
-        merged.night_ayat_kursi ? 1 : 0,
-        merged.night_baqarah ? 1 : 0,
-        merged.night_three_suras ? 1 : 0,
-        merged.ruqyah ? 1 : 0,
-        merged.istighfar_count,
-        merged.note,
+        day.date,
+        day.fajr,
+        day.dhuhr,
+        day.asr,
+        day.maghrib,
+        day.isha,
+        day.morning_adhkar ? 1 : 0,
+        day.evening_adhkar ? 1 : 0,
+        day.night_ayat_kursi ? 1 : 0,
+        day.night_baqarah ? 1 : 0,
+        day.night_three_suras ? 1 : 0,
+        day.ruqyah ? 1 : 0,
+        day.istighfar_count,
+        day.note,
       );
-    return this.day(data.date);
+  }
+  private writeAdhkarTicks(date: string, key: AdhkarKey, ids: string[]) {
+    this.db
+      .prepare("DELETE FROM nasr_adhkar_ticks WHERE date = ? AND practice = ?")
+      .run(date, key);
+    const insert = this.db.prepare(
+      "INSERT INTO nasr_adhkar_ticks (date, practice, item_id) VALUES (?, ?, ?)",
+    );
+    for (const id of ids) insert.run(date, key, id);
+  }
+  setAdhkarItem(data: NasrAdhkarTick): NasrDay {
+    const key = ADHKAR_KEYS.find((key) =>
+      adhkarItemIds(key).includes(data.item_id),
+    );
+    if (!key) throw new Error(`Unknown adhkar item: ${data.item_id}`);
+    return this.transaction(() => {
+      const existing = this.day(data.date);
+      const ids = adhkarItemIds(key);
+      const ticks = new Set(
+        existing.adhkar_ticks.filter((id) => ids.includes(id)),
+      );
+      if (data.done) ticks.add(data.item_id);
+      else ticks.delete(data.item_id);
+      this.writeAdhkarTicks(data.date, key, [...ticks]);
+      this.writeDay({ ...existing, [key]: ids.every((id) => ticks.has(id)) });
+      return this.day(data.date);
+    });
   }
   observations(): Observation[] {
     return this.db
@@ -269,7 +353,11 @@ export class NasrStore {
       this.db.prepare("VACUUM INTO ?").run(backupPath);
     }
     const deleted: Record<string, number> = {};
-    for (const table of ["observations", "nasr_days"] as const) {
+    for (const table of [
+      "observations",
+      "nasr_adhkar_ticks",
+      "nasr_days",
+    ] as const) {
       deleted[table] = Number(
         this.db.prepare(`DELETE FROM ${table}`).run().changes,
       );
