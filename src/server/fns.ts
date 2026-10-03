@@ -13,6 +13,7 @@ import { getUploadStore } from "./uploads";
 import {
   NASR_CONTENT,
   dateString,
+  nasrAdhkarTickSchema,
   nasrDayUpdateSchema,
   getToday,
   resetRequestSchema,
@@ -94,6 +95,9 @@ export const getNasrDay = createServerFn({ method: "GET" })
 export const updateNasrDay = createServerFn({ method: "POST" })
   .validator(nasrDayUpdateSchema)
   .handler(({ data }) => getNasrStore().upsertDay(data));
+export const setNasrAdhkarItem = createServerFn({ method: "POST" })
+  .validator(nasrAdhkarTickSchema)
+  .handler(({ data }) => getNasrStore().setAdhkarItem(data));
 export const getNasrSettings = createServerFn({ method: "GET" }).handler(() =>
   getNasrStore().settings(),
 );

@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { nasrDayQuery, nasrKeys, nasrQuery } from "@/queries/nasr";
-import { updateNasrDay } from "@/server/fns";
+import { setNasrAdhkarItem, updateNasrDay } from "@/server/fns";
 import { Button } from "@/components/ui/button";
 import {
   NASR_GUIDES,
@@ -34,10 +34,11 @@ const prayers: Array<{
 const boolItems: Array<{
   key: keyof Pick<NasrDay, "morning_adhkar" | "evening_adhkar" | "ruqyah">;
   itemKey: NasrContentItemKey;
+  itemized: boolean;
 }> = [
-  { key: "morning_adhkar", itemKey: "morning_adhkar" },
-  { key: "evening_adhkar", itemKey: "evening_adhkar" },
-  { key: "ruqyah", itemKey: "ruqyah" },
+  { key: "morning_adhkar", itemKey: "morning_adhkar", itemized: true },
+  { key: "evening_adhkar", itemKey: "evening_adhkar", itemized: true },
+  { key: "ruqyah", itemKey: "ruqyah", itemized: false },
 ];
 
 function TodayPage() {
@@ -55,6 +56,14 @@ function TodayPage() {
       await queryClient.invalidateQueries({ queryKey: nasrKeys.home });
     },
   });
+  const tick = useMutation({
+    mutationFn: setNasrAdhkarItem,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: nasrKeys.all });
+      await queryClient.invalidateQueries({ queryKey: nasrKeys.home });
+    },
+  });
+  const saving = update.isPending || tick.isPending;
   if (summary.isPending) {
     return (
       <p className="py-16 text-center text-sm text-muted-foreground">
@@ -92,7 +101,7 @@ function TodayPage() {
         <Button
           variant="ghost"
           size="icon"
-          disabled={update.isPending}
+          disabled={saving}
           aria-label="Previous day"
           onClick={() => setOffset((value) => value - 1)}
         >
@@ -110,16 +119,16 @@ function TodayPage() {
           variant="ghost"
           size="icon"
           aria-label="Next day"
-          disabled={isToday || update.isPending}
+          disabled={isToday || saving}
           onClick={() => setOffset((value) => Math.min(0, value + 1))}
         >
           <ChevronRight />
         </Button>
       </div>
 
-      {update.isError && (
+      {(update.isError || tick.isError) && (
         <p role="alert" className="text-sm text-negative">
-          Your change could not be saved. {update.error.message}
+          Your change could not be saved. {(update.error ?? tick.error)?.message}
         </p>
       )}
       {dayQuery.isError && (
@@ -128,7 +137,7 @@ function TodayPage() {
         </p>
       )}
       <fieldset
-        disabled={update.isPending || dayQuery.isPending || dayQuery.isError}
+        disabled={saving || dayQuery.isPending || dayQuery.isError}
         className="min-w-0 disabled:opacity-60"
       >
         <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] lg:gap-12">
@@ -183,7 +192,7 @@ function TodayPage() {
                 </span>
               </div>
               <div className="list">
-                {boolItems.map(({ key, itemKey }) => (
+                {boolItems.map(({ key, itemKey, itemized }) => (
                   <PracticeDisclosure
                     key={key}
                     itemKey={itemKey}
@@ -193,6 +202,15 @@ function TodayPage() {
                     )}
                     onToggle={() =>
                       patch({ date: selected, [key]: !(day?.[key] ?? false) })
+                    }
+                    ticks={itemized ? (day?.adhkar_ticks ?? []) : undefined}
+                    onTickItem={
+                      itemized
+                        ? (id, done) =>
+                            tick.mutate({
+                              data: { date: selected, item_id: id, done },
+                            })
+                        : undefined
                     }
                   />
                 ))}
@@ -270,14 +288,19 @@ function PracticeDisclosure({
   complete,
   items,
   onToggle,
+  ticks,
+  onTickItem,
 }: {
   itemKey: NasrContentItemKey;
   complete: boolean;
   items: NasrContent[];
   onToggle: () => void;
+  ticks?: string[];
+  onTickItem?: (id: string, done: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
   const guide = NASR_GUIDES[itemKey];
+  const done = items.filter((item) => ticks?.includes(item.id)).length;
   return (
     <div>
       <div className="list-row items-start">
@@ -297,6 +320,14 @@ function PracticeDisclosure({
               className={`block text-sm font-medium ${complete ? "text-positive" : ""}`}
             >
               {guide.title}
+              {ticks !== undefined && items.length > 0 && (
+                <>
+                  {" "}
+                  <span className="text-xs tabular-nums text-muted-foreground">
+                    {done}/{items.length}
+                  </span>
+                </>
+              )}
             </span>
             <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">
               {guide.window}
@@ -314,7 +345,12 @@ function PracticeDisclosure({
       </div>
       {open && (
         <div className="pb-4">
-          <PracticeGuide itemKey={itemKey} items={items} />
+          <PracticeGuide
+            itemKey={itemKey}
+            items={items}
+            ticks={ticks}
+            onTickItem={onTickItem}
+          />
         </div>
       )}
     </div>
@@ -431,10 +467,14 @@ function PracticeGuide({
   itemKey,
   items,
   nested = false,
+  ticks,
+  onTickItem,
 }: {
   itemKey: NasrContentItemKey;
   items: NasrContent[];
   nested?: boolean;
+  ticks?: string[];
+  onTickItem?: (id: string, done: boolean) => void;
 }) {
   const guide = NASR_GUIDES[itemKey];
   return (
@@ -450,7 +490,17 @@ function PracticeGuide({
       ) : (
         <ol className="mt-5 space-y-4">
           {items.map((item, index) => (
-            <ContentEntry key={item.id} item={item} number={index + 1} />
+            <ContentEntry
+              key={item.id}
+              item={item}
+              number={index + 1}
+              done={ticks?.includes(item.id) ?? false}
+              onToggle={
+                onTickItem
+                  ? () => onTickItem(item.id, !(ticks?.includes(item.id) ?? false))
+                  : undefined
+              }
+            />
           ))}
         </ol>
       )}
@@ -463,15 +513,57 @@ function PracticeGuide({
   );
 }
 
-function ContentEntry({ item, number }: { item: NasrContent; number: number }) {
+function ContentEntry({
+  item,
+  number,
+  done = false,
+  onToggle,
+}: {
+  item: NasrContent;
+  number: number;
+  done?: boolean;
+  onToggle?: () => void;
+}) {
   return (
-    <li className="card p-4">
+    <li
+      className={
+        onToggle && done ? "card p-4 border-positive/30 bg-positive/10" : "card p-4"
+      }
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex min-w-0 gap-3">
+        <div
+          className={
+            onToggle
+              ? "flex min-w-0 items-center gap-3"
+              : "flex min-w-0 gap-3"
+          }
+        >
+          {onToggle && (
+            <label className="-m-3 inline-flex shrink-0 cursor-pointer p-3">
+              <input
+                type="checkbox"
+                className="peer sr-only"
+                checked={done}
+                aria-label={`${done ? "Mark not done" : "Mark done"}: ${item.title}`}
+                onChange={onToggle}
+              />
+              <span className="inline-flex shrink-0 rounded-[6px] peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ring">
+                <CheckMark complete={done} />
+              </span>
+            </label>
+          )}
           <span className="text-xs tabular-nums text-muted-foreground">
             {String(number).padStart(2, "0")}
           </span>
-          <h3 className="text-sm font-semibold leading-5">{item.title}</h3>
+          <h3
+            className={
+              onToggle && done
+                ? "text-sm font-semibold leading-5 text-positive"
+                : "text-sm font-semibold leading-5"
+            }
+          >
+            {item.title}
+          </h3>
         </div>
         <span className="rounded-md bg-primary/10 px-2 py-0.5 text-xs text-primary">
           {item.repetitions}

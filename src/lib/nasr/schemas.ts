@@ -26,6 +26,8 @@ export const nasrDaySchema = z.object({
   night_baqarah: z.boolean().default(false),
   night_three_suras: z.boolean().default(false),
   ruqyah: z.boolean().default(false),
+  // The guide item ids ticked off that day, for morning and evening adhkar.
+  adhkar_ticks: z.array(z.string()).default([]),
   istighfar_count: z.coerce.number().int().min(0).default(0),
   note: z.string().nullable().default(null),
 });
@@ -46,6 +48,13 @@ export const nasrDayUpdateSchema = z.object({
   istighfar_count: z.coerce.number().int().min(0).optional(),
   note: z.string().nullable().optional(),
 });
+
+export const nasrAdhkarTickSchema = z.object({
+  date: dateString,
+  item_id: z.string().min(1),
+  done: z.boolean(),
+});
+export type NasrAdhkarTick = z.infer<typeof nasrAdhkarTickSchema>;
 
 export const observationSchema = z.object({
   id: z.string().optional(),
@@ -124,6 +133,7 @@ export function emptyDay(date: string): NasrDay {
     night_baqarah: false,
     night_three_suras: false,
     ruqyah: false,
+    adhkar_ticks: [],
     istighfar_count: 0,
     note: null,
   };
