@@ -273,20 +273,19 @@ export function importWindowStart(
 
 /**
  * Folds a fetch into the saved snapshot. Commits the fetch listed by date
- * (from `incoming.since`) replace saved ones in that range, so a commit that
- * left the branch, for example after a force push, does not linger.
+ * (from `incoming.since` on) replace saved ones in that range, so a commit
+ * that left the branch, for example after a force push, does not linger.
  */
 export function mergeSnapshot(
   previous: Snapshot | null,
   incoming: Snapshot,
 ): Snapshot {
   if (!previous) return incoming;
+  // A listing has no upper date bound (the pinned head bounds it), so it
+  // covers every saved commit from its start, future-dated ones included.
   const kept =
     incoming.since < incoming.until
-      ? previous.commits.filter(
-          (commit) =>
-            commit.date < incoming.since || commit.date > incoming.until,
-        )
+      ? previous.commits.filter((commit) => commit.date < incoming.since)
       : previous.commits;
   return {
     repo: incoming.repo,

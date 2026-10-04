@@ -145,8 +145,9 @@ export class GithubClient {
       }
       // A base commit that no longer exists, for example after a force push
       // and garbage collection; the caller falls back to a timestamp listing.
+      // Other failures, a 422 included, fail the repository so it retries.
       if (
-        (response.status === 404 || response.status === 422) &&
+        response.status === 404 &&
         /^\/repos\/[^/]+\/[^/]+\/compare\//.test(path)
       )
         return { body: null, next: false };

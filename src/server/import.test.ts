@@ -344,6 +344,21 @@ describe("GitHub response handling", () => {
       "unavailable",
     );
   });
+  it("fails a comparison GitHub refuses with 422 so the repository retries", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ message: "Validation Failed" }), {
+          status: 422,
+        }),
+      ),
+    );
+    await expect(
+      new GithubClient("test-only").request(
+        "/repos/me/app/compare/base...head?per_page=100",
+      ),
+    ).rejects.toThrow("HTTP 422");
+  });
   it("does not turn another conflict into an empty history", async () => {
     vi.stubGlobal(
       "fetch",
@@ -496,6 +511,49 @@ describe("delta refresh", () => {
     expect(merged.commits.map((item) => item.sha)).toEqual([
       "old",
       "rewritten",
+    ]);
+  });
+
+  it("drops a future-dated saved commit a date listing no longer finds", () => {
+    const merged = mergeSnapshot(
+      {
+        ...previous,
+        commits: [
+          ...previous.commits,
+          commit("clock-skewed", "2027-01-01T00:00:00.000Z"),
+        ],
+      },
+      {
+        ...previous,
+        commits: [],
+        prs: [],
+        since: "2026-07-30T00:00:00.000Z",
+        until: "2026-08-02T00:00:00.000Z",
+      },
+    );
+    expect(merged.commits.map((item) => item.sha)).toEqual(["old"]);
+  });
+
+  it("keeps every saved commit when the fetch listed nothing by date", () => {
+    const merged = mergeSnapshot(
+      {
+        ...previous,
+        commits: [
+          ...previous.commits,
+          commit("clock-skewed", "2027-01-01T00:00:00.000Z"),
+        ],
+      },
+      {
+        ...previous,
+        commits: [],
+        prs: [],
+        since: "2026-08-02T00:00:00.000Z",
+        until: "2026-08-02T00:00:00.000Z",
+      },
+    );
+    expect(merged.commits.map((item) => item.sha)).toEqual([
+      "old",
+      "clock-skewed",
     ]);
   });
 
