@@ -535,8 +535,8 @@ function HomePage() {
         {content.total === 0 ? (
           <>
             <p className="mt-4 text-muted-foreground">
-              No pages yet. Streams, videos, posts, and articles all start as a
-              page.
+              Nothing in flight. Streams, videos, posts, and articles all start
+              as a page.
             </p>
             <Button
               size="lg"
