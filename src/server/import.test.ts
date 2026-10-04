@@ -7,7 +7,6 @@ import { GithubClient } from "./github";
 import {
   importRepository,
   importWindowStart,
-  lateWindowStart,
   mergeSnapshot,
   refreshIntervalMs,
   startRefresh,
@@ -459,21 +458,6 @@ describe("delta refresh", () => {
     expect(merged.prs[0]?.title).toBe("Renamed");
   });
 
-  it("reaches back two days from the repository's own last fetch for a date listing", () => {
-    expect(
-      lateWindowStart({
-        since: "2020-01-01T00:00:00.000Z",
-        until: "2026-09-07T12:00:00.000Z",
-      }),
-    ).toBe("2026-09-05T12:00:00.000Z");
-    expect(
-      lateWindowStart({
-        since: "2026-09-06T18:00:00.000Z",
-        until: "2026-09-07T12:00:00.000Z",
-      }),
-    ).toBe("2026-09-06T18:00:00.000Z");
-  });
-
   it("lists by date only for a first import or an earlier backfill", () => {
     const stored = "2026-06-09T00:00:00.000Z";
     expect(
@@ -578,6 +562,8 @@ type FakeRepo = {
   orphaned: FakeCommit[];
   prs: { number: number; mergedAt: string }[];
   fail?: boolean;
+  /** Fails commit detail reads only, after the head and listing succeed. */
+  failDetails?: boolean;
   /** Returns at most this many commits from a comparison, as a cut-off one. */
   compareCap?: number;
 };
@@ -668,6 +654,7 @@ function fakeGithub(client: GithubClient, repos: Record<string, FakeRepo>) {
         next: false,
       };
     }
+    if (state.failDetails) throw new Error("GitHub returned HTTP 502.");
     const sha = url.pathname.split("/").at(-1)!;
     const found = [...state.branch, ...state.orphaned].find(
       (item) => item.sha === sha,
@@ -837,8 +824,9 @@ describe("incremental refresh", () => {
     expect(saved.commits.map((c) => c.sha).sort()).toEqual(["a2", "b", "base"]);
     expect(saved.head).toBe("b");
     expect(github.kinds()).toMatchObject({ compare: 1, list: 1 });
+    // From the repository's first import date.
     expect(github.calls.find((c) => c.includes("author=me"))).toContain(
-      `since=${encodeURIComponent("2026-08-30T09:00:00.000Z")}`,
+      `since=${encodeURIComponent(importStart)}`,
     );
     // The next refresh compares from the new head again.
     github.calls.length = 0;
@@ -881,6 +869,76 @@ describe("incremental refresh", () => {
     expect(github.kinds()).toMatchObject({ compare: 1, list: 1 });
   });
 
+  for (const path of ["head comparison", "fallback listing"] as const)
+    it(`resumes from day 0's last saved commit after a failed day-7 sync (${path})`, async () => {
+      const state: FakeRepo = {
+        branch: [mine("day0", day(1, 8))],
+        orphaned: [],
+        prs: [],
+      };
+      const { github, refresh } = await importedMonday(state);
+      if (path === "fallback listing") {
+        const legacy = store.snapshot("me/app")!;
+        delete legacy.head;
+        store.save(legacy);
+      }
+      const before = store.snapshot("me/app");
+      // A commit on each of days 1 to 7, and one merged pull request on day 3.
+      for (let n = 2; n <= 8; n++)
+        state.branch.push(mine(`day${n - 1}`, day(n)));
+      state.prs.push({ number: 3, mergedAt: day(4) });
+      state.failDetails = true;
+      await expect(refresh(day(8, 10))).rejects.toThrow("HTTP 502");
+      // Nothing moved: head, until and commits are as day 0 left them.
+      expect(store.snapshot("me/app")).toEqual(before);
+
+      state.failDetails = false;
+      github.calls.length = 0;
+      const saved = await refresh(day(9));
+      expect(saved.commits.map((c) => c.sha).sort()).toEqual(
+        ["day0", "day1", "day2", "day3", "day4", "day5", "day6", "day7"].sort(),
+      );
+      expect(saved.prs.map((p) => p.number)).toEqual([3]);
+      expect(saved.head).toBe("day7");
+      // Only the seven new commits are read in detail; day 0's is reused.
+      if (path === "fallback listing") {
+        expect(github.calls.find((c) => c.includes("author=me"))).toContain(
+          `since=${encodeURIComponent(importStart)}`,
+        );
+        expect(github.kinds()).toMatchObject({ list: 1, detail: 7 });
+      } else
+        expect(github.kinds()).toMatchObject({
+          compare: 1,
+          list: 0,
+          detail: 7,
+        });
+    });
+
+  it("finds a late push dated before the newest saved commit on the fallback path", async () => {
+    const state: FakeRepo = {
+      branch: [mine("base", day(1, 6)), mine("a", day(1, 8))],
+      orphaned: [],
+      prs: [],
+    };
+    const { github, refresh } = await importedMonday(state);
+    // A force push makes the stored head unusable, and brings a commit made
+    // on 28 August, days before the newest saved commit, that was never pushed.
+    state.orphaned.push(state.branch.pop()!);
+    state.branch.push(
+      mine("late", "2026-08-28T09:00:00.000Z"),
+      mine("a2", day(1, 9)),
+    );
+    const saved = await refresh(day(1, 11));
+    expect(saved.commits.map((c) => c.sha).sort()).toEqual([
+      "a2",
+      "base",
+      "late",
+    ]);
+    // Only the two commits not already saved need their details read.
+    expect(github.kinds()).toMatchObject({ list: 1, detail: 2 });
+    expect(github.calls.filter((c) => /\/commits\/base\?/.test(c))).toEqual([]);
+  });
+
   it("refreshes a snapshot saved before heads were stored from its own last fetch", async () => {
     const state: FakeRepo = {
       branch: [mine("a", day(1, 8))],
@@ -895,11 +953,12 @@ describe("incremental refresh", () => {
     state.prs.push({ number: 7, mergedAt: day(2) });
     const saved = await refresh(day(5));
     expect(saved.commits.map((c) => c.sha).sort()).toEqual(["a", "b"]);
+    expect(github.kinds()).toMatchObject({ list: 1, detail: 1 });
     expect(saved.prs.map((p) => p.number)).toEqual([7]);
     expect(saved.head).toBe("b");
-    // From its own last fetch, Monday 09:00, less the two-day margin.
+    // From the repository's first import date.
     expect(github.calls.find((c) => c.includes("author=me"))).toContain(
-      `since=${encodeURIComponent("2026-08-30T09:00:00.000Z")}`,
+      `since=${encodeURIComponent(importStart)}`,
     );
     github.calls.length = 0;
     await refresh(day(5, 10));

@@ -141,7 +141,10 @@ export async function importRepository(
   let listedSince = resume ? until : since;
   if (head && added) await read(added, resume!.since);
   else if (head) {
-    if (resume) listedSince = lateWindowStart(resume);
+    // Without a usable stored head, list the whole history from the first
+    // import: a commit pushed late can carry any earlier date. Saved details
+    // are reused, so only the list pages cost requests.
+    if (resume) listedSince = resume.since;
     // The pinned head bounds the listing, not `until`: a commit pushed after
     // the run started but before this head was read would otherwise be left
     // out while its head is saved, and the next refresh would skip it.
@@ -232,21 +235,6 @@ async function compareHeads(
       return seen === comparison.total_commits ? shas : null;
     }
   }
-}
-
-/**
- * GitHub filters commit listings by commit date, not push date, so a commit
- * made before the last fetch but pushed after it is only found by reaching
- * back. A date listing reaches this far before the repository's own `until`.
- */
-export const latePushMarginMs = 48 * 60 * 60 * 1000;
-
-export function lateWindowStart(
-  previous: Pick<Snapshot, "since" | "until">,
-  marginMs = latePushMarginMs,
-) {
-  const start = new Date(Date.parse(previous.until) - marginMs).toISOString();
-  return previous.since > start ? previous.since : start;
 }
 
 export function refreshIntervalMs() {
