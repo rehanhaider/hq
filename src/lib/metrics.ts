@@ -74,17 +74,6 @@ export function summarize(dataset: Dataset, filters: Filters) {
       });
     return daily.get(day)!;
   };
-  const history: {
-    id: string;
-    repo: string;
-    kind: "commit" | "pr";
-    title: string;
-    url: string;
-    date: string;
-    additions: number;
-    deletions: number;
-    detail: string;
-  }[] = [];
   const cycleHours: number[] = [];
   const projects = snapshots
     .map((snapshot) => {
@@ -124,36 +113,12 @@ export function summarize(dataset: Dataset, filters: Filters) {
             target.deletions += value.deletions;
           }
         }
-        history.push({
-          id: commit.sha,
-          repo: snapshot.repo.fullName,
-          kind: "commit",
-          title: commit.title,
-          url: commit.url,
-          date: commit.date,
-          additions: commit.merge ? 0 : commit.additions,
-          deletions: commit.merge ? 0 : commit.deletions,
-          detail: commit.merge
-            ? "Merge commit · lines excluded"
-            : commit.sha.slice(0, 7),
-        });
       }
       for (const pr of prs) {
         getDay(pr.mergedAt).prs++;
         cycleHours.push(
           Math.max(0, (Date.parse(pr.mergedAt) - Date.parse(pr.createdAt)) / 3600000),
         );
-        history.push({
-          id: `pr-${pr.number}`,
-          repo: snapshot.repo.fullName,
-          kind: "pr",
-          title: pr.title,
-          url: pr.url,
-          date: pr.mergedAt,
-          additions: pr.additions,
-          deletions: pr.deletions,
-          detail: `#${pr.number}`,
-        });
       }
       return {
         ...snapshot.repo,
@@ -190,9 +155,6 @@ export function summarize(dataset: Dataset, filters: Filters) {
     total,
     breakdown,
     daily: [...daily.values()].sort((a, b) => a.day.localeCompare(b.day)),
-    history: history.sort(
-      (a, b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id),
-    ),
     languages: [...languages]
       .map(([name, row]) => ({ name, ...row, projects: row.projects.size }))
       .sort((a, b) => b.additions + b.deletions - (a.additions + a.deletions)),
