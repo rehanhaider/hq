@@ -145,6 +145,40 @@ export function countKinds(items: WorkItem[]) {
 }
 
 /**
+ * Only what the Home card shows. Home renders it on the server, and the whole
+ * feed runs to tens of kilobytes: serialising that into the page cost Home
+ * about five milliseconds of its first byte.
+ */
+export type OpenWorkSummary = {
+  connected: boolean;
+  fetchedAt: string;
+  error?: string;
+  issues: number;
+  prs: number;
+  triage: number;
+  oldest: Pick<WorkItem, "id" | "url" | "repo" | "title" | "createdAt">[];
+};
+
+export function summariseOpenWork(feed: OpenWork): OpenWorkSummary {
+  return {
+    connected: feed.connected,
+    fetchedAt: feed.fetchedAt,
+    ...(feed.error ? { error: feed.error } : {}),
+    ...countKinds(feed.mine),
+    triage: feed.triage.length,
+    oldest: feed.mine
+      .slice(0, 5)
+      .map(({ id, url, repo, title, createdAt }) => ({
+        id,
+        url,
+        repo,
+        title,
+        createdAt,
+      })),
+  };
+}
+
+/**
  * The two lists. Mine is the union of the three personal searches — assigned
  * to me, waiting on my review, opened by me — deduped into one row per id.
  * Triage is everything the sweep across my repositories found that nobody has

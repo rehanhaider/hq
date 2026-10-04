@@ -3,6 +3,7 @@ import {
   age,
   buildOpenWork,
   countKinds,
+  summariseOpenWork,
   dedupe,
   normalise,
   normaliseAll,
@@ -101,6 +102,47 @@ describe("countKinds", () => {
     expect(
       countKinds([item({ id: 1 }), item({ id: 2, kind: "pr" }), item({ id: 3, kind: "pr" })]),
     ).toEqual({ issues: 1, prs: 2 });
+  });
+});
+
+describe("summariseOpenWork", () => {
+  it("keeps the counts and the five oldest rows, not the whole feed", () => {
+    const mine = [1, 2, 3, 4, 5, 6, 7].map((id) =>
+      item({ id, kind: id % 3 ? "issue" : "pr" }),
+    );
+    const summary = summariseOpenWork({
+      connected: true,
+      login: "me",
+      mine,
+      triage: [item({ id: 8 }), item({ id: 9 })],
+      fetchedAt: "2026-09-24T14:37:21.123Z",
+    });
+    expect(summary).toEqual({
+      connected: true,
+      fetchedAt: "2026-09-24T14:37:21.123Z",
+      issues: 5,
+      prs: 2,
+      triage: 2,
+      oldest: mine.slice(0, 5).map(({ id, url, repo, title, createdAt }) => ({
+        id,
+        url,
+        repo,
+        title,
+        createdAt,
+      })),
+    });
+  });
+
+  it("carries the error and the disconnected state through", () => {
+    expect(
+      summariseOpenWork({
+        connected: false,
+        mine: [],
+        triage: [],
+        fetchedAt: "2026-09-24T14:37:21.123Z",
+        error: "GitHub is not connected.",
+      }),
+    ).toMatchObject({ connected: false, error: "GitHub is not connected.", oldest: [] });
   });
 });
 
