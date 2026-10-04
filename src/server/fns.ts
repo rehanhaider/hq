@@ -81,8 +81,8 @@ export const getHome = createServerFn({ method: "GET" }).handler(() => {
       login: dataset.login,
       repositories: dataset.snapshots.length,
       // The totals, plus the seven days behind them: a figure with no shape
-      // is three numbers and no trend. The rest of `summarize` — history,
-      // languages, per-project rows — is not the home page's business.
+      // is three numbers and no trend. The rest of `summarize` — languages,
+      // per-project rows — is not the home page's business.
       week: { ...week.total, days: dailySeries(week.daily, from, to) },
     },
     content: contentSummary(content.list(), content.properties()),

@@ -111,14 +111,20 @@ describe("activity accounting", () => {
     expect(result.daily[0]?.prs).toBe(1);
     expect(result.activeDays).toBe(1);
     expect(result.medianHours).toBe(24);
-    expect(result.history).toHaveLength(3);
+    // Both commits and the authored PR land on the one day in range; the
+    // merge commit counts as a commit but adds no lines.
+    expect(result.daily).toEqual([
+      { day: "2026-08-12", commits: 2, prs: 1, additions: 100, deletions: 20 },
+    ]);
     expect(result.incomplete).toEqual([]);
   });
-  it("filters repositories without leaking their counts into charts or history", () => {
+  it("filters repositories without leaking their counts into charts or totals", () => {
     const result = summarize(data, { ...filters, repo: "me/other" });
     expect(result.total.commits).toBe(0);
+    expect(result.total.authoredPrs).toBe(0);
     expect(result.daily).toEqual([]);
-    expect(result.history).toEqual([]);
+    expect(result.projects).toEqual([]);
+    expect(result.languages).toEqual([]);
     expect(result.medianHours).toBeNull();
   });
   it("reports incomplete coverage and retains zero-activity projects", () => {
@@ -141,7 +147,7 @@ describe("activity accounting", () => {
     );
     expect(result.activeDays).toBe(0);
     expect(result.total.authoredPrs).toBe(0);
-    expect(result.history).toEqual([]);
+    expect(result.medianHours).toBeNull();
     expect(result.daily).toEqual([]);
   });
 });
@@ -189,9 +195,9 @@ it("counts authored PRs regardless of who merged them", () => {
   );
   expect(result.total.authoredPrs).toBe(1);
   expect(result.daily[0]?.prs).toBe(1);
-  expect(
-    result.history.filter((row) => row.kind === "pr").map((row) => row.title),
-  ).toEqual(["My PR"]);
+  // Only "My PR" (24h open) feeds delivery time; the colleague's 48h PR
+  // would pull the median to 36h.
+  expect(result.medianHours).toBe(24);
 });
 
 it("filters combinations of repositories across organizations and allows none", () => {
@@ -212,12 +218,18 @@ it("filters combinations of repositories across organizations and allows none", 
   expect(result.total.commits).toBe(4);
   expect(result.daily[0]?.commits).toBe(4);
   expect(result.languages[0]?.additions).toBe(200);
-  expect(new Set(result.history.map((row) => row.repo))).toEqual(
-    new Set(["me/app", "team/api"]),
-  );
-  expect(
-    summarize({ ...data, snapshots }, { ...filters, repo: [] }).history,
-  ).toEqual([]);
+  expect(result.total.authoredPrs).toBe(2);
+  expect(result.daily[0]?.prs).toBe(2);
+  const none = summarize({ ...data, snapshots }, { ...filters, repo: [] });
+  expect(none.projects).toEqual([]);
+  expect(none.total).toEqual({
+    commits: 0,
+    authoredPrs: 0,
+    additions: 0,
+    deletions: 0,
+  });
+  expect(none.daily).toEqual([]);
+  expect(none.languages).toEqual([]);
 });
 
 it("groups shares at or below one percent exactly once and last in both language views", () => {
