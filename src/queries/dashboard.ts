@@ -6,6 +6,7 @@ import {
   getDashboard,
   getImportStatus,
   getOpenWork,
+  getOpenWorkSummary,
   getRepositories,
 } from "@/server/fns";
 
@@ -34,6 +35,12 @@ export const connectionsQuery = queryOptions({
 export const openWorkQuery = queryOptions({
   queryKey: ["open-work"],
   queryFn: () => getOpenWork(),
+  staleTime: 60000,
+});
+/** The Home card's slice of the feed, kept apart so it stays small. */
+export const openWorkSummaryQuery = queryOptions({
+  queryKey: ["open-work", "summary"],
+  queryFn: () => getOpenWorkSummary(),
   staleTime: 60000,
 });
 export const statusQuery = queryOptions({

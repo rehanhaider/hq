@@ -2,10 +2,11 @@ import { createServerFn } from "@tanstack/react-start";
 import { importSchema, searchSchema, daysAgo } from "../lib/model";
 import { dailySeries, summarize } from "../lib/metrics";
 import { connectionRow } from "../lib/connections";
+import { summariseOpenWork } from "../lib/openWork";
 import { getStore, idleStatus } from "./db";
 import type { ImportStatus } from "../lib/model";
 import { github } from "./github";
-import { openWork } from "./openWork";
+import { cachedOpenWork, openWork } from "./openWork";
 import { ensureRefreshLoop, startImport } from "./import";
 import { getNasrStore } from "./nasr";
 import { getContentStore } from "./content";
@@ -346,6 +347,24 @@ export const getConnection = createServerFn({ method: "GET" }).handler(
 export const getOpenWork = createServerFn({ method: "GET" }).handler(() => {
   ensureRefreshLoop();
   return openWork();
+});
+/** The Home card's slice of open work, waiting on a sweep if there is no feed. */
+export const getOpenWorkSummary = createServerFn({ method: "GET" }).handler(
+  async () => {
+    ensureRefreshLoop();
+    return summariseOpenWork(await openWork());
+  },
+);
+/**
+ * The same slice from the saved feed, or null when there is none yet. Home
+ * renders it with the page, so this never waits on a live sweep.
+ */
+export const getCachedOpenWorkSummary = createServerFn({
+  method: "GET",
+}).handler(() => {
+  ensureRefreshLoop();
+  const feed = cachedOpenWork();
+  return feed ? summariseOpenWork(feed) : null;
 });
 export const getRepositories = createServerFn({ method: "GET" }).handler(
   async () => {
