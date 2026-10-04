@@ -3,8 +3,10 @@ import {
   ancestorIds,
   canSortIndex,
   COLLAPSED_PAGES_KEY,
+  contextMenuPageId,
   countDescendants,
   expandAncestors,
+  initialCollapsedPages,
   isInSubtree,
   pageRows,
   pageTree,
@@ -25,7 +27,7 @@ const source = readFileSync(
   fileURLToPath(new URL("./ContentWorkspace.tsx", import.meta.url)),
   "utf8",
 );
-const menu = source.slice(source.indexOf("function PageContextMenu"));
+const menu = source.slice(source.indexOf("function PageListContextMenu"));
 const sortable = source.slice(source.indexOf("function SortablePageRow"));
 
 describe("Content page index context menu", () => {
@@ -33,7 +35,9 @@ describe("Content page index context menu", () => {
     expect(source).toMatch(
       /from "@\/components\/ui\/context-menu"/,
     );
-    expect(menu).toMatch(/<ContextMenuTrigger className="block w-full">/);
+    expect(menu).toMatch(
+      /<ContextMenuTrigger className="block w-full" onContextMenu=\{pick\} onTouchStart=\{pick\}>/,
+    );
     expect(menu).toMatch(/<FilePlus2 className="size-4" \/> New subpage/);
     expect(menu).toMatch(/page\.parentId === null/);
     expect(menu).toMatch(/onClick=\{\(\) => onFilterTree\(page\.id\)\}/);
@@ -60,25 +64,118 @@ describe("Content page index context menu", () => {
     expect(source).toMatch(/<span className="sr-only">Pinned<\/span>/);
   });
 
-  it("keeps the menu on both the flat list and the sortable tree", () => {
-    expect(source).toMatch(/function PageIndexRow/);
-    expect(source.indexOf("<PageContextMenu", source.indexOf("function PageIndexRow"))).toBeGreaterThan(-1);
+  it("mounts one menu for the whole index, not one per row", () => {
+    expect(source.match(/<ContextMenu /g)).toHaveLength(1);
+    const list = source.slice(
+      source.indexOf("<PageListContextMenu"),
+      source.indexOf("</PageListContextMenu>"),
+    );
+    // Both the sortable tree and the flat list sit inside the one menu.
+    expect(list).toMatch(/<DndContext/);
+    expect(list).toMatch(/<SortableGroup/);
+    expect(list).toMatch(/<PageIndexList/);
+    expect(list).toMatch(/pages=\{visiblePages\}/);
+  });
+
+  it("marks every row, flat and sortable, with its page id", () => {
+    const flatRow = source.slice(
+      source.indexOf("function PageIndexRow"),
+      source.indexOf("function PageIndexList"),
+    );
+    expect(flatRow).toMatch(/\{\.\.\.\{ \[PAGE_ROW_ATTRIBUTE\]: page\.id \}\}/);
     const sortableReturn = sortable.slice(sortable.indexOf("return ("));
-    expect(sortableReturn).toMatch(/<PageContextMenu/);
+    expect(sortableReturn).toMatch(/\{\.\.\.\{ \[PAGE_ROW_ATTRIBUTE\]: page\.id \}\}/);
+    // The marked row wraps the drag handle, and the subtree stays outside it.
     expect(sortableReturn).toMatch(
       /<div ref=\{setActivatorNodeRef\} \{\.\.\.attributes\} \{\.\.\.listeners\}[^>]*>/,
     );
-    expect(sortableReturn.indexOf("<PageContextMenu")).toBeLessThan(
+    expect(sortableReturn.indexOf("PAGE_ROW_ATTRIBUTE")).toBeLessThan(
       sortableReturn.indexOf("setActivatorNodeRef"),
+    );
+    expect(sortableReturn.indexOf("PAGE_ROW_ATTRIBUTE")).toBeLessThan(
+      sortableReturn.indexOf("{children}"),
     );
   });
 
   it("offers Delete on both the flat list and the sortable tree", () => {
     expect(source).toMatch(/onDelete=\{\(page\) => setDeletingPage\(page\)\}/);
-    expect(source.slice(source.indexOf("function PageIndexRow"))).toMatch(
-      /onDelete=\{onDelete\}/,
-    );
-    expect(sortable).toMatch(/onDelete=\{onDelete\}/);
+    expect(menu).toMatch(/onDelete=\{onDelete\}/);
+  });
+});
+
+describe("Content page index context menu target", () => {
+  type FakeElement = {
+    pageId: string | null;
+    parentElement: FakeElement | null;
+    closest: (selector: string) => { getAttribute: () => string | null } | null;
+  };
+  /** A minimal element: `closest` walks up to the first marked ancestor. */
+  const element = (pageId: string | null, parent: FakeElement | null = null) => {
+    const node: FakeElement = {
+      pageId,
+      parentElement: parent,
+      closest(selector) {
+        expect(selector).toBe("[data-page-row]");
+        for (let current: FakeElement | null = node; current; current = current.parentElement) {
+          const id = current.pageId;
+          if (id) return { getAttribute: () => id };
+        }
+        return null;
+      },
+    };
+    return node;
+  };
+  const target = (node: object) => node as unknown as EventTarget;
+
+  it("resolves a click inside a row to that row's page", () => {
+    const row = element("page-a");
+    const link = element(null, row);
+    const title = element(null, link);
+    expect(contextMenuPageId(target(title))).toBe("page-a");
+    expect(contextMenuPageId(target(row))).toBe("page-a");
+  });
+
+  it("picks the nearest row, so a subpage is not its parent", () => {
+    const parent = element("parent");
+    const wrapper = element(null, parent);
+    const child = element("child", wrapper);
+    expect(contextMenuPageId(target(element(null, child)))).toBe("child");
+  });
+
+  it("starts from the parent element when the target is a text node", () => {
+    const row = element("page-a");
+    expect(contextMenuPageId(target({ parentElement: row }))).toBe("page-a");
+  });
+
+  it("finds no page outside a row, so the menu does not open", () => {
+    expect(contextMenuPageId(target(element(null)))).toBeNull();
+    expect(contextMenuPageId(null)).toBeNull();
+    expect(contextMenuPageId(target({}))).toBeNull();
+  });
+});
+
+describe("Content page index first render", () => {
+  const storage = (value: string | null) => () => ({
+    getItem: () => value,
+    setItem: () => undefined,
+  });
+
+  it("starts open before hydration so the server render matches", () => {
+    expect(initialCollapsedPages(false, storage('["a"]'))).toEqual([]);
+  });
+
+  it("reads the stored folds straight away after hydration", () => {
+    expect(initialCollapsedPages(true, storage('["a","b"]'))).toEqual(["a", "b"]);
+    expect(initialCollapsedPages(true, storage(null))).toEqual([]);
+  });
+
+  it("starts open when storage is blocked", () => {
+    expect(
+      initialCollapsedPages(true, () => {
+        throw new Error("SecurityError");
+      }),
+    ).toEqual([]);
+    expect(initialCollapsedPages(true, () => null)).toEqual([]);
   });
 });
 
@@ -631,7 +728,9 @@ describe("Content page index collapse", () => {
 
   it("persists the folded set in localStorage like the other sidebar UI", () => {
     expect(source).toMatch(/hq:content-collapsed-pages/);
-    expect(source).toMatch(/readCollapsedPages\(localStorage\)/);
+    expect(source).toMatch(/function browserStorage\(\)[^{]*\{\n  return localStorage;/);
+    expect(source).toMatch(/readCollapsedPages\(storage\(\)\)/);
+    expect(source).toMatch(/initialCollapsedPages\(hydrated, browserStorage\)/);
     expect(source).toMatch(/writeCollapsedPages\(collapsedIds, localStorage\)/);
   });
 });
