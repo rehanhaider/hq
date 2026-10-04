@@ -13,6 +13,13 @@ export const idleStatus: ImportStatus = {
 };
 export class ActivityStore {
   readonly db: DatabaseSync;
+  /**
+   * The parsed login and snapshots, kept between requests: reading and
+   * parsing every snapshot costs far more than the summaries built from them.
+   * Only this store writes them, and every such write clears the copy. The
+   * objects are shared by every caller, so they are read, never changed.
+   */
+  private cached: Pick<Dataset, "login" | "snapshots"> | null = null;
   constructor(path: string) {
     if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
     this.db = new DatabaseSync(path);
@@ -88,6 +95,7 @@ export class ActivityStore {
         "INSERT INTO metadata VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
       )
       .run(key, JSON.stringify(value));
+    if (key === "login") this.cached = null;
   }
   setStatus(status: ImportStatus) {
     this.write("status", status);
@@ -106,6 +114,7 @@ export class ActivityStore {
         "INSERT INTO snapshots VALUES (?, ?) ON CONFLICT(repo) DO UPDATE SET payload=excluded.payload",
       )
       .run(snapshot.repo.fullName, JSON.stringify(snapshot));
+    this.cached = null;
   }
   snapshot(repo: string): Snapshot | null {
     const row = this.db
@@ -115,17 +124,23 @@ export class ActivityStore {
   }
   remove(repo: string) {
     this.db.prepare("DELETE FROM snapshots WHERE repo = ?").run(repo);
+    this.cached = null;
     const all = this.sync();
     delete all[repo];
     this.write("sync", all);
   }
   dataset(): Dataset {
-    const rows = this.db
-      .prepare("SELECT payload FROM snapshots ORDER BY repo")
-      .all() as { payload: string }[];
-    return {
+    this.cached ??= {
       login: this.read<string>("login"),
-      snapshots: rows.map((row) => JSON.parse(row.payload) as Snapshot),
+      snapshots: (
+        this.db
+          .prepare("SELECT payload FROM snapshots ORDER BY repo")
+          .all() as { payload: string }[]
+      ).map((row) => JSON.parse(row.payload) as Snapshot),
+    };
+    // Status moves on every step of an import, so it is always read fresh.
+    return {
+      ...this.cached,
       status: this.read<ImportStatus>("status") ?? idleStatus,
     };
   }
