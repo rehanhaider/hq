@@ -95,3 +95,33 @@ describe("openWork feed", () => {
     expect(calls).toEqual([]);
   });
 });
+
+describe("cachedOpenWork", () => {
+  it("returns null at once when nothing is saved, sweeping behind the page", async () => {
+    const calls = fakeGithub();
+    const { cachedOpenWork } = await import("./openWork");
+    expect(cachedOpenWork()).toBeNull();
+    await vi.waitFor(() =>
+      expect(store.read("openWork")).toMatchObject({ login: "me" }),
+    );
+    expect(calls.some((url) => url.includes("/search/issues"))).toBe(true);
+  });
+
+  it("returns the saved copy without waiting on a refresh", async () => {
+    const saved = {
+      connected: true,
+      login: "me",
+      mine: [],
+      triage: [],
+      everything: [],
+      fetchedAt: new Date(Date.now() - 60 * 60000).toISOString(),
+    };
+    store.write("openWork", saved);
+    const calls = fakeGithub();
+    const { cachedOpenWork } = await import("./openWork");
+    expect(cachedOpenWork()).toEqual(saved);
+    await vi.waitFor(() =>
+      expect(calls.some((url) => url.includes("/search/issues"))).toBe(true),
+    );
+  });
+});

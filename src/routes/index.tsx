@@ -1,12 +1,17 @@
 import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from "@tanstack/react-query";
 import { ArrowRight, Check, ChevronDown, Circle, FilePlus2 } from "lucide-react";
 import { homeQuery, nasrKeys } from "@/queries/nasr";
-import { openWorkQuery } from "@/queries/dashboard";
-import { age, countKinds } from "@/lib/openWork";
+import { openWorkSummaryQuery } from "@/queries/dashboard";
+import { age } from "@/lib/openWork";
 import { useNewPage } from "@/queries/content";
-import { updateNasrDay } from "@/server/fns";
+import { getCachedOpenWorkSummary, updateNasrDay } from "@/server/fns";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/ui/menu";
 import { Dot } from "@/components/content/properties";
@@ -23,9 +28,25 @@ import { defaultFilters } from "@/lib/model";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/")({
-  loader: ({ context }) => context.queryClient.ensureQueryData(homeQuery),
+  loader: async ({ context }) => {
+    await Promise.all([
+      context.queryClient.ensureQueryData(homeQuery),
+      seedOpenWork(context.queryClient),
+    ]);
+  },
   component: HomePage,
 });
+
+/**
+ * Open work renders with the rest of Home when a saved feed exists. Without
+ * one the card fetches on its own after the page lands, so a cold GitHub
+ * sweep never holds Home up.
+ */
+async function seedOpenWork(queryClient: QueryClient) {
+  if (queryClient.getQueryData(openWorkSummaryQuery.queryKey)) return;
+  const saved = await getCachedOpenWorkSummary();
+  if (saved) queryClient.setQueryData(openWorkSummaryQuery.queryKey, saved);
+}
 
 const WORDS = ["No", "One", "Two", "Three", "Four", "Five"] as const;
 type PrayerKey = "fajr" | "dhuhr" | "asr" | "maghrib" | "isha";
@@ -615,11 +636,9 @@ function HomePage() {
  * snapshots, and on its own query so a slow search never holds up the day.
  */
 function OpenWorkCard() {
-  const work = useQuery(openWorkQuery);
+  const work = useQuery(openWorkSummaryQuery);
   const data = work.data;
-  const mine = data?.mine ?? [];
-  const oldest = mine.slice(0, 5);
-  const kinds = countKinds(mine);
+  const oldest = data?.oldest ?? [];
   const failed = Boolean(work.error) || Boolean(data && !data.connected);
   return (
     <section
@@ -631,7 +650,12 @@ function OpenWorkCard() {
           Open work
         </h2>
         {data && data.connected ? (
-          <span className="text-[0.8125rem] text-muted-foreground">
+          // Ages read the clock, which moves between the server render and
+          // hydration. Keep the server's text rather than flag the drift.
+          <span
+            className="text-[0.8125rem] text-muted-foreground"
+            suppressHydrationWarning
+          >
             {age(data.fetchedAt)} ago
           </span>
         ) : null}
@@ -662,9 +686,9 @@ function OpenWorkCard() {
           <dl className="mt-3.5 grid grid-cols-3 gap-x-4 gap-y-4">
             {(
               [
-                ["Issues", kinds.issues],
-                ["PRs", kinds.prs],
-                ["Needs triage", data?.triage.length ?? 0],
+                ["Issues", data?.issues ?? 0],
+                ["PRs", data?.prs ?? 0],
+                ["Needs triage", data?.triage ?? 0],
               ] as const
             ).map(([label, value]) => (
               <div key={label} className="min-w-0">
@@ -693,7 +717,10 @@ function OpenWorkCard() {
                       {item.repo}
                     </span>
                     <span className="truncate">{item.title}</span>
-                    <span className="font-mono text-xs text-muted-foreground tabular-nums">
+                    <span
+                      className="font-mono text-xs text-muted-foreground tabular-nums"
+                      suppressHydrationWarning
+                    >
                       {age(item.createdAt)}
                     </span>
                   </a>

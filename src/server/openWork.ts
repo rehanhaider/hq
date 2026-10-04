@@ -153,6 +153,15 @@ export function warmOpenWork() {
   void sweep().catch(() => {});
 }
 
+/**
+ * The saved feed or `null`, for a page that renders with it but must never
+ * wait on a sweep. A stale or missing copy is refreshed in the background.
+ */
+export function cachedOpenWork(): OpenWork | null {
+  warmOpenWork();
+  return storedFeed()?.value ?? null;
+}
+
 /** What the page reads: the cached feed if there is one, else a live sweep. */
 export async function openWork(): Promise<OpenWork> {
   const hit = storedFeed();
