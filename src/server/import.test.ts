@@ -578,7 +578,7 @@ function fakeGithub(client: GithubClient, repos: Record<string, FakeRepo>) {
         (item) =>
           item.author === params.get("author") &&
           item.date >= params.get("since")! &&
-          item.date <= params.get("until")!,
+          (!params.has("until") || item.date <= params.get("until")!),
       );
       return {
         body: listed.reverse().map(({ sha }) => ({ sha })),
@@ -700,6 +700,27 @@ describe("incremental refresh", () => {
     });
     expect(saved.commits.map((c) => c.sha)).toEqual(["a"]);
     expect(saved.until).toBe(day(1, 10));
+  });
+
+  it("keeps a commit pushed after the run started but before the head was read", async () => {
+    // The import's cutoff is Monday 09:00; this commit landed at 09:05,
+    // before me/app's head was pinned.
+    const state: FakeRepo = {
+      branch: [
+        mine("a", day(1, 8)),
+        mine("after-cutoff", "2026-09-01T09:05:00.000Z"),
+      ],
+      orphaned: [],
+      prs: [],
+    };
+    const { github, refresh } = await importedMonday(state);
+    expect(store.snapshot("me/app")?.head).toBe("after-cutoff");
+    const saved = await refresh(day(1, 10));
+    expect(saved.commits.map((c) => c.sha).sort()).toEqual([
+      "a",
+      "after-cutoff",
+    ]);
+    expect(github.kinds()).toMatchObject({ list: 0, compare: 0, detail: 0 });
   });
 
   it("fetches everything since the repository's last fetch after more than 48 hours down", async () => {

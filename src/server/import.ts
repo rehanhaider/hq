@@ -46,7 +46,7 @@ export async function importRepository(
     `/repos/${name}/commits?per_page=1&sha=${encodeURIComponent(repo.defaultBranch)}`,
   );
   const head = commitListSchema.parse(heads.body)[0]?.sha;
-  async function read(shas: string[], from: string, to: string | null) {
+  async function read(shas: string[], from: string) {
     for (let offset = 0; offset < shas.length; offset += 4) {
       const batch = shas.slice(offset, offset + 4);
       const results = await Promise.allSettled(
@@ -125,11 +125,7 @@ export async function importRepository(
       const failed = results.find((r) => r.status === "rejected");
       if (failed?.status === "rejected") throw failed.reason;
       for (const result of results)
-        if (
-          result.status === "fulfilled" &&
-          result.value.date >= from &&
-          (to === null || result.value.date <= to)
-        )
+        if (result.status === "fulfilled" && result.value.date >= from)
           commits.push(result.value);
       progress(`${name} · ${commits.length.toLocaleString()} commits read`);
     }
@@ -143,17 +139,19 @@ export async function importRepository(
   // A date listing is authoritative for commits dated from `listedSince`, so
   // the merge drops saved ones there that left the branch.
   let listedSince = resume ? until : since;
-  if (head && added) await read(added, resume!.since, null);
+  if (head && added) await read(added, resume!.since);
   else if (head) {
     if (resume) listedSince = lateWindowStart(resume);
+    // The pinned head bounds the listing, not `until`: a commit pushed after
+    // the run started but before this head was read would otherwise be left
+    // out while its head is saved, and the next refresh would skip it.
     for (let page = 1; ; page++) {
       const response = await client.request(
-        `/repos/${name}/commits?${new URLSearchParams({ sha: head, author: login, since: listedSince, until, per_page: "100", page: String(page) })}`,
+        `/repos/${name}/commits?${new URLSearchParams({ sha: head, author: login, since: listedSince, per_page: "100", page: String(page) })}`,
       );
       await read(
         commitListSchema.parse(response.body).map((item) => item.sha),
         listedSince,
-        until,
       );
       if (!response.next) break;
     }
