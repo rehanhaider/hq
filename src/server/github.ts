@@ -11,6 +11,16 @@ const repoSchema = z.object({
   pushed_at: z.string().nullable(),
 });
 export const commitListSchema = z.array(z.object({ sha: z.string() }));
+export const compareSchema = z.object({
+  status: z.enum(["diverged", "ahead", "behind", "identical"]),
+  total_commits: z.number(),
+  commits: z.array(
+    z.object({
+      sha: z.string(),
+      author: z.object({ login: z.string() }).nullable(),
+    }),
+  ),
+});
 export const commitSchema = z.object({
   sha: z.string(),
   html_url: z.string().url(),
@@ -133,6 +143,13 @@ export class GithubClient {
         if (error.message === "Git Repository is empty.")
           return { body: [], next: false };
       }
+      // A base commit that no longer exists, for example after a force push
+      // and garbage collection; the caller falls back to a timestamp listing.
+      if (
+        (response.status === 404 || response.status === 422) &&
+        /^\/repos\/[^/]+\/[^/]+\/compare\//.test(path)
+      )
+        return { body: null, next: false };
       if (response.status === 401)
         throw new Error(
           "GitHub rejected the token. Update GITHUB_TOKEN and restart the app.",

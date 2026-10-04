@@ -11,9 +11,21 @@ import type {
   Snapshot,
 } from "../lib/model";
 import { ActivityStore, getStore } from "./db";
-import { commitListSchema, commitSchema, GithubClient, github } from "./github";
+import {
+  commitListSchema,
+  commitSchema,
+  compareSchema,
+  GithubClient,
+  github,
+} from "./github";
 import { warmOpenWork } from "./openWork";
 
+/**
+ * Reads one repository. A first import or a backfill lists commits by date
+ * from `since`. An incremental refresh (`incremental`) resumes from the saved
+ * snapshot instead: commits from the stored default-branch head, merged pull
+ * requests from that snapshot's `until`.
+ */
 export async function importRepository(
   client: GithubClient,
   store: ActivityStore,
@@ -22,113 +34,132 @@ export async function importRepository(
   since: string,
   until: string,
   progress: (message: string) => void,
+  incremental = false,
 ): Promise<Snapshot> {
   const repo = await client.repository(name);
-  const old = new Map(
-    store.snapshot(name)?.commits.map((c) => [c.sha, c]) ?? [],
-  );
+  const saved = store.snapshot(name);
+  const resume = incremental ? saved : null;
+  const old = new Map(saved?.commits.map((c) => [c.sha, c]) ?? []);
   const commits: Commit[] = [];
   // Pin the branch before paginating so concurrent pushes cannot shift pages.
   const heads = await client.request(
     `/repos/${name}/commits?per_page=1&sha=${encodeURIComponent(repo.defaultBranch)}`,
   );
   const head = commitListSchema.parse(heads.body)[0]?.sha;
-  if (head) {
+  async function read(shas: string[], from: string, to: string | null) {
+    for (let offset = 0; offset < shas.length; offset += 4) {
+      const batch = shas.slice(offset, offset + 4);
+      const results = await Promise.allSettled(
+        batch.map(async (sha) => {
+          const cached = old.get(sha);
+          if (cached?.languages) return cached;
+          const first = await client.request(
+            `/repos/${name}/commits/${sha}?per_page=100`,
+          );
+          const detail = commitSchema.parse(first.body);
+          const files = [...detail.files];
+          let next = first.next;
+          for (let filePage = 2; next; filePage++) {
+            if (filePage > 30) break;
+            const more = await client.request(
+              `/repos/${name}/commits/${sha}?per_page=100&page=${filePage}`,
+            );
+            files.push(
+              ...z.object({ files: commitSchema.shape.files }).parse(more.body)
+                .files,
+            );
+            next = more.next;
+          }
+          const grouped: Commit["categories"] = {};
+          const languages: Record<string, Changes> = {};
+          for (const file of files) {
+            const language = languageOf(file.filename);
+            const languageChanges = (languages[language] ??= {
+              additions: 0,
+              deletions: 0,
+            });
+            languageChanges.additions += file.additions;
+            languageChanges.deletions += file.deletions;
+            const category = categorize(file.filename);
+            const value: Changes = (grouped[category] ??= {
+              additions: 0,
+              deletions: 0,
+            });
+            value.additions += file.additions;
+            value.deletions += file.deletions;
+          }
+          const sums = files.reduce(
+            (a, f) => ({
+              additions: a.additions + f.additions,
+              deletions: a.deletions + f.deletions,
+            }),
+            { additions: 0, deletions: 0 },
+          );
+          const remainder = {
+            additions: detail.stats.additions - sums.additions,
+            deletions: detail.stats.deletions - sums.deletions,
+          };
+          if (remainder.additions < 0 || remainder.deletions < 0) {
+            // Conflicting file totals cannot safely be apportioned to languages.
+            for (const key of Object.keys(grouped))
+              delete grouped[key as keyof typeof grouped];
+            for (const key of Object.keys(languages)) delete languages[key];
+            grouped.Unclassified = { ...detail.stats };
+            languages.Unclassified = { ...detail.stats };
+          } else if (remainder.additions || remainder.deletions) {
+            grouped.Unclassified = remainder;
+            languages.Unclassified = remainder;
+          }
+          return {
+            sha,
+            title: detail.commit.message.split("\n")[0] ?? sha,
+            url: detail.html_url,
+            date: new Date(detail.commit.committer.date).toISOString(),
+            merge: detail.parents.length > 1,
+            ...detail.stats,
+            categories: grouped,
+            languages,
+          } satisfies Commit;
+        }),
+      );
+      const failed = results.find((r) => r.status === "rejected");
+      if (failed?.status === "rejected") throw failed.reason;
+      for (const result of results)
+        if (
+          result.status === "fulfilled" &&
+          result.value.date >= from &&
+          (to === null || result.value.date <= to)
+        )
+          commits.push(result.value);
+      progress(`${name} · ${commits.length.toLocaleString()} commits read`);
+    }
+  }
+  // The commits a moved head added, or null when only a date listing can
+  // tell: no stored head, a force push, or a comparison GitHub cut short.
+  let added: string[] | null = null;
+  if (head && resume?.head === head) added = [];
+  else if (head && resume?.head)
+    added = await compareHeads(client, name, resume.head, head, login);
+  // A date listing is authoritative for commits dated from `listedSince`, so
+  // the merge drops saved ones there that left the branch.
+  let listedSince = resume ? until : since;
+  if (head && added) await read(added, resume!.since, null);
+  else if (head) {
+    if (resume) listedSince = lateWindowStart(resume);
     for (let page = 1; ; page++) {
       const response = await client.request(
-        `/repos/${name}/commits?${new URLSearchParams({ sha: head, author: login, since, until, per_page: "100", page: String(page) })}`,
+        `/repos/${name}/commits?${new URLSearchParams({ sha: head, author: login, since: listedSince, until, per_page: "100", page: String(page) })}`,
       );
-      const list = commitListSchema.parse(response.body);
-      for (let offset = 0; offset < list.length; offset += 4) {
-        const batch = list.slice(offset, offset + 4);
-        const results = await Promise.allSettled(
-          batch.map(async (item) => {
-            const cached = old.get(item.sha);
-            if (cached?.languages) return cached;
-            const first = await client.request(
-              `/repos/${name}/commits/${item.sha}?per_page=100`,
-            );
-            const detail = commitSchema.parse(first.body);
-            const files = [...detail.files];
-            let next = first.next;
-            for (let filePage = 2; next; filePage++) {
-              if (filePage > 30) break;
-              const more = await client.request(
-                `/repos/${name}/commits/${item.sha}?per_page=100&page=${filePage}`,
-              );
-              files.push(
-                ...z
-                  .object({ files: commitSchema.shape.files })
-                  .parse(more.body).files,
-              );
-              next = more.next;
-            }
-            const grouped: Commit["categories"] = {};
-            const languages: Record<string, Changes> = {};
-            for (const file of files) {
-              const language = languageOf(file.filename);
-              const languageChanges = (languages[language] ??= {
-                additions: 0,
-                deletions: 0,
-              });
-              languageChanges.additions += file.additions;
-              languageChanges.deletions += file.deletions;
-              const category = categorize(file.filename);
-              const value: Changes = (grouped[category] ??= {
-                additions: 0,
-                deletions: 0,
-              });
-              value.additions += file.additions;
-              value.deletions += file.deletions;
-            }
-            const sums = files.reduce(
-              (a, f) => ({
-                additions: a.additions + f.additions,
-                deletions: a.deletions + f.deletions,
-              }),
-              { additions: 0, deletions: 0 },
-            );
-            const remainder = {
-              additions: detail.stats.additions - sums.additions,
-              deletions: detail.stats.deletions - sums.deletions,
-            };
-            if (remainder.additions < 0 || remainder.deletions < 0) {
-              // Conflicting file totals cannot safely be apportioned to languages.
-              for (const key of Object.keys(grouped))
-                delete grouped[key as keyof typeof grouped];
-              for (const key of Object.keys(languages)) delete languages[key];
-              grouped.Unclassified = { ...detail.stats };
-              languages.Unclassified = { ...detail.stats };
-            } else if (remainder.additions || remainder.deletions) {
-              grouped.Unclassified = remainder;
-              languages.Unclassified = remainder;
-            }
-            return {
-              sha: item.sha,
-              title: detail.commit.message.split("\n")[0] ?? item.sha,
-              url: detail.html_url,
-              date: new Date(detail.commit.committer.date).toISOString(),
-              merge: detail.parents.length > 1,
-              ...detail.stats,
-              categories: grouped,
-              languages,
-            } satisfies Commit;
-          }),
-        );
-        const failed = results.find((r) => r.status === "rejected");
-        if (failed?.status === "rejected") throw failed.reason;
-        for (const result of results)
-          if (
-            result.status === "fulfilled" &&
-            result.value.date >= since &&
-            result.value.date <= until
-          )
-            commits.push(result.value);
-        progress(`${name} · ${commits.length.toLocaleString()} commits read`);
-      }
+      await read(
+        commitListSchema.parse(response.body).map((item) => item.sha),
+        listedSince,
+        until,
+      );
       if (!response.next) break;
     }
   }
+  // GitHub sets mergedAt itself, so it cannot predate the last fetch.
+  const prSince = resume ? resume.until : since;
   const prs: PullRequest[] = [];
   let cursor: string | null = null;
   do {
@@ -136,7 +167,7 @@ export async function importRepository(
     for (const pr of pulls.nodes) {
       if (!pr.mergedAt) continue;
       const mergedAt = new Date(pr.mergedAt).toISOString();
-      if (mergedAt < since || mergedAt > until) continue;
+      if (mergedAt < prSince || mergedAt > until) continue;
       if (pr.author?.login.toLowerCase() !== login.toLowerCase()) continue;
       prs.push({
         number: pr.number,
@@ -155,7 +186,7 @@ export async function importRepository(
     );
     if (
       !pulls.pageInfo.hasNextPage ||
-      pulls.nodes.some((p) => new Date(p.updatedAt).toISOString() < since)
+      pulls.nodes.some((p) => new Date(p.updatedAt).toISOString() < prSince)
     )
       break;
     cursor = pulls.pageInfo.endCursor;
@@ -166,13 +197,59 @@ export async function importRepository(
     repo,
     commits: [...new Map(commits.map((c) => [c.sha, c])).values()],
     prs: [...new Map(prs.map((p) => [p.number, p])).values()],
-    since,
+    since: listedSince,
     until,
     importedAt: new Date().toISOString(),
+    ...(head ? { head } : {}),
   };
 }
 
-export const refreshOverlapMs = 48 * 60 * 60 * 1000;
+/**
+ * The account's commits reachable from `head` but not from `base`, or null
+ * when the comparison cannot be trusted: `base` is gone or no longer an
+ * ancestor (a force push), or GitHub returned fewer commits than it counted.
+ */
+async function compareHeads(
+  client: GithubClient,
+  name: string,
+  base: string,
+  head: string,
+  login: string,
+) {
+  const shas: string[] = [];
+  for (let page = 1; ; page++) {
+    const response = await client.request(
+      `/repos/${name}/compare/${base}...${head}?per_page=100&page=${page}`,
+    );
+    if (response.body === null) return null;
+    const comparison = compareSchema.parse(response.body);
+    if (comparison.status !== "ahead") return null;
+    shas.push(
+      ...comparison.commits
+        .filter((c) => c.author?.login.toLowerCase() === login.toLowerCase())
+        .map((c) => c.sha),
+    );
+    if (!response.next) {
+      const seen = (page - 1) * 100 + comparison.commits.length;
+      return seen === comparison.total_commits ? shas : null;
+    }
+  }
+}
+
+/**
+ * GitHub filters commit listings by commit date, not push date, so a commit
+ * made before the last fetch but pushed after it is only found by reaching
+ * back. A date listing reaches this far before the repository's own `until`.
+ */
+export const latePushMarginMs = 48 * 60 * 60 * 1000;
+
+export function lateWindowStart(
+  previous: Pick<Snapshot, "since" | "until">,
+  marginMs = latePushMarginMs,
+) {
+  const start = new Date(Date.parse(previous.until) - marginMs).toISOString();
+  return previous.since > start ? previous.since : start;
+}
 
 export function refreshIntervalMs() {
   const raw = process.env.HQ_REFRESH_MS;
@@ -181,40 +258,43 @@ export function refreshIntervalMs() {
   return Number.isFinite(value) && value >= 0 ? value : 15 * 60 * 1000;
 }
 
-export function refreshSince(
-  previousSince: string,
-  now: Date,
-  overlapMs = refreshOverlapMs,
-) {
-  const overlap = new Date(now.getTime() - overlapMs).toISOString();
-  return previousSince > overlap ? previousSince : overlap;
-}
-
+/**
+ * The date a repository is listed from, or null to resume from its saved
+ * snapshot. Only a first import or a manual backfill to an earlier date
+ * lists by date; everything else catches up from the repository's own state.
+ */
 export function importWindowStart(
   mode: "manual" | "refresh",
   previousSince: string | undefined,
   requestedSince: string,
-  until: Date,
 ) {
   if (!previousSince) return requestedSince;
-  if (mode === "refresh" || requestedSince >= previousSince)
-    return refreshSince(previousSince, until);
+  if (mode === "refresh" || requestedSince >= previousSince) return null;
   return requestedSince;
 }
 
+/**
+ * Folds a fetch into the saved snapshot. Commits the fetch listed by date
+ * (from `incoming.since`) replace saved ones in that range, so a commit that
+ * left the branch, for example after a force push, does not linger.
+ */
 export function mergeSnapshot(
   previous: Snapshot | null,
   incoming: Snapshot,
 ): Snapshot {
   if (!previous) return incoming;
+  const kept =
+    incoming.since < incoming.until
+      ? previous.commits.filter(
+          (commit) =>
+            commit.date < incoming.since || commit.date > incoming.until,
+        )
+      : previous.commits;
   return {
     repo: incoming.repo,
     commits: [
       ...new Map(
-        [...previous.commits, ...incoming.commits].map((commit) => [
-          commit.sha,
-          commit,
-        ]),
+        [...kept, ...incoming.commits].map((commit) => [commit.sha, commit]),
       ).values(),
     ],
     prs: [
@@ -225,6 +305,7 @@ export function mergeSnapshot(
     since: previous.since < incoming.since ? previous.since : incoming.since,
     until: previous.until > incoming.until ? previous.until : incoming.until,
     importedAt: incoming.importedAt,
+    ...(incoming.head ? { head: incoming.head } : {}),
   };
 }
 
@@ -299,12 +380,7 @@ export async function startImport(
       try {
         for (const name of names) {
           const previous = store.snapshot(name);
-          const windowStart = importWindowStart(
-            mode,
-            previous?.since,
-            since,
-            new Date(until),
-          );
+          const windowStart = importWindowStart(mode, previous?.since, since);
           store.setSync(name, {
             state: "syncing",
             error: null,
@@ -321,9 +397,10 @@ export async function startImport(
               store,
               name,
               user.login,
-              windowStart,
+              windowStart ?? since,
               until,
               (message) => store.setStatus({ ...status, message }),
+              windowStart === null,
             );
             const savedAt = new Date().toISOString();
             store.save(mergeSnapshot(previous, snapshot));
