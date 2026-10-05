@@ -70,6 +70,11 @@ export function repoOf(repositoryUrl: string) {
   return parts.slice(-2).join("/");
 }
 
+/** `owner/name` → `name`, for a narrow column where the owner crowds out the title. */
+export function repoName(repo: string) {
+  return repo.split("/").at(-1) || repo;
+}
+
 export function normalise(raw: SearchItem): WorkItem {
   const assignees = [
     ...(raw.assignees ?? []),
