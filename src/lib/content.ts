@@ -625,6 +625,15 @@ export function filterPages(
   );
 }
 
+/** The statuses named Archived. Matched by name, since status ids are per database. */
+export function archivedStatusIds(properties: ContentProperties) {
+  return new Set(
+    properties.statuses
+      .filter((status) => status.name.trim().toLowerCase() === "archived")
+      .map((status) => status.id),
+  );
+}
+
 /**
  * Narrows server search results without repeating its full-text search in the
  * browser. The complete hierarchy supplies ancestors that the search result
@@ -650,11 +659,7 @@ export function filterPageSearchResults(
   const currentMatches = matches.map((page) => ({
     ...page, statusId: latestStatuses.get(page.id)!.statusId,
   }));
-  const archivedIds = new Set(
-    properties.statuses
-      .filter((status) => status.name.trim().toLowerCase() === "archived")
-      .map((status) => status.id),
-  );
+  const archivedIds = archivedStatusIds(properties);
   const hiddenIds = pageTreeIds(
     currentHierarchy,
     search.archived === "show"
@@ -755,11 +760,7 @@ export function visibleBoardBuckets(
   properties: ContentProperties,
   search: ContentSearch,
 ) {
-  const archivedIds = new Set(
-    properties.statuses
-      .filter((status) => status.name.trim().toLowerCase() === "archived")
-      .map((status) => status.id),
-  );
+  const archivedIds = archivedStatusIds(properties);
   return buckets.filter(
     (bucket) =>
       bucket.id === null ||
@@ -805,12 +806,22 @@ export type ContentSummary = {
  * the pages touched most recently. Pages without a status are counted under
  * their own bucket rather than being dropped, because a count that does not
  * add up to the total is worse than an extra column.
+ *
+ * Only top-level pages that are not archived count. Subpages are material for
+ * their parent, and an archived page is no longer in flight, so neither belongs
+ * in the list, the total, or the per-status counts.
  */
 export function contentSummary(
-  pages: ContentPage[],
+  allPages: ContentPage[],
   properties: ContentProperties,
   limit = 4,
 ): ContentSummary {
+  const archivedIds = archivedStatusIds(properties);
+  const pages = allPages.filter(
+    (page) =>
+      !isSubpage(page) &&
+      (page.statusId === null || !archivedIds.has(page.statusId)),
+  );
   const statuses = new Map(properties.statuses.map((s) => [s.id, s]));
   const types = new Map(properties.types.map((t) => [t.id, t]));
   const counts = properties.statuses.map((status) => ({

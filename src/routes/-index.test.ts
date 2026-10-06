@@ -48,9 +48,26 @@ describe("Home Nasr card footer", () => {
   });
 });
 
+describe("Home Open work card", () => {
+  it("renders a saved feed with the page and never waits on a sweep", () => {
+    expect(source).toMatch(/seedOpenWork\(context\.queryClient\)/);
+    expect(source).toMatch(/const saved = await getCachedOpenWorkSummary\(\)/);
+    expect(source).toMatch(
+      /if \(saved\) queryClient\.setQueryData\(openWorkSummaryQuery\.queryKey, saved\)/,
+    );
+    expect(source).not.toMatch(/getOpenWork(Summary)?\(/);
+    expect(source).not.toMatch(/openWorkQuery/);
+  });
+
+  it("still shows its own skeleton when there is no saved feed", () => {
+    expect(work).toMatch(/useQuery\(openWorkSummaryQuery\)/);
+    expect(work).toMatch(/aria-label="Loading open work"/);
+  });
+});
+
 describe("Home Open work card list", () => {
   it("says the list is oldest first, as #10 chose", () => {
-    expect(work).toMatch(/const oldest = mine\.slice\(0, 5\)/);
+    expect(work).toMatch(/const oldest = data\?\.oldest \?\? \[\]/);
     expect(work).toMatch(/Oldest open/);
     expect(work).toMatch(/aria-labelledby="work-oldest"/);
   });

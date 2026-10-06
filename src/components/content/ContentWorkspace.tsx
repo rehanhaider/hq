@@ -8,7 +8,14 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { ClientOnly, Link, useBlocker, useNavigate, useSearch } from "@tanstack/react-router";
+import {
+  ClientOnly,
+  Link,
+  useBlocker,
+  useHydrated,
+  useNavigate,
+  useSearch,
+} from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   DndContext,
@@ -193,6 +200,28 @@ export function writeCollapsedPages(
     storage?.setItem(COLLAPSED_PAGES_KEY, JSON.stringify([...ids]));
   } catch {
     /* nothing to remember it with */
+  }
+}
+
+/** The page's localStorage; touching it throws where storage is blocked. */
+function browserStorage(): CollapsedStorage | null {
+  return localStorage;
+}
+
+/**
+ * The folds the index first renders with. Before hydration the server's
+ * render has no storage to read, so the index starts open and an effect
+ * restores the folds; after it, they are read straight away.
+ */
+export function initialCollapsedPages(
+  hydrated: boolean,
+  storage: () => CollapsedStorage | null,
+): string[] {
+  if (!hydrated) return [];
+  try {
+    return readCollapsedPages(storage());
+  } catch {
+    return [];
   }
 }
 
@@ -621,16 +650,20 @@ export function ContentWorkspace() {
     hasFilters({ ...search, q: undefined, tree: undefined });
   const [localPages, setLocalPages] = useState<ContentPage[] | null>(null);
   const [draggedId, setDraggedId] = useState<string | null>(null);
-  const [collapsedIds, setCollapsedIds] = useState<string[]>([]);
-  const [collapsedRestored, setCollapsedRestored] = useState(false);
+  // A click from another page mounts the index after hydration, so the folds
+  // are read before its first render; restoring them in an effect would
+  // render every row a second time. Only a server-rendered first load waits
+  // for the effect, so hydration sees the tree the server sent.
+  const hydrated = useHydrated();
+  const [collapsedIds, setCollapsedIds] = useState<string[]>(() =>
+    initialCollapsedPages(hydrated, browserStorage),
+  );
+  const [collapsedRestored, setCollapsedRestored] = useState(hydrated);
   useEffect(() => {
-    try {
-      setCollapsedIds(readCollapsedPages(localStorage));
-    } catch {
-      setCollapsedIds([]);
-    }
+    if (collapsedRestored) return;
+    setCollapsedIds(initialCollapsedPages(true, browserStorage));
     setCollapsedRestored(true);
-  }, []);
+  }, [collapsedRestored]);
   useEffect(() => {
     if (!collapsedRestored) return;
     try {
@@ -1107,94 +1140,87 @@ export function ContentWorkspace() {
                 </Button>
               </div>
             ) : rows.length ? (
-              canReorder ? (
-                <ClientOnly
-                  fallback={
-                    <PageIndexList
-                      rows={rows}
-                      tree={tree}
-                      properties={properties}
-                      selectedId={selectedId}
-                      disabled={recovering}
-                      showCollapse={!searching}
-                      collapsed={collapsed}
-                      onToggleCollapsed={toggleCollapsed}
-                      onCreateSubpage={(id) => void addPage(id)}
-                      onFilterTree={filterToTree}
-                      onSetPinned={setPinned}
-                      onDelete={(page) => setDeletingPage(page)}
-                    />
-                  }
-                >
-                  <DndContext
-                    sensors={sensors}
-                    collisionDetection={sameLevelCollision}
-                    onDragStart={onIndexDragStart}
-                    onDragEnd={onIndexDragEnd}
-                    onDragCancel={() => setDraggedId(null)}
-                  >
-                    <SortableGroup
-                      parentId={null}
-                      depth={0}
-                      tree={tree}
-                      properties={properties}
-                      selectedId={selectedId}
-                      disabled={recovering}
-                      collapsed={collapsed}
-                      onToggleCollapsed={toggleCollapsed}
-                      onCreateSubpage={(id) => void addPage(id)}
-                      onFilterTree={filterToTree}
-                      onSetPinned={setPinned}
-                      onDelete={(page) => setDeletingPage(page)}
-                    />
-                    {tree.orphans.map((page) => (
-                      <PageIndexRow
-                        key={page.id}
-                        page={page}
+              <PageListContextMenu
+                pages={visiblePages}
+                disabled={recovering}
+                onCreateSubpage={(id) => void addPage(id)}
+                onFilterTree={filterToTree}
+                onSetPinned={setPinned}
+                onDelete={(page) => setDeletingPage(page)}
+              >
+                {canReorder ? (
+                  <ClientOnly
+                    fallback={
+                      <PageIndexList
+                        rows={rows}
+                        tree={tree}
                         properties={properties}
-                        depth={0}
-                        selected={selectedId === page.id}
+                        selectedId={selectedId}
                         disabled={recovering}
-                        hasChildren={false}
-                        collapsed={false}
+                        showCollapse={!searching}
+                        collapsed={collapsed}
                         onToggleCollapsed={toggleCollapsed}
-                        onCreateSubpage={(id) => void addPage(id)}
-                        onFilterTree={filterToTree}
-                        onSetPinned={setPinned}
-                        onDelete={(page) => setDeletingPage(page)}
                       />
-                    ))}
-                    <DragOverlay>
-                      {draggedPage ? (
-                        <div className="flex min-h-10 w-full items-center gap-2 rounded-lg bg-accent px-2 text-sm font-medium shadow-lg">
-                          <PageIcon page={draggedPage} properties={properties} />
-                          <span className="truncate">
-                            {displayPageTitle(draggedPage.title)}
-                          </span>
-                          {draggedPage.pinned ? (
-                            <Pin className="ml-auto size-3.5 shrink-0" aria-hidden />
-                          ) : null}
-                        </div>
-                      ) : null}
-                    </DragOverlay>
-                  </DndContext>
-                </ClientOnly>
-              ) : (
-                <PageIndexList
-                  rows={rows}
-                  tree={tree}
-                  properties={properties}
-                  selectedId={selectedId}
-                  disabled={recovering}
-                  showCollapse={!searching}
-                  collapsed={collapsed}
-                  onToggleCollapsed={toggleCollapsed}
-                  onCreateSubpage={(id) => void addPage(id)}
-                  onFilterTree={filterToTree}
-                  onSetPinned={setPinned}
-                  onDelete={(page) => setDeletingPage(page)}
-                />
-              )
+                    }
+                  >
+                    <DndContext
+                      sensors={sensors}
+                      collisionDetection={sameLevelCollision}
+                      onDragStart={onIndexDragStart}
+                      onDragEnd={onIndexDragEnd}
+                      onDragCancel={() => setDraggedId(null)}
+                    >
+                      <SortableGroup
+                        parentId={null}
+                        depth={0}
+                        tree={tree}
+                        properties={properties}
+                        selectedId={selectedId}
+                        disabled={recovering}
+                        collapsed={collapsed}
+                        onToggleCollapsed={toggleCollapsed}
+                      />
+                      {tree.orphans.map((page) => (
+                        <PageIndexRow
+                          key={page.id}
+                          page={page}
+                          properties={properties}
+                          depth={0}
+                          selected={selectedId === page.id}
+                          disabled={recovering}
+                          hasChildren={false}
+                          collapsed={false}
+                          onToggleCollapsed={toggleCollapsed}
+                        />
+                      ))}
+                      <DragOverlay>
+                        {draggedPage ? (
+                          <div className="flex min-h-10 w-full items-center gap-2 rounded-lg bg-accent px-2 text-sm font-medium shadow-lg">
+                            <PageIcon page={draggedPage} properties={properties} />
+                            <span className="truncate">
+                              {displayPageTitle(draggedPage.title)}
+                            </span>
+                            {draggedPage.pinned ? (
+                              <Pin className="ml-auto size-3.5 shrink-0" aria-hidden />
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </DragOverlay>
+                    </DndContext>
+                  </ClientOnly>
+                ) : (
+                  <PageIndexList
+                    rows={rows}
+                    tree={tree}
+                    properties={properties}
+                    selectedId={selectedId}
+                    disabled={recovering}
+                    showCollapse={!searching}
+                    collapsed={collapsed}
+                    onToggleCollapsed={toggleCollapsed}
+                  />
+                )}
+              </PageListContextMenu>
             ) : (
               <p className="p-4 text-center text-muted-foreground">{search.q ? "No pages match your search." : "No pages yet."}</p>
             )}
@@ -1515,12 +1541,31 @@ function rowIndent(depth: number) {
   return { paddingLeft: `${Math.min(depth, 8) * 16 + 2}px`, paddingRight: "8px" };
 }
 
+/** The row attribute a right-click on the page index resolves to its page. */
+const PAGE_ROW_ATTRIBUTE = "data-page-row";
+
 /**
- * Trigger sits outside the drag handle so a touchstart `stopPropagation` on
- * the menu cannot swallow the pointer events dnd-kit needs to reorder.
+ * The page id of the index row an event landed in, or null outside any row.
+ * The page index has one context menu for every row, so the right-click's
+ * target says which page the menu is for.
  */
-function PageContextMenu({
-  page,
+export function contextMenuPageId(target: EventTarget | null): string | null {
+  const node = target as (Partial<Element> & { parentElement?: Element | null }) | null;
+  const element =
+    typeof node?.closest === "function" ? (node as Element) : (node?.parentElement ?? null);
+  return element?.closest(`[${PAGE_ROW_ATTRIBUTE}]`)?.getAttribute(PAGE_ROW_ATTRIBUTE) ?? null;
+}
+
+/**
+ * One context menu for the whole page index. A menu per row mounted a Base UI
+ * menu root, trigger and portal for every page on screen, which made opening
+ * Content a long main-thread task; the row under the pointer now decides which
+ * page this one menu acts on. The trigger sits outside every drag handle so a
+ * touchstart `stopPropagation` on the menu cannot swallow the pointer events
+ * dnd-kit needs to reorder.
+ */
+function PageListContextMenu({
+  pages,
   disabled,
   onCreateSubpage,
   onFilterTree,
@@ -1528,7 +1573,7 @@ function PageContextMenu({
   onDelete,
   children,
 }: {
-  page: ContentPage;
+  pages: ContentPage[];
   disabled: boolean;
   onCreateSubpage: (id: string) => void;
   onFilterTree: (id: string) => void;
@@ -1536,33 +1581,75 @@ function PageContextMenu({
   onDelete: (page: ContentPage) => void;
   children: ReactNode;
 }) {
+  const [pageId, setPageId] = useState<string | null>(null);
+  // Looked up on every render, so a refresh while the menu is open shows the
+  // page as it is now, the way the per-row menu did.
+  const page = pageId ? pages.find((entry) => entry.id === pageId) : undefined;
+  const pick = (event: { target: EventTarget | null; preventBaseUIHandler: () => void }) => {
+    const id = contextMenuPageId(event.target);
+    if (id) setPageId(id);
+    else event.preventBaseUIHandler();
+  };
   return (
     <ContextMenu disabled={disabled}>
-      <ContextMenuTrigger className="block w-full">{children}</ContextMenuTrigger>
+      <ContextMenuTrigger className="block w-full" onContextMenu={pick} onTouchStart={pick}>
+        {children}
+      </ContextMenuTrigger>
       <ContextMenuContent>
-        <ContextMenuItem
-          disabled={disabled}
-          onClick={() => onSetPinned(page.id, !page.pinned)}
-        >
-          {page.pinned ? <PinOff className="size-4" /> : <Pin className="size-4" />}
-          {page.pinned ? "Unpin" : "Pin"}
-        </ContextMenuItem>
-        {page.parentId === null && (
-          <ContextMenuItem disabled={disabled} onClick={() => onFilterTree(page.id)}>
-            <ListFilter className="size-4" /> Filter to this page
-          </ContextMenuItem>
-        )}
-        <ContextMenuItem
-          disabled={disabled}
-          onClick={() => onCreateSubpage(page.id)}
-        >
-          <FilePlus2 className="size-4" /> New subpage
-        </ContextMenuItem>
-        <ContextMenuItem disabled={disabled} onClick={() => onDelete(page)}>
-          <Trash2 className="size-4" /> Delete
-        </ContextMenuItem>
+        {page ? (
+          <PageMenuItems
+            page={page}
+            disabled={disabled}
+            onCreateSubpage={onCreateSubpage}
+            onFilterTree={onFilterTree}
+            onSetPinned={onSetPinned}
+            onDelete={onDelete}
+          />
+        ) : null}
       </ContextMenuContent>
     </ContextMenu>
+  );
+}
+
+function PageMenuItems({
+  page,
+  disabled,
+  onCreateSubpage,
+  onFilterTree,
+  onSetPinned,
+  onDelete,
+}: {
+  page: ContentPage;
+  disabled: boolean;
+  onCreateSubpage: (id: string) => void;
+  onFilterTree: (id: string) => void;
+  onSetPinned: (id: string, pinned: boolean) => void;
+  onDelete: (page: ContentPage) => void;
+}) {
+  return (
+    <>
+      <ContextMenuItem
+        disabled={disabled}
+        onClick={() => onSetPinned(page.id, !page.pinned)}
+      >
+        {page.pinned ? <PinOff className="size-4" /> : <Pin className="size-4" />}
+        {page.pinned ? "Unpin" : "Pin"}
+      </ContextMenuItem>
+      {page.parentId === null && (
+        <ContextMenuItem disabled={disabled} onClick={() => onFilterTree(page.id)}>
+          <ListFilter className="size-4" /> Filter to this page
+        </ContextMenuItem>
+      )}
+      <ContextMenuItem
+        disabled={disabled}
+        onClick={() => onCreateSubpage(page.id)}
+      >
+        <FilePlus2 className="size-4" /> New subpage
+      </ContextMenuItem>
+      <ContextMenuItem disabled={disabled} onClick={() => onDelete(page)}>
+        <Trash2 className="size-4" /> Delete
+      </ContextMenuItem>
+    </>
   );
 }
 
@@ -1575,10 +1662,6 @@ function PageIndexRow({
   hasChildren,
   collapsed,
   onToggleCollapsed,
-  onCreateSubpage,
-  onFilterTree,
-  onSetPinned,
-  onDelete,
 }: {
   page: ContentPage;
   properties: ContentProperties;
@@ -1588,39 +1671,30 @@ function PageIndexRow({
   hasChildren: boolean;
   collapsed: boolean;
   onToggleCollapsed: (id: string) => void;
-  onCreateSubpage: (id: string) => void;
-  onFilterTree: (id: string) => void;
-  onSetPinned: (id: string, pinned: boolean) => void;
-  onDelete: (page: ContentPage) => void;
 }) {
   return (
-    <PageContextMenu
-      page={page}
-      disabled={disabled}
-      onCreateSubpage={onCreateSubpage}
-      onFilterTree={onFilterTree}
-      onSetPinned={onSetPinned}
-      onDelete={onDelete}
+    <div
+      className="flex items-center gap-0.5"
+      style={rowIndent(depth)}
+      {...{ [PAGE_ROW_ATTRIBUTE]: page.id }}
     >
-      <div className="flex items-center gap-0.5" style={rowIndent(depth)}>
-        {hasChildren ? (
-          <CollapseToggle
-            page={page}
-            collapsed={collapsed}
-            disabled={disabled}
-            onToggle={onToggleCollapsed}
-          />
-        ) : (
-          <span aria-hidden className="size-6 shrink-0" />
-        )}
-        <PageIndexLink
+      {hasChildren ? (
+        <CollapseToggle
           page={page}
-          properties={properties}
-          selected={selected}
+          collapsed={collapsed}
           disabled={disabled}
+          onToggle={onToggleCollapsed}
         />
-      </div>
-    </PageContextMenu>
+      ) : (
+        <span aria-hidden className="size-6 shrink-0" />
+      )}
+      <PageIndexLink
+        page={page}
+        properties={properties}
+        selected={selected}
+        disabled={disabled}
+      />
+    </div>
   );
 }
 
@@ -1633,10 +1707,6 @@ function PageIndexList({
   showCollapse,
   collapsed,
   onToggleCollapsed,
-  onCreateSubpage,
-  onFilterTree,
-  onSetPinned,
-  onDelete,
 }: {
   rows: { page: ContentPage; depth: number }[];
   tree: PageTree;
@@ -1646,10 +1716,6 @@ function PageIndexList({
   showCollapse: boolean;
   collapsed: ReadonlySet<string>;
   onToggleCollapsed: (id: string) => void;
-  onCreateSubpage: (id: string) => void;
-  onFilterTree: (id: string) => void;
-  onSetPinned: (id: string, pinned: boolean) => void;
-  onDelete: (page: ContentPage) => void;
 }) {
   return (
     <>
@@ -1667,10 +1733,6 @@ function PageIndexList({
             hasChildren={hasChildren}
             collapsed={collapsed.has(page.id)}
             onToggleCollapsed={onToggleCollapsed}
-            onCreateSubpage={onCreateSubpage}
-            onFilterTree={onFilterTree}
-            onSetPinned={onSetPinned}
-            onDelete={onDelete}
           />
         );
       })}
@@ -1694,10 +1756,6 @@ function SortableGroup({
   disabled,
   collapsed,
   onToggleCollapsed,
-  onCreateSubpage,
-  onFilterTree,
-  onSetPinned,
-  onDelete,
 }: {
   parentId: string | null;
   depth: number;
@@ -1707,10 +1765,6 @@ function SortableGroup({
   disabled: boolean;
   collapsed: ReadonlySet<string>;
   onToggleCollapsed: (id: string) => void;
-  onCreateSubpage: (id: string) => void;
-  onFilterTree: (id: string) => void;
-  onSetPinned: (id: string, pinned: boolean) => void;
-  onDelete: (page: ContentPage) => void;
 }) {
   const pages = tree.children.get(parentId) ?? [];
   if (!pages.length) return null;
@@ -1727,10 +1781,6 @@ function SortableGroup({
         disabled={disabled}
         collapsed={collapsed}
         onToggleCollapsed={onToggleCollapsed}
-        onCreateSubpage={onCreateSubpage}
-        onFilterTree={onFilterTree}
-        onSetPinned={onSetPinned}
-        onDelete={onDelete}
       />
       <SortableSiblingList
         pages={unpinned}
@@ -1741,10 +1791,6 @@ function SortableGroup({
         disabled={disabled}
         collapsed={collapsed}
         onToggleCollapsed={onToggleCollapsed}
-        onCreateSubpage={onCreateSubpage}
-        onFilterTree={onFilterTree}
-        onSetPinned={onSetPinned}
-        onDelete={onDelete}
       />
     </>
   );
@@ -1759,10 +1805,6 @@ function SortableSiblingList({
   disabled,
   collapsed,
   onToggleCollapsed,
-  onCreateSubpage,
-  onFilterTree,
-  onSetPinned,
-  onDelete,
 }: {
   pages: ContentPage[];
   depth: number;
@@ -1772,10 +1814,6 @@ function SortableSiblingList({
   disabled: boolean;
   collapsed: ReadonlySet<string>;
   onToggleCollapsed: (id: string) => void;
-  onCreateSubpage: (id: string) => void;
-  onFilterTree: (id: string) => void;
-  onSetPinned: (id: string, pinned: boolean) => void;
-  onDelete: (page: ContentPage) => void;
 }) {
   if (!pages.length) return null;
   return (
@@ -1792,10 +1830,6 @@ function SortableSiblingList({
           hasChildren={(tree.children.get(page.id)?.length ?? 0) > 0}
           collapsed={collapsed.has(page.id)}
           onToggleCollapsed={onToggleCollapsed}
-          onCreateSubpage={onCreateSubpage}
-          onFilterTree={onFilterTree}
-          onSetPinned={onSetPinned}
-          onDelete={onDelete}
         >
           {collapsed.has(page.id) ? null : (
             <SortableGroup
@@ -1807,10 +1841,6 @@ function SortableSiblingList({
               disabled={disabled}
               collapsed={collapsed}
               onToggleCollapsed={onToggleCollapsed}
-              onCreateSubpage={onCreateSubpage}
-              onFilterTree={onFilterTree}
-              onSetPinned={onSetPinned}
-              onDelete={onDelete}
             />
           )}
         </SortablePageRow>
@@ -1829,10 +1859,6 @@ function SortablePageRow({
   hasChildren,
   collapsed,
   onToggleCollapsed,
-  onCreateSubpage,
-  onFilterTree,
-  onSetPinned,
-  onDelete,
   children,
 }: {
   page: ContentPage;
@@ -1845,10 +1871,6 @@ function SortablePageRow({
   hasChildren: boolean;
   collapsed: boolean;
   onToggleCollapsed: (id: string) => void;
-  onCreateSubpage: (id: string) => void;
-  onFilterTree: (id: string) => void;
-  onSetPinned: (id: string, pinned: boolean) => void;
-  onDelete: (page: ContentPage) => void;
   /** The page's own subtree, carried along when the row moves. */
   children?: ReactNode;
 }) {
@@ -1866,9 +1888,9 @@ function SortablePageRow({
     disabled: disabled || !sortable,
   });
   // Only the row itself is the handle; the subtree below it is outside the
-  // handle, so grabbing a child never drags the parent. The context-menu
-  // trigger wraps the handle so a right-click still opens the page menu.
-  // The disclosure sits beside the handle and stops the pointer, so
+  // handle, so grabbing a child never drags the parent. The row carries its
+  // page id, so a right-click on it opens the index's context menu for this
+  // page. The disclosure sits beside the handle and stops the pointer, so
   // unfolding never starts a drag.
   return (
     <div
@@ -1876,35 +1898,30 @@ function SortablePageRow({
       style={{ transform: CSS.Translate.toString(transform), transition }}
       className={isDragging ? "opacity-40" : ""}
     >
-      <PageContextMenu
-        page={page}
-        disabled={disabled}
-        onCreateSubpage={onCreateSubpage}
-        onFilterTree={onFilterTree}
-        onSetPinned={onSetPinned}
-        onDelete={onDelete}
+      <div
+        className="flex items-center gap-0.5"
+        style={rowIndent(depth)}
+        {...{ [PAGE_ROW_ATTRIBUTE]: page.id }}
       >
-        <div className="flex items-center gap-0.5" style={rowIndent(depth)}>
-          {hasChildren ? (
-            <CollapseToggle
-              page={page}
-              collapsed={collapsed}
-              disabled={disabled}
-              onToggle={onToggleCollapsed}
-            />
-          ) : (
-            <span aria-hidden className="size-6 shrink-0" />
-          )}
-          <div ref={setActivatorNodeRef} {...attributes} {...listeners} className="min-w-0 flex-1">
-            <PageIndexLink
-              page={page}
-              properties={properties}
-              selected={selected}
-              disabled={disabled}
-            />
-          </div>
+        {hasChildren ? (
+          <CollapseToggle
+            page={page}
+            collapsed={collapsed}
+            disabled={disabled}
+            onToggle={onToggleCollapsed}
+          />
+        ) : (
+          <span aria-hidden className="size-6 shrink-0" />
+        )}
+        <div ref={setActivatorNodeRef} {...attributes} {...listeners} className="min-w-0 flex-1">
+          <PageIndexLink
+            page={page}
+            properties={properties}
+            selected={selected}
+            disabled={disabled}
+          />
         </div>
-      </PageContextMenu>
+      </div>
       {children}
     </div>
   );

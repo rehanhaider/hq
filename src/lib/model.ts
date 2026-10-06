@@ -100,6 +100,8 @@ export type Snapshot = {
   since: string;
   until: string;
   importedAt: string;
+  /** Default-branch head at `until`. Absent on snapshots saved before refreshes compared heads. */
+  head?: string;
 };
 export type ImportStatus = {
   state: "idle" | "running" | "complete" | "error";

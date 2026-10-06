@@ -510,6 +510,64 @@ describe("contentSummary", () => {
     });
   });
 
+  it("leaves archived pages and subpages out of the list, total and counts", () => {
+    const withArchive: ContentProperties = {
+      ...properties,
+      statuses: [
+        ...properties.statuses,
+        { id: "archived", name: "Archived", color: "slate", position: 2 },
+      ],
+    };
+    const summary = contentSummary(
+      [
+        ...pages,
+        page("Old talk", {
+          id: "e",
+          statusId: "archived",
+          updatedAt: "2026-09-14T09:00:00.000Z",
+        }),
+        page("Clip", {
+          id: "f",
+          parentId: "a",
+          statusId: null,
+          updatedAt: "2026-09-15T09:00:00.000Z",
+        }),
+        page("Published child", {
+          id: "g",
+          parentId: "b",
+          statusId: "published",
+          updatedAt: "2026-09-16T09:00:00.000Z",
+        }),
+      ],
+      withArchive,
+    );
+    expect(summary.total).toBe(3);
+    expect(summary.recent.map((entry) => entry.title)).toEqual([
+      "Blog draft",
+      "Loose page",
+      "Stream plan",
+    ]);
+    expect(summary.counts.map((entry) => [entry.name, entry.count])).toEqual([
+      ["Idea", 1],
+      ["Published", 1],
+      ["Archived", 0],
+      ["No status", 1],
+    ]);
+  });
+
+  it("matches the Archived status by name, whatever its case", () => {
+    const shouting: ContentProperties = {
+      ...properties,
+      statuses: [{ id: "x", name: " ARCHIVED ", color: "slate", position: 0 }],
+    };
+    const summary = contentSummary(
+      [page("Gone", { statusId: "x" })],
+      shouting,
+    );
+    expect(summary.total).toBe(0);
+    expect(summary.recent).toEqual([]);
+  });
+
   it("summarises an empty pipeline without inventing rows", () => {
     const summary = contentSummary([], properties);
     expect(summary.total).toBe(0);

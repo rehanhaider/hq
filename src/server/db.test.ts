@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ActivityStore } from "./db";
 import type { ImportStatus, Snapshot } from "../lib/model";
 
@@ -132,5 +132,89 @@ describe("SQLite storage", () => {
     store.close();
     store = new ActivityStore(path);
     expect(store.dataset().status.state).toBe("error");
+  });
+});
+describe("the in-memory dataset", () => {
+  /** Counts the snapshot reads that reach SQLite from here on. */
+  function countSnapshotReads() {
+    const prepare = vi.spyOn(store.db, "prepare");
+    return () =>
+      prepare.mock.calls.filter(([sql]) => sql.includes("FROM snapshots ORDER BY"))
+        .length;
+  }
+  const other: Snapshot = {
+    ...snapshot,
+    repo: { ...snapshot.repo, id: 2, fullName: "me/other" },
+  };
+  it("reads SQLite once and reuses the parsed snapshots until a write", () => {
+    store = new ActivityStore(":memory:");
+    store.save(snapshot);
+    const reads = countSnapshotReads();
+    const first = store.dataset();
+    const second = store.dataset();
+    expect(reads()).toBe(1);
+    expect(second.snapshots).toBe(first.snapshots);
+  });
+  it("still reads the import status fresh on every call", () => {
+    store = new ActivityStore(":memory:");
+    store.save(snapshot);
+    store.dataset();
+    const reads = countSnapshotReads();
+    store.setStatus(running);
+    expect(store.dataset().status).toEqual(running);
+    expect(reads()).toBe(0);
+  });
+  it("shows an imported or refreshed snapshot on the next read", () => {
+    store = new ActivityStore(":memory:");
+    store.save(snapshot);
+    expect(store.dataset().snapshots).toHaveLength(1);
+    store.save(other);
+    expect(store.dataset().snapshots.map((s) => s.repo.fullName)).toEqual([
+      "me/app",
+      "me/other",
+    ]);
+    store.save({ ...snapshot, since: "2026-07-01T00:00:00.000Z" });
+    expect(store.dataset().snapshots[0]?.since).toBe("2026-07-01T00:00:00.000Z");
+  });
+  it("shows a renamed repository under its new name on the next read", () => {
+    store = new ActivityStore(":memory:");
+    store.save(snapshot);
+    store.dataset();
+    store.save({
+      ...snapshot,
+      repo: { ...snapshot.repo, fullName: "me/renamed" },
+    });
+    store.remove("me/app");
+    expect(store.dataset().snapshots.map((s) => s.repo.fullName)).toEqual([
+      "me/renamed",
+    ]);
+  });
+  it("drops a disconnected repository on the next read", () => {
+    store = new ActivityStore(":memory:");
+    store.save(snapshot);
+    store.save(other);
+    expect(store.dataset().snapshots).toHaveLength(2);
+    store.remove("me/app");
+    expect(store.dataset().snapshots.map((s) => s.repo.fullName)).toEqual([
+      "me/other",
+    ]);
+  });
+  it("shows the account on the next read once it is recorded", () => {
+    store = new ActivityStore(":memory:");
+    expect(store.dataset().login).toBeNull();
+    store.assertAccount("me");
+    expect(store.dataset().login).toBe("me");
+    store.write("login", "ME");
+    expect(store.dataset().login).toBe("ME");
+  });
+  it("keeps the parsed snapshots across unrelated metadata writes", () => {
+    store = new ActivityStore(":memory:");
+    store.save(snapshot);
+    store.dataset();
+    const reads = countSnapshotReads();
+    store.setSync("me/app", { state: "ok" });
+    store.write("openWork", { connected: true });
+    store.dataset();
+    expect(reads()).toBe(0);
   });
 });
