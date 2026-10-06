@@ -9,7 +9,7 @@ import {
 import { ArrowRight, Check, ChevronDown, Circle, FilePlus2 } from "lucide-react";
 import { homeQuery, nasrKeys } from "@/queries/nasr";
 import { openWorkSummaryQuery } from "@/queries/dashboard";
-import { age } from "@/lib/openWork";
+import { age, repoName } from "@/lib/openWork";
 import { useNewPage } from "@/queries/content";
 import { getCachedOpenWorkSummary, updateNasrDay } from "@/server/fns";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -701,32 +701,42 @@ function OpenWorkCard() {
           <Rule />
 
           {oldest.length ? (
-            <ul className="list min-w-0">
-              {oldest.map((item) => (
-                <li key={item.id} className="min-w-0">
-                  {/* Three columns, each allowed to shrink to nothing: a repo
-                      name and a title are both long enough to push a card
-                      wider than the phone it is on. */}
-                  <a
-                    href={item.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="grid grid-cols-[minmax(0,8rem)_minmax(0,1fr)_auto] items-baseline gap-2 py-2"
-                  >
-                    <span className="truncate text-xs text-muted-foreground">
-                      {item.repo}
-                    </span>
-                    <span className="truncate">{item.title}</span>
-                    <span
-                      className="font-mono text-xs text-muted-foreground tabular-nums"
-                      suppressHydrationWarning
+            <>
+              {/* Oldest first is deliberate (#10), but unlabelled it reads
+                  as what is active now. */}
+              <h3 id="work-oldest" className="section-label">
+                Oldest open
+              </h3>
+              <ul className="list mt-1 min-w-0" aria-labelledby="work-oldest">
+                {oldest.map((item) => (
+                  <li key={item.id} className="min-w-0">
+                    {/* Two lines: in a third of the row there is no room for
+                        the repo and the title side by side, so the title
+                        gets its own line and the owner moves to the tooltip. */}
+                    <a
+                      href={item.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      title={item.repo}
+                      className="block py-2"
                     >
-                      {age(item.createdAt)}
-                    </span>
-                  </a>
-                </li>
-              ))}
-            </ul>
+                      <span className="flex items-baseline justify-between gap-2 text-xs text-muted-foreground">
+                        <span className="truncate">{repoName(item.repo)}</span>
+                        <span
+                          className="font-mono tabular-nums"
+                          suppressHydrationWarning
+                        >
+                          {age(item.createdAt)}
+                        </span>
+                      </span>
+                      <span className="mt-0.5 line-clamp-2 break-words">
+                        {item.title}
+                      </span>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </>
           ) : (
             <p className="text-muted-foreground">
               Nothing needs your attention.

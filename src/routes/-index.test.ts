@@ -64,3 +64,18 @@ describe("Home Open work card", () => {
     expect(work).toMatch(/aria-label="Loading open work"/);
   });
 });
+
+describe("Home Open work card list", () => {
+  it("says the list is oldest first, as #10 chose", () => {
+    expect(work).toMatch(/const oldest = data\?\.oldest \?\? \[\]/);
+    expect(work).toMatch(/Oldest open/);
+    expect(work).toMatch(/aria-labelledby="work-oldest"/);
+  });
+
+  it("gives the title its own line and keeps the full repository in the tooltip", () => {
+    expect(work).toMatch(/title=\{item\.repo\}/);
+    expect(work).toMatch(/\{repoName\(item\.repo\)\}/);
+    expect(work).toMatch(/line-clamp-2 break-words">\s*\{item\.title\}/);
+    expect(work).not.toMatch(/grid-cols-\[minmax\(0,8rem\)/);
+  });
+});

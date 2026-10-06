@@ -7,6 +7,7 @@ import {
   dedupe,
   normalise,
   normaliseAll,
+  repoName,
   repoOf,
   sweepQueries,
   arrangeWork,
@@ -63,6 +64,10 @@ function item(overrides: Partial<WorkItem> = {}): WorkItem {
 describe("normalise", () => {
   it("reads the repository out of the API url", () => {
     expect(repoOf("https://api.github.com/repos/acme/widget")).toBe("acme/widget");
+  });
+  it("shortens a repository to its name, keeping a bare name as it is", () => {
+    expect(repoName("getpelican/pelican-plugins")).toBe("pelican-plugins");
+    expect(repoName("widget")).toBe("widget");
   });
   it("calls a result with a pull_request a pull request", () => {
     expect(normalise(raw({ pull_request: { url: "x" }, draft: true })).kind).toBe("pr");
