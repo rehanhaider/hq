@@ -7,6 +7,7 @@ import {
   activityReadout,
   dayTicks,
   donutChart,
+  metricLabels,
   monthStarts,
   weekChart,
 } from "./charts";
@@ -23,6 +24,10 @@ const rows = dailyActivity(
     { since: "2026-01-30T00:00:00.000Z", until: "2026-02-01T12:00:00.000Z" },
   ],
 );
+
+it("offers merged PRs first in the chart metric toggle", () => {
+  expect(Object.keys(metricLabels)).toEqual(["prs", "commits", "lines"]);
+});
 
 it("labels day ticks and the first day of each month", () => {
   const days = rows.map((row) => row.day);

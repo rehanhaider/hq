@@ -135,15 +135,15 @@ function Statistics({
       <div className="flex flex-wrap items-end justify-between gap-x-12 gap-y-8">
         <div className="min-w-0">
           <p className="flex flex-wrap items-baseline gap-x-2">
-            <span className="display">{number(data.total.commits)}</span>
-            <span className="text-base font-normal text-muted-foreground">commits</span>
+            <span className="display">{number(data.total.authoredPrs)}</span>
+            <span className="text-base font-normal text-muted-foreground">PRs merged</span>
           </p>
           <p className="mt-2.5 text-sm text-muted-foreground">
             {data.activeDays} active {data.activeDays === 1 ? "day" : "days"}
           </p>
         </div>
         <div className="grid min-w-0 grid-cols-2 gap-x-10 gap-y-6 sm:grid-cols-3">
-          <Metric label="PRs merged" value={data.total.authoredPrs} />
+          <Metric label="Commits" value={data.total.commits} />
           <Metric
             label="Lines added"
             value={data.total.additions}
@@ -248,7 +248,7 @@ function Projects({
         <div>
           <h2 className="section-title">Most active</h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            Ordered by your commit count
+            Ordered by your merged PRs, then commits
           </p>
         </div>
         {onAll && (
@@ -262,10 +262,10 @@ function Projects({
           <thead className="border-y text-muted-foreground">
             <tr>
               <th className="py-2.5 pr-4 font-normal">Repository</th>
-              <th className="py-2.5 pl-4 text-right font-normal">Commits</th>
               <th className="py-2.5 pl-4 text-right font-normal">
                 PRs merged
               </th>
+              <th className="py-2.5 pl-4 text-right font-normal">Commits</th>
               <th className="py-2.5 pl-4 text-right font-normal">
                 Lines + / −
               </th>
@@ -299,10 +299,10 @@ function Projects({
                     )}
                   </td>
                   <td className="py-3 pl-4 text-right tabular-nums">
-                    {number(project.commits)}
+                    {number(project.authoredPrs)}
                   </td>
                   <td className="py-3 pl-4 text-right tabular-nums">
-                    {number(project.authoredPrs)}
+                    {number(project.commits)}
                   </td>
                   <td className="whitespace-nowrap py-3 pl-4 text-right tabular-nums">
                     <span className="text-positive">
