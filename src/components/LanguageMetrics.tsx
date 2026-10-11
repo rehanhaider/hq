@@ -1,4 +1,7 @@
+import { Chart } from "@tanstack/charts/react";
+import { useMemo } from "react";
 import { Button } from "@/components/ui/button";
+import { donutChart } from "@/lib/charts";
 import { groupLanguages, type summarize } from "@/lib/metrics";
 
 function share(part: number, total: number) {
@@ -51,16 +54,23 @@ export function LanguageMetrics({
     (n, r) => n + r.additions + r.deletions,
     0,
   );
-  const slices = groupLanguages(data.languages);
+  const slices = useMemo(() => groupLanguages(data.languages), [data.languages]);
   const leftover = slices.some((row) => row.remaining) ? 1 : 0;
-  let offset = 0;
-  const gradient = slices
-    .map((r, i) => {
-      const start = offset;
-      offset += share(r.additions + r.deletions, total);
-      return `${sliceColor(i, leftover > 0 && i === slices.length - 1)} ${start}% ${offset}%`;
-    })
-    .join(", ");
+  const definition = useMemo(
+    () =>
+      donutChart(
+        slices.map((r, i) => ({
+          name: r.name,
+          value: r.additions + r.deletions,
+          color: sliceColor(i, leftover > 0 && i === slices.length - 1),
+        })),
+        {
+          hole: 0.56,
+          format: (slice) => `${slice.name}: ${shareLabel(slice.value, total)}`,
+        },
+      ),
+    [slices, leftover, total],
+  );
   return (
     <section className="section min-w-0 pt-6" aria-label="Language metrics">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -86,13 +96,14 @@ export function LanguageMetrics({
       {mode === "pie" ? (
         total > 0 ? (
           <div className="mt-5 grid items-center gap-6 lg:grid-cols-[18rem_minmax(0,1fr)] lg:gap-10">
-            <div
-              className="relative mx-auto aspect-square w-full max-w-64 rounded-full sm:max-w-72"
-              style={{ background: `conic-gradient(${gradient})` }}
-              role="img"
-              aria-label={`Language distribution: ${slices.map((r) => `${r.name} ${shareLabel(r.additions + r.deletions, total)}`).join(", ")}`}
-            >
-              <div className="absolute inset-[22%] flex flex-col items-center justify-center rounded-full bg-background text-center">
+            <div className="relative mx-auto w-full max-w-64 sm:max-w-72">
+              <Chart
+                definition={definition}
+                aspectRatio={1}
+                initialWidth={288}
+                ariaLabel={`Language distribution: ${slices.map((r) => `${r.name} ${shareLabel(r.additions + r.deletions, total)}`).join(", ")}`}
+              />
+              <div className="pointer-events-none absolute inset-[22%] flex flex-col items-center justify-center text-center">
                 <span className="text-2xl font-semibold tracking-tight tabular-nums">
                   {total.toLocaleString("en-US")}
                 </span>

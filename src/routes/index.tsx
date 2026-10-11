@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { Chart } from "@tanstack/charts/react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   useMutation,
@@ -25,6 +26,7 @@ import {
   type PrayerStatus,
 } from "@/lib/nasr";
 import { defaultFilters } from "@/lib/model";
+import { donutChart, weekChart } from "@/lib/charts";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/")({
@@ -341,23 +343,10 @@ function HomePage() {
           </div>
 
           <div className="mt-4 flex items-center gap-5">
-            <div
-              className="grid size-24 shrink-0 place-items-center rounded-full sm:size-[8.25rem]"
-              style={{
-                background: `conic-gradient(var(--primary) 0 ${nasr.overall.percentage}%, var(--track) ${nasr.overall.percentage}% 100%)`,
-              }}
-              role="img"
-              aria-label={`${nasr.overall.percentage}% adherence over ${nasr.windowDays} logged days`}
-            >
-              <div className="grid size-[4.75rem] place-items-center rounded-full bg-card text-center sm:size-26">
-                <div>
-                  <p className="display text-xl sm:text-[1.75rem]">
-                    {nasr.overall.percentage}%
-                  </p>
-                  <p className="section-label mt-1">adherence</p>
-                </div>
-              </div>
-            </div>
+            <AdherenceRing
+              percentage={nasr.overall.percentage}
+              days={nasr.windowDays}
+            />
 
             <div
               className="grid flex-1 grid-cols-10 gap-1 sm:grid-cols-[repeat(20,minmax(0,1fr))]"
@@ -499,35 +488,7 @@ function HomePage() {
                 <p className="section-label">Requests merged per day</p>
                 {/* The axis is drawn whether or not anything was merged: a week
                     of nothing is a fact about the week, not a missing chart. */}
-                <div
-                  className="mt-3 flex flex-1 items-end gap-1.5 border-b"
-                  role="img"
-                  aria-label={`Requests merged per day, ${week.days.map((entry) => `${weekday(entry.day)} ${entry.prs}`).join(", ")}`}
-                >
-                  {week.days.map((entry) => (
-                    <span
-                      key={entry.day}
-                      title={`${entry.day} — ${entry.prs} ${entry.prs === 1 ? "request" : "requests"} merged`}
-                      className="flex-1 rounded-t-[3px] bg-primary/85"
-                      style={{
-                        height:
-                          peak > 0
-                            ? `${Math.max(2, (entry.prs / peak) * 100)}%`
-                            : 0,
-                      }}
-                    />
-                  ))}
-                </div>
-                <div className="mt-2 flex gap-1.5">
-                  {week.days.map((entry) => (
-                    <span
-                      key={entry.day}
-                      className="flex-1 text-center text-[0.6875rem] text-muted-foreground"
-                    >
-                      {weekday(entry.day)}
-                    </span>
-                  ))}
-                </div>
+                <MergedPerDay days={week.days} />
                 {peak === 0 && (
                   <p className="mt-3 text-[0.8125rem] text-muted-foreground">
                     Nothing merged in the last 7 days.
@@ -771,6 +732,63 @@ function statusLabel(status: PrayerStatus) {
       : status === "missed"
         ? "missed"
         : "not logged";
+}
+
+function AdherenceRing({
+  percentage,
+  days,
+}: {
+  percentage: number;
+  days: number;
+}) {
+  const definition = useMemo(
+    () =>
+      donutChart(
+        [
+          { name: "kept", value: percentage, color: "var(--primary)" },
+          { name: "missed", value: 100 - percentage, color: "var(--track)" },
+        ],
+        { hole: 0.79 },
+      ),
+    [percentage],
+  );
+  return (
+    <div className="relative size-24 shrink-0 sm:size-[8.25rem]">
+      <Chart
+        definition={definition}
+        aspectRatio={1}
+        initialWidth={132}
+        ariaLabel={`${percentage}% adherence over ${days} logged days`}
+      />
+      <div className="pointer-events-none absolute inset-0 grid place-items-center text-center">
+        <div>
+          <p className="display text-xl sm:text-[1.75rem]">{percentage}%</p>
+          <p className="section-label mt-1">adherence</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MergedPerDay({ days }: { days: { day: string; prs: number }[] }) {
+  const definition = useMemo(
+    () =>
+      weekChart(days, {
+        label: (entry) =>
+          `${entry.day} — ${entry.prs} ${entry.prs === 1 ? "request" : "requests"} merged`,
+        tick: weekday,
+      }),
+    [days],
+  );
+  return (
+    <Chart
+      definition={definition}
+      initialWidth={260}
+      className="mt-3 min-h-24 flex-1"
+      style={{ height: "auto" }}
+      ariaLabel={`Requests merged per day, ${days.map((entry) => `${weekday(entry.day)} ${entry.prs}`).join(", ")}`}
+    />
+  );
 }
 
 function weekday(day: string) {
