@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { categorize, dailySeries, summarize, groupLanguages } from "./metrics";
-import { daySchema, importSchema, searchSchema } from "./model";
+import {
+  daySchema,
+  defaultFilters,
+  importSchema,
+  searchSchema,
+} from "./model";
 import type { Dataset, Snapshot } from "./model";
 
 const snapshot: Snapshot = {
@@ -178,6 +183,46 @@ describe("boundary validation", () => {
     ).toBe(false);
     expect(searchSchema.parse({ page: -1, view: "bad" }).page).toBe(1);
   });
+  it("defaults the chart to merged PRs and keeps an explicit commits chart", () => {
+    expect(searchSchema.parse({}).metric).toBe("prs");
+    expect(searchSchema.parse({ metric: "bad" }).metric).toBe("prs");
+    expect(searchSchema.parse({ metric: "commits" }).metric).toBe("commits");
+    expect(defaultFilters().metric).toBe("prs");
+  });
+});
+
+it("orders repositories by merged PRs, then commits, then name", () => {
+  const [feature, merge] = snapshot.commits;
+  const repo = (
+    fullName: string,
+    commits: Snapshot["commits"],
+    prs: Snapshot["prs"],
+  ) => ({
+    ...snapshot,
+    repo: { ...snapshot.repo, fullName },
+    commits,
+    prs,
+  });
+  const result = summarize(
+    {
+      ...data,
+      snapshots: [
+        repo("me/zeta", [feature!], []),
+        repo("me/most-commits", [feature!, merge!], []),
+        repo("me/alpha", [feature!], []),
+        repo("me/shipped", [feature!], [snapshot.prs[0]!]),
+      ],
+    },
+    filters,
+  );
+  expect(
+    result.projects.map((row) => [row.fullName, row.authoredPrs, row.commits]),
+  ).toEqual([
+    ["me/shipped", 1, 1],
+    ["me/most-commits", 0, 2],
+    ["me/alpha", 0, 1],
+    ["me/zeta", 0, 1],
+  ]);
 });
 
 it("counts authored PRs regardless of who merged them", () => {

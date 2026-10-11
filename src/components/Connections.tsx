@@ -62,16 +62,16 @@ const columns = helper.columns([
     meta: { className: "w-[1%]" },
     cell: ({ getValue }) => <ConnectionBadge state={getValue()} />,
   }),
+  helper.accessor((row) => row.metrics.pullRequests.ready, {
+    id: "requests",
+    header: "Requests",
+    meta: { className: "w-[1%] text-right font-mono" },
+    cell: ({ getValue }) => number(getValue()),
+  }),
   helper.accessor((row) => row.metrics.commits.ready, {
     id: "commits",
     header: "Commits",
     meta: { className: "w-[1%] text-right font-mono" },
-    cell: ({ getValue }) => number(getValue()),
-  }),
-  helper.accessor((row) => row.metrics.pullRequests.ready, {
-    id: "requests",
-    header: "Requests",
-    meta: { className: "hidden w-[1%] text-right font-mono md:table-cell" },
     cell: ({ getValue }) => number(getValue()),
   }),
   helper.accessor((row) => row.metrics.additions + row.metrics.deletions, {
@@ -232,7 +232,7 @@ function ProjectTable({
     columns,
     data: data.length ? data : emptyRows,
     getRowId: (row) => row.fullName,
-    initialState: { sorting: [{ id: "commits", desc: true }] },
+    initialState: { sorting: [{ id: "requests", desc: true }] },
     meta: { busy },
   });
   return (

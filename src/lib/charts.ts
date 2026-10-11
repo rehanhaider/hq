@@ -7,8 +7,8 @@ import { activityValues, type dailyActivity } from "./activity";
 import type { Filters } from "./model";
 
 export const metricLabels = {
-  commits: "Commits",
   prs: "PRs merged",
+  commits: "Commits",
   lines: "LOCs",
 };
 

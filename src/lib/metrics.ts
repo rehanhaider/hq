@@ -132,7 +132,10 @@ export function summarize(dataset: Dataset, filters: Filters) {
       };
     })
     .sort(
-      (a, b) => b.commits - a.commits || a.fullName.localeCompare(b.fullName),
+      (a, b) =>
+        b.authoredPrs - a.authoredPrs ||
+        b.commits - a.commits ||
+        a.fullName.localeCompare(b.fullName),
     );
   cycleHours.sort((a, b) => a - b);
   const middle = Math.floor(cycleHours.length / 2);
