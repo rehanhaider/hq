@@ -424,10 +424,7 @@ function HomePage() {
         <OpenWorkCard />
 
         <section
-          className={cn(
-            "card p-5",
-            chart ? "flex min-h-[18rem] flex-col" : "self-start",
-          )}
+          className={cn("card p-5", !chart && "self-start")}
           aria-labelledby="code-heading"
         >
           <div className="flex items-center justify-between gap-3">
@@ -484,7 +481,10 @@ function HomePage() {
                   </dd>
                 </div>
               </dl>
-              <div className="mt-5 flex flex-1 flex-col">
+              {/* The card still stretches to the row; the chart does not, so
+                  seven small counts keep a fixed height and the space below
+                  stays empty. */}
+              <div className="mt-5">
                 <p className="section-label">Requests merged per day</p>
                 {/* The axis is drawn whether or not anything was merged: a week
                     of nothing is a fact about the week, not a missing chart. */}
@@ -783,9 +783,9 @@ function MergedPerDay({ days }: { days: { day: string; prs: number }[] }) {
   return (
     <Chart
       definition={definition}
+      height={192}
       initialWidth={260}
-      className="mt-3 min-h-24 flex-1"
-      style={{ height: "auto" }}
+      className="mt-3"
       ariaLabel={`Requests merged per day, ${days.map((entry) => `${weekday(entry.day)} ${entry.prs}`).join(", ")}`}
     />
   );
