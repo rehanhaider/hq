@@ -49,6 +49,17 @@ it("draws partial days fainter than complete days and skips missing ones", () =>
   expect(svg.match(/fill-opacity="0.55"/g)).toHaveLength(1);
 });
 
+it("keeps a sliver for imported days with nothing in them, and none for missing ones", () => {
+  const scene = createChartScene(activityChart(rows, "commits", "daily"), size);
+  const target = scene.points[0]!.markId;
+  const bars = scene.points.filter((point) => point.markId !== target);
+  expect(bars.map((point) => [point.datum.day, point.yValue])).toEqual([
+    ["2026-01-30", 2],
+    ["2026-01-31", 3 / 200],
+    ["2026-02-01", 3],
+  ]);
+});
+
 it("reads out values, missing history, and coverage", () => {
   const scene = createChartScene(activityChart(rows, "commits", "cumulative"), size);
   const readouts = [...new Map(scene.points.map((p) => [p.datum.day, p.datum])).values()]

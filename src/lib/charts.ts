@@ -55,7 +55,16 @@ export function activityChart(
   const bars = (coverage: string, fillOpacity: number) =>
     barY(
       shown.filter((row) => row.coverage === coverage),
-      { x: "day", y: "value", key: "day", fill: "var(--primary)", fillOpacity, maxThickness: 60 },
+      {
+        x: "day",
+        // An imported day with nothing in it keeps a sliver about a pixel
+        // tall, so it never reads as a not-imported gap.
+        y: (row) => Math.max(row.value ?? 0, max / 200),
+        key: "day",
+        fill: "var(--primary)",
+        fillOpacity,
+        maxThickness: 60,
+      },
     );
   return defineChart({
     marks: [
