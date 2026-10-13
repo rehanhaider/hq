@@ -196,10 +196,14 @@ export class GithubClient {
       if (!response.next) return result;
     }
   }
-  async repository(name: string) {
-    return mapRepo(
-      repoSchema.parse((await this.request(`/repos/${name}`)).body),
-    );
+  /**
+   * One repository, by full name or by its numeric ID. The ID survives a
+   * rename or transfer, where the old name only answers with a redirect.
+   */
+  async repository(ref: string | number) {
+    const path =
+      typeof ref === "number" ? `/repositories/${ref}` : `/repos/${ref}`;
+    return mapRepo(repoSchema.parse((await this.request(path)).body));
   }
   async pulls(name: string, cursor: string | null) {
     const [owner, repo] = name.split("/");

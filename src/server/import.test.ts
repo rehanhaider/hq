@@ -556,6 +556,8 @@ describe("delta refresh", () => {
 
 type FakeCommit = { sha: string; date: string; author: string };
 type FakeRepo = {
+  /** GitHub's numeric ID; defaults to the shared fixture's. */
+  id?: number;
   /** The default branch, oldest first; the last entry is the head. */
   branch: FakeCommit[];
   /** Commits no longer on the branch whose objects GitHub still serves. */
@@ -579,9 +581,15 @@ function fakeGithub(client: GithubClient, repos: Record<string, FakeRepo>) {
     return { name, state };
   };
   vi.spyOn(client, "user").mockResolvedValue({ login: "me", id: 1 });
-  vi.spyOn(client, "repository").mockImplementation(async (name) => {
-    named(`/repos/${name}`);
-    return { ...repo, fullName: name };
+  vi.spyOn(client, "repository").mockImplementation(async (ref) => {
+    const name =
+      typeof ref === "number"
+        ? (Object.keys(repos).find(
+            (key) => (repos[key]!.id ?? repo.id) === ref,
+          ) ?? `#${ref}`)
+        : ref;
+    const { state } = named(`/repos/${name}`);
+    return { ...repo, id: state.id ?? repo.id, fullName: name };
   });
   vi.spyOn(client, "pulls").mockImplementation(async (name) => {
     calls.push(`pulls ${name}`);
@@ -978,12 +986,12 @@ describe("background refresh across repositories", () => {
     const at = (hoursAgo: number) =>
       new Date(now - hoursAgo * 3_600_000).toISOString();
     const repos: Record<string, FakeRepo> = {
-      "me/a": { branch: [mine("a1", at(100))], orphaned: [], prs: [] },
-      "me/b": { branch: [mine("b1", at(100))], orphaned: [], prs: [] },
+      "me/a": { id: 1, branch: [mine("a1", at(100))], orphaned: [], prs: [] },
+      "me/b": { id: 2, branch: [mine("b1", at(100))], orphaned: [], prs: [] },
     };
     for (const name of ["me/a", "me/b"])
       shared.save({
-        repo: { ...repo, fullName: name },
+        repo: { ...repo, id: repos[name]!.id!, fullName: name },
         commits: [{ ...commit(`${name.at(-1)}1`, at(100)), languages: {} }],
         prs: [],
         since: at(200),
@@ -1022,6 +1030,22 @@ describe("background refresh across repositories", () => {
     expect(
       shared.dataset().snapshots.find((s) => s.repo.fullName === "me/b")?.head,
     ).toBe("b2");
+
+    // GitHub answers the old name of a moved repository only with a
+    // redirect, so it is found by ID and its saved history moves with it.
+    repos["org/a"] = repos["me/a"]!;
+    delete repos["me/a"];
+    repos["org/a"].branch.push(mine("a3", at(30)));
+    expect(await startRefresh()).toEqual({ ok: true });
+    await settle();
+    expect(shared.dataset().status.state).toBe("complete");
+    expect(shared.snapshot("me/a")).toBeNull();
+    expect(shared.sync()["me/a"]).toBeUndefined();
+    const moved = shared.snapshot("org/a")!;
+    expect(moved.repo.fullName).toBe("org/a");
+    expect(moved.commits.map((c) => c.sha).sort()).toEqual(["a1", "a2", "a3"]);
+    expect(moved.head).toBe("a3");
+    expect(shared.sync()["org/a"]?.state).toBe("ok");
     shared.close();
     delete process.env.GITHUB_TOKEN;
   });
