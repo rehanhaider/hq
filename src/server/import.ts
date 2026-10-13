@@ -24,20 +24,23 @@ import { warmOpenWork } from "./openWork";
  * Reads one repository. A first import or a backfill lists commits by date
  * from `since`. An incremental refresh (`incremental`) resumes from the saved
  * snapshot instead: commits from the stored default-branch head, merged pull
- * requests from that snapshot's `until`.
+ * requests from that snapshot's `until`. A saved repository is looked up by
+ * ID, so one renamed or transferred on GitHub is read under its new name,
+ * which the returned snapshot carries.
  */
 export async function importRepository(
   client: GithubClient,
   store: ActivityStore,
-  name: string,
+  savedName: string,
   login: string,
   since: string,
   until: string,
   progress: (message: string) => void,
   incremental = false,
 ): Promise<Snapshot> {
-  const repo = await client.repository(name);
-  const saved = store.snapshot(name);
+  const saved = store.snapshot(savedName);
+  const repo = await client.repository(saved?.repo.id ?? savedName);
+  const name = repo.fullName;
   const resume = incremental ? saved : null;
   const old = new Map(saved?.commits.map((c) => [c.sha, c]) ?? []);
   const commits: Commit[] = [];
@@ -389,7 +392,10 @@ export async function startImport(
             );
             const savedAt = new Date().toISOString();
             store.save(mergeSnapshot(previous, snapshot));
-            store.setSync(name, {
+            // A rename or transfer on GitHub moves the saved repository too.
+            const current = snapshot.repo.fullName;
+            if (current !== name) store.remove(name);
+            store.setSync(current, {
               state: "ok",
               error: null,
               lastSuccessAt: savedAt,
@@ -399,7 +405,9 @@ export async function startImport(
             store.setStatus({
               ...status,
               message:
-                mode === "refresh" ? `${name} refreshed` : `${name} imported`,
+                mode === "refresh"
+                  ? `${current} refreshed`
+                  : `${current} imported`,
             });
           } catch (error) {
             const message =
