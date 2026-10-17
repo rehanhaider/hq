@@ -145,7 +145,7 @@ export const NASR_CONTENT: readonly NasrContent[] = [
   },
 ]
 
-export const ADHKAR_KEYS = ['morning_adhkar', 'evening_adhkar'] as const
+export const ADHKAR_KEYS = ['morning_adhkar', 'evening_adhkar', 'ruqyah'] as const
 export type AdhkarKey = (typeof ADHKAR_KEYS)[number]
 
 /** The guide items, in display order, that a practice is ticked off by. */
