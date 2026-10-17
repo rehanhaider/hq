@@ -121,6 +121,31 @@ describe("nasr store", () => {
       expect(store.days()).toEqual([]);
     }
   });
+  it("ticks self-ruqyah items one at a time like the adhkar", () => {
+    store = new NasrStore(":memory:");
+    const ids = adhkarItemIds("ruqyah");
+    const first = store.setAdhkarItem({
+      date: "2026-01-01",
+      item_id: ids[0]!,
+      done: true,
+    });
+    expect(first.adhkar_ticks).toEqual([ids[0]]);
+    expect(first.ruqyah).toBe(false);
+    for (const id of ids.slice(1)) {
+      store.setAdhkarItem({ date: "2026-01-01", item_id: id, done: true });
+    }
+    expect(store.day("2026-01-01").ruqyah).toBe(true);
+    const unticked = store.setAdhkarItem({
+      date: "2026-01-01",
+      item_id: ids[0]!,
+      done: false,
+    });
+    expect(unticked.ruqyah).toBe(false);
+    expect(unticked.adhkar_ticks).toEqual(ids.slice(1));
+    expect(
+      store.upsertDay({ date: "2026-01-02", ruqyah: true }).adhkar_ticks,
+    ).toEqual(ids);
+  });
   it("returns each date's ticks in morning then evening guide order", () => {
     store = new NasrStore(":memory:");
     const morning = adhkarItemIds("morning_adhkar");

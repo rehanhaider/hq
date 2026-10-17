@@ -38,7 +38,7 @@ const boolItems: Array<{
 }> = [
   { key: "morning_adhkar", itemKey: "morning_adhkar", itemized: true },
   { key: "evening_adhkar", itemKey: "evening_adhkar", itemized: true },
-  { key: "ruqyah", itemKey: "ruqyah", itemized: false },
+  { key: "ruqyah", itemKey: "ruqyah", itemized: true },
 ];
 
 function TodayPage() {

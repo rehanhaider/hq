@@ -26,7 +26,8 @@ export const nasrDaySchema = z.object({
   night_baqarah: z.boolean().default(false),
   night_three_suras: z.boolean().default(false),
   ruqyah: z.boolean().default(false),
-  // The guide item ids ticked off that day, for morning and evening adhkar.
+  // The guide item ids ticked off that day, for morning and evening adhkar
+  // and self-ruqyah.
   adhkar_ticks: z.array(z.string()).default([]),
   istighfar_count: z.coerce.number().int().min(0).default(0),
   note: z.string().nullable().default(null),
