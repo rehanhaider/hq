@@ -82,29 +82,6 @@ export function calculateAdherence(
   return result;
 }
 
-export function overallAdherence(
-  days: NasrDay[],
-  windowDays: number,
-  istighfarTarget: number,
-): AdherenceResult {
-  const items = calculateAdherence(days, windowDays, istighfarTarget);
-  const keys = Object.keys(items).filter((k) => k !== "fajr_ontime");
-  if (keys.length === 0) return { percentage: 0, completed: 0, total: 0 };
-
-  const totalCompleted = keys.reduce(
-    (sum, k) => sum + (items[k]?.completed ?? 0),
-    0,
-  );
-  const totalPossible = keys.reduce((sum, k) => sum + (items[k]?.total ?? 0), 0);
-
-  return {
-    percentage:
-      totalPossible > 0 ? Math.round((totalCompleted / totalPossible) * 100) : 0,
-    completed: totalCompleted,
-    total: totalPossible,
-  };
-}
-
 /** The five prayers. Home's Salah figure sums these, as Progress lists them. */
 export const SALAH_KEYS = ["fajr", "dhuhr", "asr", "maghrib", "isha"] as const;
 /** The rest of a day. Home's Practices figure sums these. */

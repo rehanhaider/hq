@@ -729,10 +729,13 @@ function StatusLink({ segment }: { segment: StatusSegment }) {
   // hydration. Keep the server's text rather than flag the drift.
   const figure = "font-mono font-semibold tabular-nums text-foreground";
   return (
-    // No preload: the link stays on this page.
+    // No preload: the link stays on this page. The hash is part of the
+    // match, or every part would read as the current page, since "/" is
+    // Home's own path.
     <Link
       to="/"
       hash={segment.card}
+      activeOptions={{ includeHash: true }}
       preload={false}
       className="whitespace-nowrap transition-colors hover:text-foreground"
     >

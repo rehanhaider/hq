@@ -9,7 +9,6 @@ import {
   groupAdherence,
   markLabel,
   nasrStatus,
-  overallAdherence,
   practiceProgress,
   unloggedDays,
   windowStrip,
@@ -103,31 +102,6 @@ describe("calculateAdherence", () => {
   });
 });
 
-describe("overallAdherence", () => {
-  it("computes overall across all items", () => {
-    const days = [
-      makeDay("2025-01-01", {
-        fajr: "ontime",
-        dhuhr: "ontime",
-        asr: "ontime",
-        maghrib: "ontime",
-        isha: "ontime",
-        morning_adhkar: true,
-        evening_adhkar: true,
-        night_ayat_kursi: true,
-        night_baqarah: true,
-        night_three_suras: true,
-        ruqyah: true,
-        istighfar_count: 100,
-      }),
-    ];
-    expect(overallAdherence(days, 1, 100).percentage).toBe(100);
-  });
-  it("returns 0 for no cycle days", () => {
-    expect(overallAdherence([], 0, 100).percentage).toBe(0);
-  });
-});
-
 describe("daysInWindow", () => {
   const logged = ["2026-07-01", "2026-07-31", "2026-08-27", "2026-09-08"].map(
     (date) => makeDay(date, { fajr: "qada" }),
@@ -157,7 +131,9 @@ describe("daysInWindow", () => {
 
   it("is empty, and scores zero, with nothing logged", () => {
     expect(daysInWindow([], "2026-09-08")).toEqual([]);
-    expect(overallAdherence([], 0, 100).percentage).toBe(0);
+    expect(
+      groupAdherence(calculateAdherence([], 0, 100), SALAH_KEYS).percentage,
+    ).toBe(0);
   });
 
   it("drops a day logged in the future", () => {
