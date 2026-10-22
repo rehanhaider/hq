@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { Chart } from "@tanstack/charts/react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
@@ -7,26 +7,42 @@ import {
   useQueryClient,
   type QueryClient,
 } from "@tanstack/react-query";
-import { ArrowRight, Check, ChevronDown, Circle, FilePlus2 } from "lucide-react";
+import {
+  ArrowRight,
+  Check,
+  ChevronDown,
+  Circle,
+  CircleAlert,
+  FilePlus2,
+} from "lucide-react";
 import { homeQuery, nasrKeys } from "@/queries/nasr";
 import { openWorkSummaryQuery } from "@/queries/dashboard";
 import { age, repoName } from "@/lib/openWork";
+import { attentionStatus, isStale, reasonLabel } from "@/lib/attention";
 import { useNewPage } from "@/queries/content";
 import { getCachedOpenWorkSummary, updateNasrDay } from "@/server/fns";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/ui/menu";
 import { Dot } from "@/components/content/properties";
-import { relativeTime } from "@/lib/content";
+import { contentStatus, isQuiet, relativeTime } from "@/lib/content";
 import {
+  PRACTICE_KEYS,
+  SALAH_KEYS,
+  emptyDaysNote,
+  groupAdherence,
   markLabel,
   middayPrayerLabel,
+  nasrStatus,
+  practiceProgress,
+  unloggedDays,
   windowStrip,
   windowSummary,
   withDay,
   type PrayerStatus,
+  type StatusSegment,
 } from "@/lib/nasr";
 import { defaultFilters } from "@/lib/model";
-import { donutChart, weekChart } from "@/lib/charts";
+import { weekChart } from "@/lib/charts";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/")({
@@ -50,7 +66,6 @@ async function seedOpenWork(queryClient: QueryClient) {
   if (saved) queryClient.setQueryData(openWorkSummaryQuery.queryKey, saved);
 }
 
-const WORDS = ["No", "One", "Two", "Three", "Four", "Five"] as const;
 type PrayerKey = "fajr" | "dhuhr" | "asr" | "maghrib" | "isha";
 type LoggedStatus = "ontime" | "qada";
 
@@ -65,6 +80,7 @@ function Rule() {
 function HomePage() {
   const queryClient = useQueryClient();
   const home = useQuery(homeQuery);
+  const work = useQuery(openWorkSummaryQuery);
   const newPage = useNewPage();
   const [creating, setCreating] = useState(false);
   const logPrayer = useMutation({
@@ -77,9 +93,9 @@ function HomePage() {
         if (!current) return current;
         const { nasr } = current;
         const day = { ...nasr.day, [key]: status };
-        // The 40-day ring and strip read `days`, not `day`, so they are
-        // rebuilt here too. Otherwise they wait on the refetch, which also
-        // carries the GitHub summary and can land well after the tap.
+        // The 40-day strip and its figures read `days`, not `day`, so they
+        // are rebuilt here too. Otherwise they wait on the refetch, which
+        // also carries the GitHub summary and can land well after the tap.
         const days = withDay(nasr.days, day);
         return {
           ...current,
@@ -128,52 +144,66 @@ function HomePage() {
   ] as const;
   const logged = prayers.filter(([, , status]) => status !== null).length;
   const nextPrayer = prayers.find(([, , status]) => status === null);
-  const practices = [
-    ["Morning adhkar", day.morning_adhkar],
-    ["Evening adhkar", day.evening_adhkar],
-    [
-      "Night recitation",
-      Boolean(
-        day.night_ayat_kursi && day.night_baqarah && day.night_three_suras,
-      ),
-    ],
-    ["Self-ruqyah", day.ruqyah],
-  ] as const;
+  const practices = practiceProgress(day, nasr.content);
   const date = new Date(`${nasr.today}T12:00:00Z`).toLocaleDateString("en-GB", {
     weekday: "long",
     day: "numeric",
     month: "long",
     timeZone: "UTC",
   });
-  const kept = practices.filter(([, done]) => done).length;
-  const state =
-    logged === 5
-      ? kept === practices.length
-        ? "All five prayers and every practice logged."
-        : `All five prayers logged, ${WORDS[kept]?.toLowerCase()} of four practices kept.`
-      : logged === 0
-        ? "Nothing logged yet today."
-        : `${WORDS[logged]} ${logged === 1 ? "prayer" : "prayers"} logged, ${WORDS[5 - logged]?.toLowerCase()} to go.`;
+  const statusLine = [
+    ...nasrStatus(day, nasr.days, nasr.today),
+    ...attentionStatus(work.data),
+    ...contentStatus(content),
+  ];
   const target = nasr.settings.istighfar_target;
   const istighfar = target > 0 ? Math.min(100, (day.istighfar_count / target) * 100) : 0;
   const marks = windowStrip(nasr.days, nasr.today);
+  const emptyDays = emptyDaysNote(unloggedDays(nasr.days, nasr.today));
+  // From `adherence` rather than a server field, so a prayer logged on this
+  // card moves them along with the strip.
+  const figures = [
+    ["Fajr on time", nasr.adherence.fajr_ontime?.percentage ?? 0],
+    ["Salah prayed", groupAdherence(nasr.adherence, SALAH_KEYS).percentage],
+    ["Practices", groupAdherence(nasr.adherence, PRACTICE_KEYS).percentage],
+  ] as const;
   const week = github.week;
   // The bars count requests merged, not commits: the headline figures already
   // carry the commits, and a merged request is the unit of finished work.
   const peak = Math.max(...week.days.map((entry) => entry.prs), 0);
   const chart = github.repositories > 0;
+  const quiet = content.lastEditedAt !== null && isQuiet(content.lastEditedAt);
 
   return (
     <div className="space-y-6 lg:space-y-8">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div className="min-w-0">
-          <p className="section-label">{date}</p>
-          <h1 className="title mt-2">{state}</h1>
-        </div>
+      <header className="min-w-0">
+        <p className="section-label">{date}</p>
+        {/* The day in one line. Each part links to the card that holds it:
+            on a phone the cards stack, and this line is what shows before
+            the first scroll. */}
+        <h1 className="mt-2 text-[1.0625rem] leading-normal font-medium tracking-[-0.01em] text-muted-foreground lg:text-[1.25rem]">
+          {statusLine.map((segment, index) => (
+            <Fragment key={segment.id}>
+              {index > 0 && (
+                <>
+                  <span aria-hidden className="mx-2 sm:mx-2.5">
+                    ·
+                  </span>
+                  <wbr />
+                </>
+              )}
+              <StatusLink segment={segment} />
+            </Fragment>
+          ))}
+        </h1>
       </header>
 
       <div className="grid items-stretch gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1.1fr)] lg:gap-8">
-        <section className="card flex flex-col p-5" aria-labelledby="nasr-heading">
+        <section
+          id="nasr"
+          className="card flex scroll-mt-16 flex-col p-5"
+          aria-labelledby="nasr-heading"
+        >
           <div className="flex items-center justify-between gap-3">
             <h2 id="nasr-heading" className="section-title">
               Nasr
@@ -293,24 +323,45 @@ function HomePage() {
 
           <Rule />
 
-          <ul className="grid gap-2.5 sm:grid-cols-2">
-            {practices.map(([label, done]) => (
-              <li key={label} className="flex items-center gap-2">
-                {done ? (
-                  <Check className="size-4 shrink-0 text-positive" aria-hidden />
-                ) : (
-                  <Circle
-                    className="size-4 shrink-0 text-muted-foreground"
-                    aria-hidden
-                  />
-                )}
-                <span className={done ? undefined : "text-muted-foreground"}>
-                  {label}
-                </span>
-                <span className="sr-only">{done ? "done" : "not done"}</span>
+          {/* Read-only on purpose: the practices are logged on Today, where
+              the duas are, so Home holds no controls for them. */}
+          <ul className="grid gap-x-4 gap-y-1 sm:grid-cols-2" aria-label="Today's practices">
+            {practices.map((practice) => (
+              <li key={practice.key}>
+                <Link
+                  to="/nasr"
+                  search={{ guide: practice.key }}
+                  className="-mx-2 flex min-h-8 items-center gap-2 rounded-md px-2 hover:bg-muted/60"
+                >
+                  {practice.complete ? (
+                    <Check className="size-4 shrink-0 text-positive" aria-hidden />
+                  ) : (
+                    <Circle
+                      className="size-4 shrink-0 text-muted-foreground"
+                      aria-hidden
+                    />
+                  )}
+                  <span
+                    className={cn(
+                      "truncate",
+                      !practice.complete && "text-muted-foreground",
+                    )}
+                  >
+                    {practice.label}
+                  </span>
+                  <span className="ml-auto shrink-0 font-mono text-xs text-muted-foreground tabular-nums">
+                    {practice.done}/{practice.total}
+                  </span>
+                  <span className="sr-only">
+                    {practice.complete ? "done" : "not done"}
+                  </span>
+                </Link>
               </li>
             ))}
           </ul>
+          <p className="mt-3 text-xs text-muted-foreground">
+            Logged on Nasr, beside the duas. A row opens its guide there.
+          </p>
 
           <Rule />
 
@@ -342,25 +393,23 @@ function HomePage() {
             </span>
           </div>
 
-          <div className="mt-4 flex items-center gap-5">
-            <AdherenceRing
-              percentage={nasr.overall.percentage}
-              days={nasr.windowDays}
-            />
-
-            <div
-              className="grid flex-1 grid-cols-10 gap-1 sm:grid-cols-[repeat(20,minmax(0,1fr))]"
-              aria-label="One mark per day of the last 40 days"
-              role="list"
-            >
-              {marks.map((mark) => (
-                <span
-                  key={mark.date}
-                  role="listitem"
+          {/* The strip is the day picker: each mark opens its day on Today. */}
+          <ul
+            className="mt-4 grid grid-cols-10 gap-1 sm:grid-cols-[repeat(20,minmax(0,1fr))]"
+            aria-label="One mark per day of the last 40 days"
+          >
+            {marks.map((mark) => (
+              <li key={mark.date}>
+                {/* No preload: the links above already load Nasr, and forty
+                    more would only repeat it. */}
+                <Link
+                  to="/nasr"
+                  search={{ date: mark.date }}
+                  preload={false}
                   aria-label={markLabel(mark)}
                   title={markLabel(mark)}
                   className={cn(
-                    "flex h-5 flex-col-reverse overflow-hidden rounded-[3px] bg-track",
+                    "flex h-6 flex-col-reverse overflow-hidden rounded-[3px] bg-track focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground sm:h-5",
                     mark.today && "outline-2 outline-offset-1 outline-primary",
                   )}
                 >
@@ -387,14 +436,26 @@ function HomePage() {
                       style={{ height: `${(mark.missed / 5) * 100}%` }}
                     />
                   )}
-                </span>
-              ))}
-            </div>
-          </div>
+                </Link>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-3 text-xs text-muted-foreground">
+            Tap a day to open it.{emptyDays ? ` ${emptyDays}` : null}
+          </p>
+
+          <dl className="mt-4 grid grid-cols-3 gap-x-4">
+            {figures.map(([label, value]) => (
+              <div key={label} className="min-w-0">
+                <dt className="section-label">{label}</dt>
+                <dd className="figure mt-1.5">{value}%</dd>
+              </div>
+            ))}
+          </dl>
 
           <Rule />
           {/* The streak is not windowed, so its row says so: the eyebrow above
-              covers only the ring and the strip. */}
+              covers only the strip and its figures. */}
           <div className="flex items-center justify-between gap-3">
             <span className="text-[0.8125rem] text-muted-foreground">
               Fajr streak, all time
@@ -421,10 +482,11 @@ function HomePage() {
           </Link>
         </section>
 
-        <OpenWorkCard />
+        <WaitingCard />
 
         <section
-          className={cn("card p-5", !chart && "self-start")}
+          id="code"
+          className={cn("card scroll-mt-16 p-5", !chart && "self-start")}
           aria-labelledby="code-heading"
         >
           <div className="flex items-center justify-between gap-3">
@@ -459,31 +521,33 @@ function HomePage() {
             </>
           ) : (
             <>
-              <dl className="mt-3.5 flex flex-wrap gap-x-8 gap-y-4">
-                <div>
-                  <dt className="section-label">Commits</dt>
-                  <dd className="figure mt-1.5">{number(week.commits)}</dd>
-                </div>
-                <div>
+              <dl className="mt-3.5 grid grid-cols-3 gap-x-4 gap-y-4">
+                <div className="min-w-0">
                   <dt className="section-label">Requests merged</dt>
                   <dd className="figure mt-1.5">{number(week.authoredPrs)}</dd>
                 </div>
-                <div>
-                  <dt className="section-label">Lines changed</dt>
+                <div className="min-w-0">
+                  <dt className="section-label">Commits</dt>
+                  <dd className="figure mt-1.5">{number(week.commits)}</dd>
+                </div>
+                <div className="min-w-0">
+                  <dt className="section-label">Active days</dt>
                   <dd className="figure mt-1.5">
-                    <span className="text-positive">
-                      +{number(week.additions)}
-                    </span>
-                    <span className="font-normal text-muted-foreground"> / </span>
-                    <span className="text-negative">
-                      &minus;{number(week.deletions)}
-                    </span>
+                    {week.activeDays}
+                    <span className="font-normal text-muted-foreground"> / 7</span>
                   </dd>
                 </div>
               </dl>
-              {/* The card still stretches to the row; the chart does not, so
-                  seven small counts keep a fixed height and the space below
-                  stays empty. */}
+              <p className="mt-3 font-mono text-xs tabular-nums">
+                <span className="text-positive">+{number(week.additions)}</span>
+                <span className="text-muted-foreground"> / </span>
+                <span className="text-negative">
+                  &minus;{number(week.deletions)}
+                </span>
+                <span className="text-muted-foreground"> lines</span>
+              </p>
+              {/* The chart keeps one height whatever the counts, so the card
+                  does not jump when they change. */}
               <div className="mt-5">
                 <p className="section-label">Requests merged per day</p>
                 {/* The axis is drawn whether or not anything was merged: a week
@@ -495,12 +559,57 @@ function HomePage() {
                   </p>
                 )}
               </div>
+
+              <Rule />
+
+              {/* Not limited to the week: this says what shipped last. */}
+              <h3 id="code-latest" className="section-label">
+                Latest merged
+              </h3>
+              {github.latestMerged.length ? (
+                <ul className="list mt-1 min-w-0" aria-labelledby="code-latest">
+                  {github.latestMerged.map((request) => (
+                    <li key={request.url} className="min-w-0">
+                      <a
+                        href={request.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        title={request.repo}
+                        className="block py-2"
+                      >
+                        <span className="flex items-baseline justify-between gap-2 text-xs text-muted-foreground">
+                          <span className="truncate">
+                            {repoName(request.repo)} · #{request.number}
+                          </span>
+                          <span
+                            className="font-mono tabular-nums"
+                            suppressHydrationWarning
+                          >
+                            {age(request.mergedAt)}
+                          </span>
+                        </span>
+                        <span className="mt-0.5 line-clamp-2 break-words">
+                          {request.title}
+                        </span>
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Nothing merged yet.
+                </p>
+              )}
             </>
           )}
         </section>
       </div>
 
-      <section className="card p-5" aria-labelledby="flight-heading">
+      <section
+        id="flight"
+        className="card scroll-mt-16 p-5"
+        aria-labelledby="flight-heading"
+      >
         <div className="flex items-center justify-between gap-3">
           <h2 id="flight-heading" className="section-title">
             In flight
@@ -534,23 +643,31 @@ function HomePage() {
           </>
         ) : (
           <>
-            <div className="mt-3.5 flex flex-wrap gap-2">
-              {content.counts
-                .filter((status) => status.count > 0)
-                .map((status) => (
-                  <span
-                    key={status.id}
-                    className="inline-flex h-[1.375rem] items-center gap-1.5 rounded-md bg-muted px-2 text-xs font-medium text-muted-foreground"
-                  >
-                    <Dot color={status.color} className="size-1.5" />
-                    {status.name}
-                    <span className="font-mono tabular-nums">
-                      {status.count}
+            <div className="mt-3.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+              <div className="flex flex-wrap gap-2">
+                {content.counts
+                  .filter((status) => status.count > 0)
+                  .map((status) => (
+                    <span
+                      key={status.id}
+                      className="inline-flex h-[1.375rem] items-center gap-1.5 rounded-md bg-muted px-2 text-xs font-medium text-muted-foreground"
+                    >
+                      <Dot color={status.color} className="size-1.5" />
+                      {status.name}
+                      <span className="font-mono tabular-nums">
+                        {status.count}
+                      </span>
                     </span>
-                  </span>
-                ))}
+                  ))}
+              </div>
+              {quiet && (
+                <p className="text-xs text-muted-foreground">
+                  No page edited or moved in 2 weeks
+                </p>
+              )}
             </div>
             <Rule />
+            {/* Pinned pages first, then the rest by their last edit. */}
             <ul className="list">
               {content.recent.map((page, index) => (
                 <li
@@ -562,12 +679,26 @@ function HomePage() {
                     search={{ page: page.id }}
                     className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 py-2.5 sm:grid-cols-[minmax(0,1fr)_auto_auto]"
                   >
-                    <span className="truncate font-medium">{page.title}</span>
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="truncate font-medium">{page.title}</span>
+                      {page.pinned && (
+                        <Chip className="shrink-0 bg-primary/10 text-primary">
+                          Pinned
+                        </Chip>
+                      )}
+                    </span>
                     <span className="col-start-1 truncate text-xs text-muted-foreground sm:col-start-2">
                       {[page.type, page.status].filter(Boolean).join(" · ") ||
                         "No type"}
                     </span>
-                    <span className="col-start-2 row-start-1 row-span-2 min-w-[4.5rem] text-right font-mono text-xs text-muted-foreground tabular-nums sm:col-start-3 sm:row-span-1">
+                    <span
+                      className={cn(
+                        "col-start-2 row-start-1 row-span-2 min-w-[4.5rem] text-right font-mono text-xs tabular-nums sm:col-start-3 sm:row-span-1",
+                        isQuiet(page.updatedAt)
+                          ? "text-warning"
+                          : "text-muted-foreground",
+                      )}
+                    >
                       {relativeTime(page.updatedAt)}
                     </span>
                   </Link>
@@ -592,23 +723,76 @@ function HomePage() {
   );
 }
 
+/** One part of the status line: its figures set apart, the whole a link to its card. */
+function StatusLink({ segment }: { segment: StatusSegment }) {
+  // Ages read the clock, which moves between the server render and
+  // hydration. Keep the server's text rather than flag the drift.
+  const figure = "font-mono font-semibold tabular-nums text-foreground";
+  return (
+    // No preload: the link stays on this page. The hash is part of the
+    // match, or every part would read as the current page, since "/" is
+    // Home's own path.
+    <Link
+      to="/"
+      hash={segment.card}
+      activeOptions={{ includeHash: true }}
+      preload={false}
+      className="whitespace-nowrap transition-colors hover:text-foreground"
+    >
+      {segment.lead && (
+        <>
+          <span className={figure} suppressHydrationWarning>
+            {segment.lead}
+          </span>{" "}
+        </>
+      )}
+      {segment.text}
+      {segment.tail && (
+        <>
+          {" "}
+          <span className={figure} suppressHydrationWarning>
+            {segment.tail}
+          </span>
+        </>
+      )}
+    </Link>
+  );
+}
+
+/** A 20px label on a row: why the row is there, or what state it is in. */
+function Chip({ className, children }: { className: string; children: string }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex h-5 items-center rounded-md px-1.5 text-[0.6875rem] font-medium",
+        className,
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
 /**
- * What is open on GitHub right now, read live rather than from the imported
+ * What waits on you on GitHub, read live rather than from the imported
  * snapshots, and on its own query so a slow search never holds up the day.
  */
-function OpenWorkCard() {
+function WaitingCard() {
   const work = useQuery(openWorkSummaryQuery);
   const data = work.data;
-  const oldest = data?.oldest ?? [];
-  const failed = Boolean(work.error) || Boolean(data && !data.connected);
+  const failed =
+    Boolean(work.error) ||
+    Boolean(data?.error) ||
+    Boolean(data && !data.connected);
   return (
     <section
-      className="card flex min-w-0 flex-col p-5"
-      aria-labelledby="work-heading"
+      id="waiting"
+      className="card flex min-w-0 scroll-mt-16 flex-col p-5"
+      aria-labelledby="waiting-heading"
     >
       <div className="flex items-center justify-between gap-3">
-        <h2 id="work-heading" className="section-title">
-          Open work
+        <h2 id="waiting-heading" className="section-title">
+          Waiting on you
         </h2>
         {data && data.connected ? (
           // Ages read the clock, which moves between the server render and
@@ -628,85 +812,106 @@ function OpenWorkCard() {
           <div className="h-3 w-2/3 animate-pulse rounded bg-muted" />
           <div className="h-3 w-1/2 animate-pulse rounded bg-muted" />
         </div>
-      ) : failed ? (
-        <>
-          <p className="mt-4 text-muted-foreground">
-            Connect GitHub to see open work.
-          </p>
-          <div className="mt-5 flex-1" />
-          <Link
-            to="/github/work"
-            search={defaultFilters()}
-            className="text-[0.8125rem] font-medium text-primary"
-          >
-            Open GitHub work <ArrowRight className="inline size-3.5" />
-          </Link>
-        </>
       ) : (
         <>
-          <dl className="mt-3.5 grid grid-cols-3 gap-x-4 gap-y-4">
-            {(
-              [
-                ["Issues", data?.issues ?? 0],
-                ["PRs", data?.prs ?? 0],
-                ["Needs triage", data?.triage ?? 0],
-              ] as const
-            ).map(([label, value]) => (
-              <div key={label} className="min-w-0">
-                <dt className="section-label">{label}</dt>
-                <dd className="figure mt-1.5">{number(value)}</dd>
-              </div>
-            ))}
-          </dl>
-
-          <Rule />
-
-          {oldest.length ? (
+          {data && data.connected ? (
             <>
-              {/* Oldest first is deliberate (#10), but unlabelled it reads
-                  as what is active now. */}
-              <h3 id="work-oldest" className="section-label">
-                Oldest open
-              </h3>
-              <ul className="list mt-1 min-w-0" aria-labelledby="work-oldest">
-                {oldest.map((item) => (
-                  <li key={item.id} className="min-w-0">
-                    {/* Two lines: in a third of the row there is no room for
-                        the repo and the title side by side, so the title
-                        gets its own line and the owner moves to the tooltip. */}
-                    <a
-                      href={item.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      title={item.repo}
-                      className="block py-2"
-                    >
-                      <span className="flex items-baseline justify-between gap-2 text-xs text-muted-foreground">
-                        <span className="truncate">{repoName(item.repo)}</span>
-                        <span
-                          className="font-mono tabular-nums"
-                          suppressHydrationWarning
-                        >
-                          {age(item.createdAt)}
-                        </span>
-                      </span>
-                      <span className="mt-0.5 line-clamp-2 break-words">
-                        {item.title}
-                      </span>
-                    </a>
-                  </li>
+              <dl className="mt-3.5 grid grid-cols-3 gap-x-4 gap-y-4">
+                {(
+                  [
+                    ["Needs you", data.needsYou],
+                    ["Needs triage", data.triage],
+                    ["Going stale", data.stale],
+                  ] as const
+                ).map(([label, value]) => (
+                  <div key={label} className="min-w-0">
+                    <dt className="section-label">{label}</dt>
+                    <dd className="figure mt-1.5">{number(value)}</dd>
+                  </div>
                 ))}
-              </ul>
-            </>
-          ) : (
-            <p className="text-muted-foreground">
-              Nothing needs your attention.
-            </p>
-          )}
+              </dl>
 
-          {data?.error ? (
-            <p className="mt-3 text-xs text-muted-foreground" role="status">
-              Some of GitHub could not be read just now.
+              <Rule />
+
+              {data.waiting.length ? (
+                <>
+                  {/* The Overview's order, labelled so it is not read as
+                      recency: review requests and assignments together, the
+                      quietest first, with the reason on each row. It replaces
+                      the oldest-created order that #10 and #124 chose, so Home
+                      and Overview agree on what to act on first. */}
+                  <h3 id="waiting-order" className="section-label">
+                    Reviews and assignments, quietest first
+                  </h3>
+                  <ul className="list mt-1 min-w-0" aria-labelledby="waiting-order">
+                    {data.waiting.map((item) => (
+                      <li key={item.id} className="min-w-0">
+                        {/* Two lines: in a third of the row there is no room
+                            for the repo and the title side by side, so the
+                            title gets its own line and the owner moves to the
+                            tooltip. */}
+                        <a
+                          href={item.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          title={item.repo}
+                          className="block py-2"
+                        >
+                          <span className="flex items-baseline justify-between gap-2 text-xs text-muted-foreground">
+                            <span className="truncate">
+                              {repoName(item.repo)} · #{item.number}
+                            </span>
+                            <span
+                              className="font-mono tabular-nums"
+                              suppressHydrationWarning
+                            >
+                              {age(item.updatedAt)}
+                            </span>
+                          </span>
+                          <span className="mt-0.5 line-clamp-2 break-words">
+                            {item.title}
+                          </span>
+                          <span className="mt-1.5 flex flex-wrap gap-1.5">
+                            <Chip
+                              className={
+                                item.reasons.includes("review")
+                                  ? "bg-primary/10 text-primary"
+                                  : "bg-muted text-muted-foreground"
+                              }
+                            >
+                              {reasonLabel(item)}
+                            </Chip>
+                            {isStale(item.updatedAt) && (
+                              <Chip className="bg-warning/15 text-warning">
+                                Quiet 14+ days
+                              </Chip>
+                            )}
+                            {item.draft && (
+                              <Chip className="bg-muted text-muted-foreground">
+                                Draft
+                              </Chip>
+                            )}
+                          </span>
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : failed ? null : (
+                <p className="text-muted-foreground">Nothing needs you.</p>
+              )}
+            </>
+          ) : null}
+
+          {failed ? (
+            <p
+              role="alert"
+              className="mt-4 flex items-start gap-2 rounded-lg border border-negative/30 bg-negative/5 px-4 py-3 text-xs text-negative"
+            >
+              <CircleAlert className="mt-px size-3.5 shrink-0" />
+              <span className="min-w-0 break-words">
+                {work.error?.message || data?.error || "Could not read GitHub."}
+              </span>
             </p>
           ) : null}
 
@@ -734,42 +939,6 @@ function statusLabel(status: PrayerStatus) {
         : "not logged";
 }
 
-function AdherenceRing({
-  percentage,
-  days,
-}: {
-  percentage: number;
-  days: number;
-}) {
-  const definition = useMemo(
-    () =>
-      donutChart(
-        [
-          { name: "kept", value: percentage, color: "var(--primary)" },
-          { name: "missed", value: 100 - percentage, color: "var(--track)" },
-        ],
-        { hole: 0.79 },
-      ),
-    [percentage],
-  );
-  return (
-    <div className="relative size-24 shrink-0 sm:size-[8.25rem]">
-      <Chart
-        definition={definition}
-        aspectRatio={1}
-        initialWidth={132}
-        ariaLabel={`${percentage}% adherence over ${days} logged days`}
-      />
-      <div className="pointer-events-none absolute inset-0 grid place-items-center text-center">
-        <div>
-          <p className="display text-xl sm:text-[1.75rem]">{percentage}%</p>
-          <p className="section-label mt-1">adherence</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function MergedPerDay({ days }: { days: { day: string; prs: number }[] }) {
   const definition = useMemo(
     () =>
@@ -783,7 +952,7 @@ function MergedPerDay({ days }: { days: { day: string; prs: number }[] }) {
   return (
     <Chart
       definition={definition}
-      height={192}
+      height={128}
       initialWidth={260}
       className="mt-3"
       ariaLabel={`Requests merged per day, ${days.map((entry) => `${weekday(entry.day)} ${entry.prs}`).join(", ")}`}

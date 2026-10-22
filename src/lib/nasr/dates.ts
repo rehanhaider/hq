@@ -22,6 +22,14 @@ export function shiftDate(date: string, days: number): string {
 }
 
 /**
+ * The day Today shows for a `date` search parameter. No date is today, and
+ * so is a date after today: the pager never passes it.
+ */
+export function dayOrToday(date: string | undefined, today: string): string {
+  return date && date < today ? date : today;
+}
+
+/**
  * Friday midday occupies the Dhuhr slot; only the displayed name changes.
  * Calendar dates are UTC days, matching the rest of Nasr's date helpers.
  */

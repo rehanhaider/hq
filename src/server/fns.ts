@@ -1,8 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { importSchema, searchSchema, daysAgo } from "../lib/model";
-import { dailySeries, summarize } from "../lib/metrics";
+import { dailySeries, latestMerged, summarize } from "../lib/metrics";
 import { connectionRow } from "../lib/connections";
-import { summariseOpenWork } from "../lib/openWork";
+import { summariseAttention } from "../lib/attention";
 import { getStore, idleStatus } from "./db";
 import type { ImportStatus } from "../lib/model";
 import { github } from "./github";
@@ -81,10 +81,15 @@ export const getHome = createServerFn({ method: "GET" }).handler(() => {
     github: {
       login: dataset.login,
       repositories: dataset.snapshots.length,
-      // The totals, plus the seven days behind them: a figure with no shape
-      // is three numbers and no trend. The rest of `summarize` — languages,
-      // per-project rows — is not the home page's business.
-      week: { ...week.total, days: dailySeries(week.daily, from, to) },
+      // The totals and the active days, plus the seven days behind them: a
+      // figure with no shape has no trend. The rest of `summarize`, its
+      // languages and per-project rows, is not the home page's business.
+      week: {
+        ...week.total,
+        activeDays: week.activeDays,
+        days: dailySeries(week.daily, from, to),
+      },
+      latestMerged: latestMerged(dataset),
     },
     content: contentSummary(content.list(), content.properties()),
   };
@@ -348,11 +353,11 @@ export const getOpenWork = createServerFn({ method: "GET" }).handler(() => {
   ensureRefreshLoop();
   return openWork();
 });
-/** The Home card's slice of open work, waiting on a sweep if there is no feed. */
+/** Home's slice of open work, waiting on a sweep if there is no feed. */
 export const getOpenWorkSummary = createServerFn({ method: "GET" }).handler(
   async () => {
     ensureRefreshLoop();
-    return summariseOpenWork(await openWork());
+    return summariseAttention(await openWork());
   },
 );
 /**
@@ -364,7 +369,7 @@ export const getCachedOpenWorkSummary = createServerFn({
 }).handler(() => {
   ensureRefreshLoop();
   const feed = cachedOpenWork();
-  return feed ? summariseOpenWork(feed) : null;
+  return feed ? summariseAttention(feed) : null;
 });
 export const getRepositories = createServerFn({ method: "GET" }).handler(
   async () => {

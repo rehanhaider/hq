@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   canDropOnColumn,
   contentSearchSchema,
+  contentStatus,
   contentSummary,
   DEFAULT_PAGE_TITLE,
   displayPageTitle,
@@ -10,6 +11,8 @@ import {
   filterPages,
   groupPages,
   hasFilters,
+  isQuiet,
+  quietFor,
   visibleBoardBuckets,
   pageTreeIds,
   pageTypeIcons,
@@ -573,6 +576,118 @@ describe("contentSummary", () => {
     expect(summary.total).toBe(0);
     expect(summary.recent).toEqual([]);
     expect(summary.counts.every((entry) => entry.count === 0)).toBe(true);
+    expect(summary.lastEditedAt).toBeNull();
+  });
+
+  it("lists pinned pages first, each group by its last edit", () => {
+    const summary = contentSummary(
+      [
+        ...pages,
+        page("Old pin", {
+          id: "p1",
+          pinned: true,
+          updatedAt: "2026-08-01T09:00:00.000Z",
+        }),
+        page("New pin", {
+          id: "p2",
+          pinned: true,
+          updatedAt: "2026-09-05T09:00:00.000Z",
+        }),
+      ],
+      properties,
+    );
+    expect(summary.recent.map((entry) => [entry.title, entry.pinned])).toEqual([
+      ["New pin", true],
+      ["Old pin", true],
+      ["Blog draft", false],
+      ["Loose page", false],
+    ]);
+  });
+
+  it("dates the last edit over every page in flight, listed or not", () => {
+    // Four pins fill the list, so the page edited last is not on it.
+    const pins = ["w", "x", "y", "z"].map((id) =>
+      page(`Pin ${id}`, {
+        id,
+        pinned: true,
+        updatedAt: "2026-08-01T09:00:00.000Z",
+      }),
+    );
+    const summary = contentSummary([...pins, ...pages], properties);
+    expect(summary.recent.every((entry) => entry.pinned)).toBe(true);
+    expect(summary.lastEditedAt).toBe("2026-09-12T09:00:00.000Z");
+  });
+
+  it("leaves archived pages and subpages out of the last edit", () => {
+    const withArchive: ContentProperties = {
+      ...properties,
+      statuses: [
+        ...properties.statuses,
+        { id: "archived", name: "Archived", color: "slate", position: 2 },
+      ],
+    };
+    const summary = contentSummary(
+      [
+        ...pages,
+        page("Old talk", {
+          id: "e",
+          statusId: "archived",
+          updatedAt: "2026-09-14T09:00:00.000Z",
+        }),
+        page("Clip", {
+          id: "f",
+          parentId: "a",
+          statusId: null,
+          updatedAt: "2026-09-15T09:00:00.000Z",
+        }),
+      ],
+      withArchive,
+    );
+    expect(summary.lastEditedAt).toBe("2026-09-12T09:00:00.000Z");
+  });
+});
+
+describe("isQuiet and quietFor", () => {
+  const now = Date.parse("2026-10-21T12:00:00.000Z");
+
+  it("calls a page quiet from fourteen days without an edit", () => {
+    expect(isQuiet("2026-10-07T12:00:00.000Z", now)).toBe(true);
+    expect(isQuiet("2026-10-07T12:00:01.000Z", now)).toBe(false);
+    expect(isQuiet("not a date", now)).toBe(false);
+  });
+
+  it("says for how long on relativeTime's scale, without ago", () => {
+    expect(quietFor("2026-10-07T12:00:00.000Z", now)).toBe("2w");
+    expect(quietFor("2026-09-23T12:00:00.000Z", now)).toBe("4w");
+    // relativeTime turns to a date at eight weeks; quietFor keeps counting.
+    expect(relativeTime("2026-08-12T12:00:00.000Z", now)).toBe("2026-08-12");
+    expect(quietFor("2026-08-12T12:00:00.000Z", now)).toBe("10w");
+    expect(quietFor("2025-06-01T12:00:00.000Z", now)).toBe("1y");
+    expect(quietFor("not a date", now)).toBe("");
+  });
+});
+
+describe("contentStatus", () => {
+  const now = Date.parse("2026-10-21T12:00:00.000Z");
+
+  it("says when a page in flight was last edited", () => {
+    expect(
+      contentStatus({ lastEditedAt: "2026-10-18T12:00:00.000Z" }, now),
+    ).toEqual([
+      { id: "content", card: "flight", text: "Content edited", tail: "3d ago" },
+    ]);
+  });
+
+  it("says how long content has been quiet, from two weeks", () => {
+    expect(
+      contentStatus({ lastEditedAt: "2026-09-30T12:00:00.000Z" }, now),
+    ).toEqual([
+      { id: "content", card: "flight", text: "Content quiet for", tail: "3w" },
+    ]);
+  });
+
+  it("says nothing with no pages in flight", () => {
+    expect(contentStatus({ lastEditedAt: null }, now)).toEqual([]);
   });
 });
 

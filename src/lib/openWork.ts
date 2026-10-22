@@ -141,45 +141,11 @@ export function byOldestCreated(a: WorkItem, b: WorkItem) {
   );
 }
 
-/** Issues and pull requests apart, for the figures on the home page. */
+/** Issues and pull requests apart, for the attention figures. */
 export function countKinds(items: WorkItem[]) {
   return {
     issues: items.filter((item) => item.kind === "issue").length,
     prs: items.filter((item) => item.kind === "pr").length,
-  };
-}
-
-/**
- * Only what the Home card shows. Home renders it on the server, and the whole
- * feed runs to tens of kilobytes: serialising that into the page cost Home
- * about five milliseconds of its first byte.
- */
-export type OpenWorkSummary = {
-  connected: boolean;
-  fetchedAt: string;
-  error?: string;
-  issues: number;
-  prs: number;
-  triage: number;
-  oldest: Pick<WorkItem, "id" | "url" | "repo" | "title" | "createdAt">[];
-};
-
-export function summariseOpenWork(feed: OpenWork): OpenWorkSummary {
-  return {
-    connected: feed.connected,
-    fetchedAt: feed.fetchedAt,
-    ...(feed.error ? { error: feed.error } : {}),
-    ...countKinds(feed.mine),
-    triage: feed.triage.length,
-    oldest: feed.mine
-      .slice(0, 5)
-      .map(({ id, url, repo, title, createdAt }) => ({
-        id,
-        url,
-        repo,
-        title,
-        createdAt,
-      })),
   };
 }
 

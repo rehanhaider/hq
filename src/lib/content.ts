@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { EMBED_BLOCK_TYPES, embedMatchers } from "./embedPaste";
 import { linkPreviewUrl } from "./linkPreview";
+import type { StatusSegment } from "./nasr";
 
 export type JsonValue =
   | string
@@ -795,17 +796,21 @@ export type ContentSummary = {
     id: string;
     title: string;
     updatedAt: string;
+    pinned: boolean;
     status: string | null;
     statusColor: PropertyColor | null;
     type: string | null;
   }[];
+  /** When a page in flight was last edited or moved; null with no pages. */
+  lastEditedAt: string | null;
 };
 
 /**
  * The pipeline as counts per status, in the order Settings gives them, plus
- * the pages touched most recently. Pages without a status are counted under
- * their own bucket rather than being dropped, because a count that does not
- * add up to the total is worse than an extra column.
+ * the pinned pages and then the pages touched most recently. Pages without a
+ * status are counted under their own bucket rather than being dropped,
+ * because a count that does not add up to the total is worse than an extra
+ * column.
  *
  * Only top-level pages that are not archived count. Subpages are material for
  * their parent, and an archived page is no longer in flight, so neither belongs
@@ -840,9 +845,14 @@ export function contentSummary(
       color: "slate",
       count: unassigned,
     });
+  // A pin is the mark for "this one", so pinned pages lead, however long
+  // they have sat still.
   const recent = [...pages]
     .sort(
-      (a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id),
+      (a, b) =>
+        Number(b.pinned) - Number(a.pinned) ||
+        b.updatedAt.localeCompare(a.updatedAt) ||
+        a.id.localeCompare(b.id),
     )
     .slice(0, limit)
     .map((page) => {
@@ -854,12 +864,71 @@ export function contentSummary(
         id: page.id,
         title: displayPageTitle(page.title),
         updatedAt: page.updatedAt,
+        pinned: page.pinned,
         status: status?.name ?? null,
         statusColor: status?.color ?? null,
         type: names.length ? names.join(", ") : null,
       };
     });
-  return { total: pages.length, counts, recent };
+  // Over every page in flight, not only the listed ones: with the pins
+  // first, the page edited last can be missing from the list.
+  const lastEditedAt = pages.reduce<string | null>(
+    (latest, page) =>
+      latest === null || page.updatedAt > latest ? page.updatedAt : latest,
+    null,
+  );
+  return { total: pages.length, counts, recent, lastEditedAt };
+}
+
+/** Untouched this long, a page in flight has gone quiet. */
+export const QUIET_DAYS = 14;
+
+export function isQuiet(iso: string, now = Date.now()) {
+  const then = Date.parse(iso);
+  return Number.isFinite(then) && now - then >= QUIET_DAYS * 86400000;
+}
+
+/**
+ * How long content has been quiet, on `relativeTime`'s scale without "ago":
+ * "2w". Past eight weeks, where `relativeTime` turns to a date, it keeps
+ * counting weeks, then years.
+ */
+export function quietFor(iso: string, now = Date.now()) {
+  const then = Date.parse(iso);
+  if (!Number.isFinite(then)) return "";
+  const relative = relativeTime(iso, now);
+  if (relative.endsWith(" ago")) return relative.slice(0, -" ago".length);
+  const days = Math.round((now - then) / 86400000);
+  return days < 365 ? `${Math.round(days / 7)}w` : `${Math.floor(days / 365)}y`;
+}
+
+/**
+ * The Content part of Home's status line: when a page in flight last moved,
+ * or how long nothing has. Nothing when there are no pages.
+ */
+export function contentStatus(
+  summary: Pick<ContentSummary, "lastEditedAt">,
+  now = Date.now(),
+): StatusSegment[] {
+  const latest = summary.lastEditedAt;
+  if (!latest) return [];
+  return isQuiet(latest, now)
+    ? [
+        {
+          id: "content",
+          card: "flight",
+          text: "Content quiet for",
+          tail: quietFor(latest, now),
+        },
+      ]
+    : [
+        {
+          id: "content",
+          card: "flight",
+          text: "Content edited",
+          tail: relativeTime(latest, now),
+        },
+      ];
 }
 
 /**
