@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -7,7 +7,9 @@ import { setNasrAdhkarItem, updateNasrDay } from "@/server/fns";
 import { Button } from "@/components/ui/button";
 import {
   NASR_GUIDES,
+  dayOrToday,
   middayPrayerLabel,
+  nasrTodaySearchSchema,
   shiftDate,
   type NasrContent,
   type NasrContentItemKey,
@@ -15,7 +17,12 @@ import {
   type PrayerStatus,
 } from "@/lib/nasr";
 
+/**
+ * The day shown is the `date` search parameter, so a day is a link: Home's
+ * strip opens one. `guide` opens that practice's guide on arrival.
+ */
 export const Route = createFileRoute("/nasr/")({
+  validateSearch: nasrTodaySearchSchema,
   loader: ({ context }) => context.queryClient.ensureQueryData(nasrQuery),
   component: TodayPage,
 });
@@ -44,11 +51,21 @@ const boolItems: Array<{
 function TodayPage() {
   const queryClient = useQueryClient();
   const summary = useQuery(nasrQuery);
-  const [offset, setOffset] = useState(0);
+  const search = Route.useSearch();
+  const navigate = Route.useNavigate();
   const today = summary.data?.today ?? "";
-  const selected = today ? shiftDate(today, offset) : "";
-  const isToday = offset === 0;
+  const selected = today ? dayOrToday(search.date, today) : "";
+  const isToday = selected === today;
   const dayQuery = useQuery(nasrDayQuery(selected));
+  function showDay(date: string) {
+    void navigate({
+      search: (previous) => ({
+        ...previous,
+        date: dayOrToday(date, today) === today ? undefined : date,
+      }),
+      replace: true,
+    });
+  }
   const update = useMutation({
     mutationFn: updateNasrDay,
     onSuccess: async () => {
@@ -103,7 +120,7 @@ function TodayPage() {
           size="icon"
           disabled={saving}
           aria-label="Previous day"
-          onClick={() => setOffset((value) => value - 1)}
+          onClick={() => showDay(shiftDate(selected, -1))}
         >
           <ChevronLeft />
         </Button>
@@ -120,7 +137,7 @@ function TodayPage() {
           size="icon"
           aria-label="Next day"
           disabled={isToday || saving}
-          onClick={() => setOffset((value) => Math.min(0, value + 1))}
+          onClick={() => showDay(shiftDate(selected, 1))}
         >
           <ChevronRight />
         </Button>
@@ -196,6 +213,7 @@ function TodayPage() {
                   <PracticeDisclosure
                     key={key}
                     itemKey={itemKey}
+                    openOnArrival={search.guide === key}
                     complete={day?.[key] ?? false}
                     items={(data?.content ?? []).filter(
                       (item) => item.item_key === itemKey,
@@ -215,6 +233,7 @@ function TodayPage() {
                   />
                 ))}
                 <NightDisclosure
+                  openOnArrival={search.guide === "night"}
                   day={day}
                   items={(data?.content ?? []).filter(
                     (item) => item.item_key === "night_ayat",
@@ -283,8 +302,21 @@ function statusTone(value: PrayerStatus) {
   return "bg-muted text-muted-foreground";
 }
 
+/**
+ * A disclosure the `guide` parameter opened scrolls into view once, when it
+ * mounts. After that it is the reader's to collapse and open again.
+ */
+function useScrollOnArrival(openOnArrival: boolean) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (openOnArrival) ref.current?.scrollIntoView({ block: "start" });
+  }, []);
+  return ref;
+}
+
 function PracticeDisclosure({
   itemKey,
+  openOnArrival,
   complete,
   items,
   onToggle,
@@ -292,17 +324,19 @@ function PracticeDisclosure({
   onTickItem,
 }: {
   itemKey: NasrContentItemKey;
+  openOnArrival: boolean;
   complete: boolean;
   items: NasrContent[];
   onToggle: () => void;
   ticks?: string[];
   onTickItem?: (id: string, done: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(openOnArrival);
+  const ref = useScrollOnArrival(openOnArrival);
   const guide = NASR_GUIDES[itemKey];
   const done = items.filter((item) => ticks?.includes(item.id)).length;
   return (
-    <div>
+    <div ref={ref} className="scroll-mt-16">
       <div className="list-row items-start">
         <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-3">
           <input
@@ -358,10 +392,12 @@ function PracticeDisclosure({
 }
 
 function NightDisclosure({
+  openOnArrival,
   day,
   items,
   onToggle,
 }: {
+  openOnArrival: boolean;
   day: NasrDay | undefined;
   items: NasrContent[];
   onToggle: (
@@ -369,7 +405,8 @@ function NightDisclosure({
     current: boolean,
   ) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(openOnArrival);
+  const ref = useScrollOnArrival(openOnArrival);
   const checks = [
     {
       key: "night_ayat_kursi" as const,
@@ -389,7 +426,7 @@ function NightDisclosure({
   ];
   const completed = checks.filter((check) => check.value).length;
   return (
-    <div>
+    <div ref={ref} className="scroll-mt-16">
       <button
         type="button"
         aria-expanded={open}

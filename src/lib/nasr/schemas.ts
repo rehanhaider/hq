@@ -57,6 +57,25 @@ export const nasrAdhkarTickSchema = z.object({
 });
 export type NasrAdhkarTick = z.infer<typeof nasrAdhkarTickSchema>;
 
+/** The guides Today can open on arrival: the three ticked practices and the night. */
+export const nasrGuideKeySchema = z.enum([
+  "morning_adhkar",
+  "evening_adhkar",
+  "night",
+  "ruqyah",
+]);
+export type NasrGuideKey = z.infer<typeof nasrGuideKeySchema>;
+
+/**
+ * Today's search parameters: the day shown, absent for today, and a guide to
+ * open on arrival. A value that does not parse reads as absent.
+ */
+export const nasrTodaySearchSchema = z.object({
+  date: dateString.optional().catch(undefined),
+  guide: nasrGuideKeySchema.optional().catch(undefined),
+});
+export type NasrTodaySearch = z.infer<typeof nasrTodaySearchSchema>;
+
 export const observationSchema = z.object({
   id: z.string().optional(),
   timestamp: z.string(),

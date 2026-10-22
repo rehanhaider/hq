@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { datesInRange, middayPrayerLabel, shiftDate, windowDates } from "./dates";
+import {
+  datesInRange,
+  dayOrToday,
+  middayPrayerLabel,
+  shiftDate,
+  windowDates,
+} from "./dates";
+import { nasrTodaySearchSchema } from "./schemas";
 
 describe("datesInRange", () => {
   it("returns single date for same start/end", () => {
@@ -50,5 +57,34 @@ describe("windowDates", () => {
   });
   it("crosses a year boundary", () => {
     expect(windowDates("2025-01-01", 2)).toEqual(["2024-12-31", "2025-01-01"]);
+  });
+});
+
+describe("dayOrToday", () => {
+  const today = "2026-10-21";
+  it("shows the day asked for when it is before today", () => {
+    expect(dayOrToday("2026-10-19", today)).toBe("2026-10-19");
+  });
+  it("reads no day, today, and a day after today as today", () => {
+    expect(dayOrToday(undefined, today)).toBe(today);
+    expect(dayOrToday(today, today)).toBe(today);
+    expect(dayOrToday("2026-10-22", today)).toBe(today);
+  });
+});
+
+describe("Today's search parameters", () => {
+  it("keeps a calendar date and a known guide", () => {
+    expect(
+      nasrTodaySearchSchema.parse({ date: "2026-10-19", guide: "night" }),
+    ).toEqual({ date: "2026-10-19", guide: "night" });
+    expect(nasrTodaySearchSchema.parse({})).toEqual({});
+  });
+  it("drops a value that does not parse rather than failing the page", () => {
+    expect(
+      nasrTodaySearchSchema.parse({ date: "2026-02-30", guide: "night_ayat" }),
+    ).toEqual({ date: undefined, guide: undefined });
+    expect(
+      nasrTodaySearchSchema.parse({ date: "19 October", guide: 3 }),
+    ).toEqual({ date: undefined, guide: undefined });
   });
 });
