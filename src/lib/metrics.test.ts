@@ -1,12 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { categorize, dailySeries, summarize, groupLanguages } from "./metrics";
+import {
+  categorize,
+  dailySeries,
+  latestMerged,
+  summarize,
+  groupLanguages,
+} from "./metrics";
 import {
   daySchema,
   defaultFilters,
   importSchema,
   searchSchema,
 } from "./model";
-import type { Dataset, Snapshot } from "./model";
+import type { Dataset, PullRequest, Snapshot } from "./model";
 
 const snapshot: Snapshot = {
   repo: {
@@ -330,5 +336,62 @@ describe("dailySeries", () => {
     const series = dailySeries(daily, "2026-09-10", "2026-09-11");
     expect(series).toHaveLength(2);
     expect(series.map((entry) => entry.commits)).toEqual([0, 5]);
+  });
+});
+
+describe("latestMerged", () => {
+  const request = (number: number, mergedAt: string, author = "me"): PullRequest => ({
+    number,
+    title: `Request ${number}`,
+    url: `https://github.com/pull/${number}`,
+    author,
+    mergedBy: "me",
+    createdAt: "2024-01-01T00:00:00.000Z",
+    mergedAt,
+    additions: 1,
+    deletions: 1,
+  });
+  const merged = (repo: string, number: number, mergedAt: string) => ({
+    repo,
+    number,
+    title: `Request ${number}`,
+    url: `https://github.com/pull/${number}`,
+    mergedAt,
+  });
+  const dataset: Dataset = {
+    ...data,
+    snapshots: [
+      {
+        ...snapshot,
+        prs: [
+          request(1, "2026-08-12T00:00:00.000Z"),
+          request(2, "2026-09-01T00:00:00.000Z", "other"),
+        ],
+      },
+      {
+        ...snapshot,
+        repo: { ...snapshot.repo, id: 2, fullName: "me/site" },
+        prs: [
+          request(7, "2026-09-20T00:00:00.000Z", "ME"),
+          request(8, "2025-01-01T00:00:00.000Z"),
+          request(9, "2026-09-10T00:00:00.000Z"),
+          request(10, "2024-06-01T00:00:00.000Z"),
+        ],
+      },
+    ],
+  };
+
+  it("lists the account's own requests across repositories, newest first, whatever their date", () => {
+    expect(latestMerged(dataset)).toEqual([
+      merged("me/site", 7, "2026-09-20T00:00:00.000Z"),
+      merged("me/site", 9, "2026-09-10T00:00:00.000Z"),
+      merged("me/app", 1, "2026-08-12T00:00:00.000Z"),
+      merged("me/site", 8, "2025-01-01T00:00:00.000Z"),
+    ]);
+    expect(latestMerged(dataset, 2).map((row) => row.number)).toEqual([7, 9]);
+  });
+
+  it("lists nothing without an importing account", () => {
+    expect(latestMerged({ ...dataset, login: null })).toEqual([]);
   });
 });

@@ -171,6 +171,43 @@ export function summarize(dataset: Dataset, filters: Filters) {
   };
 }
 
+export type MergedRequest = {
+  repo: string;
+  number: number;
+  title: string;
+  url: string;
+  mergedAt: string;
+};
+
+/**
+ * The pull requests the importing account authored that merged last, across
+ * every imported repository, newest first. No date range: the list says what
+ * shipped last, however long ago that was.
+ */
+export function latestMerged(dataset: Dataset, limit = 4): MergedRequest[] {
+  const login = dataset.login?.toLowerCase();
+  if (!login) return [];
+  return dataset.snapshots
+    .flatMap((snapshot) =>
+      snapshot.prs
+        .filter((pr) => pr.author.toLowerCase() === login)
+        .map((pr) => ({
+          repo: snapshot.repo.fullName,
+          number: pr.number,
+          title: pr.title,
+          url: pr.url,
+          mergedAt: pr.mergedAt,
+        })),
+    )
+    .sort(
+      (a, b) =>
+        b.mergedAt.localeCompare(a.mergedAt) ||
+        a.repo.localeCompare(b.repo) ||
+        b.number - a.number,
+    )
+    .slice(0, Math.max(0, limit));
+}
+
 // Aggregate small language shares without double-counting per-language commit counts.
 export function groupLanguages(
   rows: {
