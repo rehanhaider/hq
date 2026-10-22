@@ -68,7 +68,7 @@ describe("Home Waiting on you card", () => {
 describe("Home Waiting on you card list", () => {
   it("follows the Overview's order and says so, replacing the oldest-first list of #10", () => {
     expect(work).toMatch(/data\.waiting\.map/);
-    expect(work).toMatch(/Review first, then assigned, quietest first/);
+    expect(work).toMatch(/Reviews and assignments, quietest first/);
     expect(work).toMatch(/aria-labelledby="waiting-order"/);
     expect(work).not.toMatch(/Oldest open/);
     expect(work).not.toMatch(/\.oldest\b/);

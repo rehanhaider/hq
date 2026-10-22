@@ -833,11 +833,12 @@ function WaitingCard() {
               {data.waiting.length ? (
                 <>
                   {/* The Overview's order, labelled so it is not read as
-                      recency. It replaces the oldest-created order that #10
-                      and #124 chose, so Home and Overview agree on what to
-                      act on first. */}
+                      recency: review requests and assignments together, the
+                      quietest first, with the reason on each row. It replaces
+                      the oldest-created order that #10 and #124 chose, so Home
+                      and Overview agree on what to act on first. */}
                   <h3 id="waiting-order" className="section-label">
-                    Review first, then assigned, quietest first
+                    Reviews and assignments, quietest first
                   </h3>
                   <ul className="list mt-1 min-w-0" aria-labelledby="waiting-order">
                     {data.waiting.map((item) => (
