@@ -103,6 +103,7 @@ function HistoryPage() {
                   ["night_baqarah", "Al-Baqarah"],
                   ["night_three_suras", "Three surahs"],
                   ["ruqyah", "Ruqyah"],
+                  ["daily_duas", "Daily duas"],
                   ["istighfar", "Istighfar"],
                 ]}
               />

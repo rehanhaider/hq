@@ -29,6 +29,11 @@ export const NASR_GUIDES: Record<NasrContentItemKey, Guide> = {
     summary: 'Cup your hands, recite into your palms, blow lightly, then wipe your head, face, chest and what you can reach. Repeat the wipe three times.',
     closingNote: 'Optional passages for sihr-specific ruqyah: Al-A’raf 7:117–122, Yunus 10:79–82 and Ta-Ha 20:65–69. This is scholarly practice based on their meaning, not a transmitted prescription. If a marked reaction repeats, record it in Observations with the date and time; no reaction is also useful information.',
   },
+  daily_duas: {
+    title: 'Daily duas',
+    window: 'Any time of day.',
+    summary: 'Duas the narrations set no time for. Say each once at a time that suits you.',
+  },
   istighfar: {
     title: 'Istighfar',
     window: 'Across the day.',
@@ -81,7 +86,7 @@ const morningCore: Omit<NasrContent, 'id' | 'item_key'>[] = [
     meaning: 'O Allah, You are my Lord; there is no god but You. You created me and I am Your servant. I hold to Your covenant as far as I am able. I seek refuge from the evil I have done, acknowledge Your favour and my sin, and ask Your forgiveness.', note: null,
   },
   {
-    title: 'Protection from harm', repetitions: 'Three times', sort_order: 40, grade: 'sahih', reference: 'Uthman ibn Affan — Abu Dawud 5088; at-Tirmidhi 3388; Ibn Majah 3869.',
+    title: 'Protection from harm', repetitions: 'Three times', sort_order: 40, grade: 'sahih', reference: 'Uthman ibn Affan — Abu Dawud 5088; at-Tirmidhi 3388; Ibn Majah 3869; al-Bukhari, al-Adab al-Mufrad 660.',
     arabic: 'بِسْمِ اللَّهِ الَّذِي لَا يَضُرُّ مَعَ اسْمِهِ شَيْءٌ فِي الْأَرْضِ وَلَا فِي السَّمَاءِ وَهُوَ السَّمِيعُ الْعَلِيمُ',
     transliteration: "Bismillahil-ladhi la yadurru ma'asmihi shay'un fil-ardi wa la fis-sama'i wa Huwas-Sami'ul-'Alim.", meaning: 'In the name of Allah, with whose name nothing on earth or in heaven can cause harm — and He is the All-Hearing, the All-Knowing.', note: null,
   },
@@ -138,6 +143,10 @@ export const NASR_CONTENT: readonly NasrContent[] = [
     arabic: 'أَعُوذُ بِكَلِمَاتِ اللَّهِ التَّامَّةِ مِنْ كُلِّ شَيْطَانٍ وَهَامَّةٍ، وَمِنْ كُلِّ عَيْنٍ لَامَّةٍ', transliteration: "A'udhu bi kalimatillahit-tammati min kulli shaytanin wa hammah, wa min kulli 'aynin lammah.", meaning: 'I seek refuge in the perfect words of Allah from every devil and harmful creature, and from every evil eye.', note: 'The Prophet ﷺ used these words to seek refuge for Hasan and Husayn.',
   },
   {
+    id: 'dua-calamity', item_key: 'daily_duas', title: 'Refuge from calamity and misfortune', repetitions: 'Once', sort_order: 10, grade: 'sahih', reference: 'Abu Hurayra — Sahih al-Bukhari 6616, 6347; Sahih Muslim 2707.',
+    arabic: 'أَعُوذُ بِاللَّهِ مِنْ جَهْدِ الْبَلَاءِ، وَدَرَكِ الشَّقَاءِ، وَسُوءِ الْقَضَاءِ، وَشَمَاتَةِ الْأَعْدَاءِ', transliteration: "A'udhu billahi min jahdil-bala', wa darakish-shaqa', wa su'il-qada', wa shamatatil-a'da'.", meaning: 'I seek refuge in Allah from the hardship of severe trial, from being overtaken by misfortune, from an evil decree, and from the gloating of enemies.', note: null,
+  },
+  {
     id: 'istighfar-short', item_key: 'istighfar', title: 'Istighfar', repetitions: 'Target: 100 a day', sort_order: 10, grade: 'sahih', reference: 'Sahih Muslim 2702; Sahih al-Bukhari 6307; Abu Dawud 1516.', arabic: 'أَسْتَغْفِرُ اللَّهَ', transliteration: 'Astaghfirullah.', meaning: "I seek Allah's forgiveness.", note: 'Split the count across the day and use the counter rather than estimating.',
   },
   {
@@ -145,7 +154,7 @@ export const NASR_CONTENT: readonly NasrContent[] = [
   },
 ]
 
-export const ADHKAR_KEYS = ['morning_adhkar', 'evening_adhkar', 'ruqyah'] as const
+export const ADHKAR_KEYS = ['morning_adhkar', 'evening_adhkar', 'ruqyah', 'daily_duas'] as const
 export type AdhkarKey = (typeof ADHKAR_KEYS)[number]
 
 /** The guide items, in display order, that a practice is ticked off by. */

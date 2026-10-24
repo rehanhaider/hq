@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { adhkarItemIds } from "../lib/nasr";
 import { NasrStore } from "./nasr";
 
@@ -76,6 +79,18 @@ describe("nasr store", () => {
     expect(day.fajr).toBe("ontime");
     expect(day.adhkar_ticks).toEqual(ids);
     expect(day.morning_adhkar).toBe(false);
+  });
+  it("adds the daily duas column to a database written before it", () => {
+    const path = join(mkdtempSync(join(tmpdir(), "nasr-")), "nasr.sqlite");
+    store = new NasrStore(path);
+    store.upsertDay({ date: "2026-01-01", ruqyah: true });
+    store.db.exec("ALTER TABLE nasr_days DROP COLUMN daily_duas");
+    store.close();
+    store = new NasrStore(path);
+    expect(store.day("2026-01-01").ruqyah).toBe(true);
+    const [id] = adhkarItemIds("daily_duas");
+    const day = store.setAdhkarItem({ date: "2026-01-01", item_id: id!, done: true });
+    expect(day.daily_duas).toBe(true);
   });
   it("expands a legacy completed day and can untick one item", () => {
     store = new NasrStore(":memory:");
@@ -195,7 +210,7 @@ describe("nasr store", () => {
       done: true,
     });
     expect(store.exportCsv().split("\n")[0]).toBe(
-      "date,fajr,dhuhr,asr,maghrib,isha,morning_adhkar,evening_adhkar,night_ayat_kursi,night_baqarah,night_three_suras,ruqyah,istighfar_count,note",
+      "date,fajr,dhuhr,asr,maghrib,isha,morning_adhkar,evening_adhkar,night_ayat_kursi,night_baqarah,night_three_suras,ruqyah,daily_duas,istighfar_count,note",
     );
     expect(store.exportCsv()).toBe(before);
   });
