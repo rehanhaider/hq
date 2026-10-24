@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS nasr_days (
   night_baqarah INTEGER NOT NULL DEFAULT 0,
   night_three_suras INTEGER NOT NULL DEFAULT 0,
   ruqyah INTEGER NOT NULL DEFAULT 0,
+  daily_duas INTEGER NOT NULL DEFAULT 0,
   istighfar_count INTEGER NOT NULL DEFAULT 0,
   note TEXT
 );
@@ -67,6 +68,7 @@ type DayRow = {
   night_baqarah: number;
   night_three_suras: number;
   ruqyah: number;
+  daily_duas: number;
   istighfar_count: number;
   note: string | null;
 };
@@ -100,6 +102,7 @@ function normalizeDay(row: DayRow | NasrDay, stored: Set<string>): NasrDay {
     night_baqarah: asBool(row.night_baqarah),
     night_three_suras: asBool(row.night_three_suras),
     ruqyah: asBool(row.ruqyah),
+    daily_duas: asBool(row.daily_duas),
     // Days logged before item ticks existed still show every item as done.
     adhkar_ticks: ADHKAR_KEYS.flatMap((key) =>
       adhkarItemIds(key).filter((id) => asBool(row[key]) || stored.has(id)),
@@ -117,6 +120,15 @@ export class NasrStore {
     if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
     this.db = new DatabaseSync(path);
     this.db.exec(schema);
+    const columns = (
+      this.db
+        .prepare("SELECT name FROM pragma_table_info('nasr_days')")
+        .all() as { name: string }[]
+    ).map((column) => column.name);
+    if (!columns.includes("daily_duas"))
+      this.db.exec(
+        "ALTER TABLE nasr_days ADD COLUMN daily_duas INTEGER NOT NULL DEFAULT 0",
+      );
   }
   private transaction<T>(work: () => T): T {
     this.db.exec("BEGIN IMMEDIATE");
@@ -207,6 +219,7 @@ export class NasrStore {
           existing.night_three_suras,
         ),
         ruqyah: pick(data.ruqyah, existing.ruqyah),
+        daily_duas: pick(data.daily_duas, existing.daily_duas),
         adhkar_ticks: existing.adhkar_ticks,
         istighfar_count: pick(data.istighfar_count, existing.istighfar_count),
         note: pick(data.note, existing.note),
@@ -230,8 +243,8 @@ export class NasrStore {
         `INSERT INTO nasr_days (
           date, fajr, dhuhr, asr, maghrib, isha,
           morning_adhkar, evening_adhkar, night_ayat_kursi, night_baqarah,
-          night_three_suras, ruqyah, istighfar_count, note
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          night_three_suras, ruqyah, daily_duas, istighfar_count, note
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(date) DO UPDATE SET
           fajr=excluded.fajr, dhuhr=excluded.dhuhr, asr=excluded.asr,
           maghrib=excluded.maghrib, isha=excluded.isha,
@@ -240,7 +253,8 @@ export class NasrStore {
           night_ayat_kursi=excluded.night_ayat_kursi,
           night_baqarah=excluded.night_baqarah,
           night_three_suras=excluded.night_three_suras,
-          ruqyah=excluded.ruqyah, istighfar_count=excluded.istighfar_count,
+          ruqyah=excluded.ruqyah, daily_duas=excluded.daily_duas,
+          istighfar_count=excluded.istighfar_count,
           note=excluded.note`,
       )
       .run(
@@ -256,6 +270,7 @@ export class NasrStore {
         day.night_baqarah ? 1 : 0,
         day.night_three_suras ? 1 : 0,
         day.ruqyah ? 1 : 0,
+        day.daily_duas ? 1 : 0,
         day.istighfar_count,
         day.note,
       );
@@ -331,6 +346,7 @@ export class NasrStore {
       "night_baqarah",
       "night_three_suras",
       "ruqyah",
+      "daily_duas",
       "istighfar_count",
       "note",
     ];

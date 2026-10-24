@@ -287,7 +287,7 @@ describe("markLabel", () => {
 });
 
 describe("dayCompletion", () => {
-  it("counts the same twelve things adherence divides by", () => {
+  it("counts the same thirteen things adherence divides by", () => {
     expect(dayCompletion(makeDay("2026-09-01"), 100)).toBe(0);
     const whole = makeDay("2026-09-01", {
       fajr: "ontime",
@@ -301,6 +301,7 @@ describe("dayCompletion", () => {
       night_baqarah: true,
       night_three_suras: true,
       ruqyah: true,
+      daily_duas: true,
       istighfar_count: 100,
     });
     expect(dayCompletion(whole, 100)).toBe(1);
@@ -336,12 +337,12 @@ describe("groupAdherence", () => {
     });
   });
 
-  it("sums the seven practices the same way", () => {
+  it("sums the eight practices the same way", () => {
     // Morning adhkar and the istighfar target, both on the first day.
     expect(groupAdherence(adherence, PRACTICE_KEYS)).toEqual({
-      percentage: 14,
+      percentage: 13,
       completed: 2,
-      total: 14,
+      total: 16,
     });
   });
 
@@ -463,6 +464,13 @@ describe("practiceProgress", () => {
         total: 3,
       },
       { key: "ruqyah", label: "Self-ruqyah", complete: true, done: 8, total: 8 },
+      {
+        key: "daily_duas",
+        label: "Daily duas",
+        complete: false,
+        done: 0,
+        total: 1,
+      },
     ]);
   });
 

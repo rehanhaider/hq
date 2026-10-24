@@ -26,8 +26,9 @@ export const nasrDaySchema = z.object({
   night_baqarah: z.boolean().default(false),
   night_three_suras: z.boolean().default(false),
   ruqyah: z.boolean().default(false),
-  // The guide item ids ticked off that day, for morning and evening adhkar
-  // and self-ruqyah.
+  daily_duas: z.boolean().default(false),
+  // The guide item ids ticked off that day, for morning and evening adhkar,
+  // self-ruqyah and the daily duas.
   adhkar_ticks: z.array(z.string()).default([]),
   istighfar_count: z.coerce.number().int().min(0).default(0),
   note: z.string().nullable().default(null),
@@ -46,6 +47,7 @@ export const nasrDayUpdateSchema = z.object({
   night_baqarah: z.boolean().optional(),
   night_three_suras: z.boolean().optional(),
   ruqyah: z.boolean().optional(),
+  daily_duas: z.boolean().optional(),
   istighfar_count: z.coerce.number().int().min(0).optional(),
   note: z.string().nullable().optional(),
 });
@@ -57,12 +59,13 @@ export const nasrAdhkarTickSchema = z.object({
 });
 export type NasrAdhkarTick = z.infer<typeof nasrAdhkarTickSchema>;
 
-/** The guides Today can open on arrival: the three ticked practices and the night. */
+/** The guides Today can open on arrival: the four ticked practices and the night. */
 export const nasrGuideKeySchema = z.enum([
   "morning_adhkar",
   "evening_adhkar",
   "night",
   "ruqyah",
+  "daily_duas",
 ]);
 export type NasrGuideKey = z.infer<typeof nasrGuideKeySchema>;
 
@@ -91,6 +94,7 @@ export const nasrContentItemKeySchema = z.enum([
   "evening_adhkar",
   "night_ayat",
   "ruqyah",
+  "daily_duas",
   "istighfar",
 ]);
 
@@ -153,6 +157,7 @@ export function emptyDay(date: string): NasrDay {
     night_baqarah: false,
     night_three_suras: false,
     ruqyah: false,
+    daily_duas: false,
     adhkar_ticks: [],
     istighfar_count: 0,
     note: null,

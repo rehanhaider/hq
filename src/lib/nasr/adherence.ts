@@ -1,4 +1,5 @@
 import type { NasrContent, NasrDay, NasrGuideKey } from "./schemas";
+import type { AdhkarKey } from "./content";
 import { windowDates } from "./dates";
 import { fajrOnTimeStreak } from "./streaks";
 
@@ -38,6 +39,7 @@ export function calculateAdherence(
     "night_baqarah",
     "night_three_suras",
     "ruqyah",
+    "daily_duas",
   ] as const;
 
   const result: Record<string, AdherenceResult> = {};
@@ -92,6 +94,7 @@ export const PRACTICE_KEYS = [
   "night_baqarah",
   "night_three_suras",
   "ruqyah",
+  "daily_duas",
   "istighfar",
 ] as const;
 
@@ -153,9 +156,9 @@ export function withDay(days: NasrDay[], day: NasrDay): NasrDay[] {
 }
 
 /**
- * How much of one day was kept, as a fraction of the twelve things it holds:
- * the five prayers, the six adhkar and practices, and the istighfar target.
- * The same twelve `calculateAdherence` divides by, so a strip of days and the
+ * How much of one day was kept, as a fraction of the thirteen things it holds:
+ * the five prayers, the seven adhkar and practices, and the istighfar target.
+ * The same thirteen `calculateAdherence` divides by, so a strip of days and the
  * percentage above it are measuring the same thing.
  */
 export function dayCompletion(day: NasrDay, istighfarTarget: number): number {
@@ -167,6 +170,7 @@ export function dayCompletion(day: NasrDay, istighfarTarget: number): number {
     "night_baqarah",
     "night_three_suras",
     "ruqyah",
+    "daily_duas",
   ] as const;
   let kept = 0;
   for (const prayer of prayers)
@@ -280,15 +284,15 @@ export type PracticeProgress = {
 };
 
 /**
- * Home's four practice rows, read out of one day. Morning, evening and
- * self-ruqyah count the guide items ticked on Today; the night counts its
+ * Home's five practice rows, read out of one day. Morning, evening,
+ * self-ruqyah and the daily duas count the guide items ticked on Today; the night counts its
  * three recitations.
  */
 export function practiceProgress(
   day: NasrDay,
   content: readonly NasrContent[],
 ): PracticeProgress[] {
-  const ticked = (itemKey: "morning_adhkar" | "evening_adhkar" | "ruqyah") => {
+  const ticked = (itemKey: AdhkarKey) => {
     const ids = content
       .filter((item) => item.item_key === itemKey)
       .map((item) => item.id);
@@ -323,6 +327,12 @@ export function practiceProgress(
       label: "Self-ruqyah",
       complete: day.ruqyah,
       ...ticked("ruqyah"),
+    },
+    {
+      key: "daily_duas",
+      label: "Daily duas",
+      complete: day.daily_duas,
+      ...ticked("daily_duas"),
     },
   ];
 }

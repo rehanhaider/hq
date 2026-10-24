@@ -39,13 +39,14 @@ const prayers: Array<{
 ];
 
 const boolItems: Array<{
-  key: keyof Pick<NasrDay, "morning_adhkar" | "evening_adhkar" | "ruqyah">;
+  key: keyof Pick<NasrDay, "morning_adhkar" | "evening_adhkar" | "ruqyah" | "daily_duas">;
   itemKey: NasrContentItemKey;
   itemized: boolean;
 }> = [
   { key: "morning_adhkar", itemKey: "morning_adhkar", itemized: true },
   { key: "evening_adhkar", itemKey: "evening_adhkar", itemized: true },
   { key: "ruqyah", itemKey: "ruqyah", itemized: true },
+  { key: "daily_duas", itemKey: "daily_duas", itemized: true },
 ];
 
 function TodayPage() {
