@@ -694,17 +694,6 @@ function IstighfarCounter({
         />
       </div>
       <div className="flex gap-2">
-        {[1, 10, 33].map((step) => (
-          <Button
-            key={step}
-            size="lg"
-            variant={step === 1 ? "default" : "secondary"}
-            className="flex-1 tabular-nums"
-            onClick={() => onUpdate(count + step)}
-          >
-            +{step}
-          </Button>
-        ))}
         <Button
           size="lg"
           variant="ghost"
@@ -715,6 +704,17 @@ function IstighfarCounter({
         >
           −1
         </Button>
+        {[33, 10, 1].map((step) => (
+          <Button
+            key={step}
+            size="lg"
+            variant={step === 1 ? "default" : "secondary"}
+            className="flex-1 tabular-nums"
+            onClick={() => onUpdate(count + step)}
+          >
+            +{step}
+          </Button>
+        ))}
       </div>
     </div>
   );
