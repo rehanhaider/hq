@@ -25,6 +25,7 @@ Reviewed against the official catalog on 7 September 2026. This is a library ass
 | Router | File-based pages, navigation, shareable filter state | Already used within Start |
 | Query | Fetching, caching, mutations, import-status polling | Already used |
 | Table | Repository columns and sorting | Already used |
+| Redact | Replaces React's runtime in the browser and server bundles through its Vite plugin; application code still imports `react` | Used with the default `full` preset. It renders synchronously, so hydration runs as one task rather than in slices |
 | Form | Settings validation and repository-import form state | Proposed addition, awaiting dependency approval; use the stable v1 line |
 | Charts | Could replace custom activity and language charts | Defer; official site labels it alpha |
 | Store | Could replace the current theme store | Defer; official site labels it alpha, and the current store only owns theme |
