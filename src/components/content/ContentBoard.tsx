@@ -377,6 +377,8 @@ function Column({
       </header>
       <div className="min-h-24 flex-1 space-y-2 px-2 pb-2">
         <SortableContext
+          // `boardCollision` finds a card's column by this id.
+          id={keyOf(bucket)}
           items={bucket.pages.map((page) => page.id)}
           strategy={verticalListSortingStrategy}
         >

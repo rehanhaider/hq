@@ -38,7 +38,12 @@ function args(
     active: { id: "idea-0" },
     collisionRect,
     droppableRects: new Map(Object.entries(rects)),
-    droppableContainers: Object.keys(rects).map((id) => ({ id })),
+    // A card carries its column's id as its sortable container; a column
+    // carries no sortable data.
+    droppableContainers: Object.keys(rects).map((id) => {
+      const column = id.includes("-") ? id.slice(0, id.indexOf("-")) : null;
+      return { id, data: { current: column ? { sortable: { containerId: column } } : undefined } };
+    }),
     pointerCoordinates,
   } as unknown as Args;
 }
@@ -68,10 +73,22 @@ describe("board collision", () => {
       heldOverPlanned,
       pointerOverPlanned,
     );
-    expect(boardCollision(input).map((collision) => collision.id)).toEqual([
-      "planned-0",
-      "planned",
-    ]);
+    expect(boardCollision(input)[0]?.id).toBe("planned-0");
+  });
+
+  it("is over the last card when held below it in the same column", () => {
+    // Below the last card only the column is under the pointer. Within the
+    // column, the closest card still wins, so the reorder lands at the end.
+    const last = card(idea, 8);
+    const held = rect(last.left, last.bottom + 20, 254, CARD_HEIGHT);
+    const input = args(board(), held, { x: last.left + 127, y: held.top + 32 });
+    expect(boardCollision(input)[0]?.id).toBe("idea-8");
+  });
+
+  it("only weighs the cards of the column under the pointer", () => {
+    const input = args(board(), heldOverPlanned, pointerOverPlanned);
+    const ids = boardCollision(input).map((collision) => String(collision.id));
+    expect(ids).toEqual(["planned"]);
   });
 
   it("is over nothing when the pointer is between columns", () => {
