@@ -41,6 +41,15 @@ describe("board columns", () => {
     expect(column).toMatch(/\{onAdd && \(/);
   });
 
+  it("finds the drop target under the pointer, across the whole column", () => {
+    expect(source).toMatch(/collisionDetection=\{boardCollision\}/);
+    expect(source).not.toMatch(/closestCorners/);
+    // The header and the New button are part of the column's drop target.
+    expect(column).toMatch(/<section\s+ref=\{setNodeRef\}/);
+    // Each card's sortable container is its column, which boardCollision reads.
+    expect(column).toMatch(/id=\{keyOf\(bucket\)\}\s+items=\{bucket\.pages\.map/);
+  });
+
   it("groups top-level pages by status, leaving subpages out", () => {
     // Statuses only apply to top-level pages, so the board filters to them
     // before anything else and never offers another grouping.
