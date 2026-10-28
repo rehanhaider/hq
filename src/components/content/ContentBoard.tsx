@@ -6,7 +6,6 @@ import {
   DragOverlay,
   KeyboardSensor,
   PointerSensor,
-  closestCorners,
   useDroppable,
   useSensor,
   useSensors,
@@ -39,6 +38,7 @@ import {
 } from "@/lib/content";
 import { contentKeys, contentPropertiesQuery, invalidateContent, pagesQuery } from "@/queries/content";
 import { createPage, movePageCard } from "@/server/fns";
+import { boardCollision } from "./boardCollision";
 import { ContentToolbar, type ToolbarPatch } from "./ContentToolbar";
 import { chipClass, Dot, byId } from "./properties";
 import { PageIcon } from "./PageTypeIcon";
@@ -293,7 +293,7 @@ export function ContentBoard() {
         >
           <DndContext
             sensors={sensors}
-            collisionDetection={closestCorners}
+            collisionDetection={boardCollision}
             onDragStart={onDragStart}
             onDragOver={onDragOver}
             onDragEnd={onDragEnd}
@@ -352,9 +352,17 @@ function Column({
   onAdd?: () => void;
   onOpen: (id: string) => void;
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: keyOf(bucket) });
+  // The whole column is the drop target, header and New button included, so
+  // the pointer is never over a column without being over its droppable.
+  const { setNodeRef, over } = useDroppable({ id: keyOf(bucket) });
+  // Over one of its cards, the card is what the pointer is over, but the drop
+  // still lands in this column.
+  const isOver =
+    over !== null &&
+    (over.id === keyOf(bucket) || bucket.pages.some((page) => page.id === over.id));
   return (
     <section
+      ref={setNodeRef}
       className={`flex w-[17rem] shrink-0 flex-col rounded-xl border bg-card transition-colors ${
         isOver ? "border-primary/50 bg-accent/40" : ""
       }`}
@@ -367,7 +375,7 @@ function Column({
           {bucket.pages.length}
         </span>
       </header>
-      <div ref={setNodeRef} className="min-h-24 flex-1 space-y-2 px-2 pb-2">
+      <div className="min-h-24 flex-1 space-y-2 px-2 pb-2">
         <SortableContext
           items={bucket.pages.map((page) => page.id)}
           strategy={verticalListSortingStrategy}
