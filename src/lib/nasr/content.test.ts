@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { NASR_CONTENT, NASR_GUIDES } from "./content";
+import {
+  NASR_CONTENT,
+  NASR_GUIDES,
+  adhkarItemIds,
+  optionalItemIds,
+} from "./content";
 import { nasrContentSchema } from "./schemas";
 
 describe("nasr content reference", () => {
@@ -16,7 +21,9 @@ describe("nasr content reference", () => {
       expect(items.every((item) => item.reference.length > 0)).toBe(true);
       expect(
         items.every((item) =>
-          ["sahih", "hasan", "mawquf"].includes(item.grade),
+          item.grade === null
+            ? item.optional === true
+            : ["sahih", "hasan", "mawquf"].includes(item.grade),
         ),
       ).toBe(true);
     }
@@ -37,5 +44,23 @@ describe("nasr content reference", () => {
     expect(night.filter((item) => item.id.startsWith("night-sura-"))).toHaveLength(
       3,
     );
+  });
+  it("keeps the sihr passages optional and out of self-ruqyah's set", () => {
+    expect(adhkarItemIds("ruqyah")).toHaveLength(8);
+    expect(optionalItemIds("ruqyah")).toEqual([
+      "ruqyah-sihr-araf",
+      "ruqyah-sihr-yunus",
+      "ruqyah-sihr-taha",
+    ]);
+    for (const key of ["morning_adhkar", "evening_adhkar", "daily_duas"] as const)
+      expect(optionalItemIds(key)).toEqual([]);
+    expect(NASR_GUIDES.ruqyah.optional).toBeDefined();
+  });
+  it("holds every verse of each sihr passage", () => {
+    const verses = (id: string) =>
+      NASR_CONTENT.find((item) => item.id === id)?.arabic?.split(" ۝ ").length;
+    expect(verses("ruqyah-sihr-araf")).toBe(6);
+    expect(verses("ruqyah-sihr-yunus")).toBe(4);
+    expect(verses("ruqyah-sihr-taha")).toBe(5);
   });
 });

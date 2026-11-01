@@ -405,7 +405,9 @@ function PracticeDisclosure({
   const [open, setOpen] = useState(openOnArrival);
   const ref = useScrollOnArrival(openOnArrival);
   const guide = NASR_GUIDES[itemKey];
-  const done = items.filter((item) => ticks?.includes(item.id)).length;
+  // Optional items are ticked in the guide but never counted toward the set.
+  const required = items.filter((item) => !item.optional);
+  const done = required.filter((item) => ticks?.includes(item.id)).length;
   return (
     <div ref={ref} className="scroll-mt-16">
       <div className="list-row items-start">
@@ -425,11 +427,11 @@ function PracticeDisclosure({
               className={`block text-sm font-medium ${complete ? "text-positive" : ""}`}
             >
               {guide.title}
-              {ticks !== undefined && items.length > 0 && (
+              {ticks !== undefined && required.length > 0 && (
                 <>
                   {" "}
                   <span className="text-xs tabular-nums text-muted-foreground">
-                    {done}/{items.length}
+                    {done}/{required.length}
                   </span>
                 </>
               )}
@@ -593,6 +595,23 @@ function PracticeGuide({
   streaks?: Record<string, StreakResult>;
 }) {
   const guide = NASR_GUIDES[itemKey];
+  const required = items.filter((item) => !item.optional);
+  const optional = items.filter((item) => item.optional);
+  const entries = (list: NasrContent[]) =>
+    list.map((item, index) => (
+      <ContentEntry
+        key={item.id}
+        item={item}
+        number={index + 1}
+        done={ticks?.includes(item.id) ?? false}
+        streak={streaks?.[item.id]}
+        onToggle={
+          onTickItem
+            ? () => onTickItem(item.id, !(ticks?.includes(item.id) ?? false))
+            : undefined
+        }
+      />
+    ));
   return (
     <div className={`rounded-xl bg-muted/30 px-4 pb-5 pt-4 ${nested ? "mt-1" : ""}`}>
       <p className="text-xs font-medium text-primary">{guide.window}</p>
@@ -604,22 +623,16 @@ function PracticeGuide({
           Loading the recitation guide…
         </p>
       ) : (
-        <ol className="mt-5 space-y-4">
-          {items.map((item, index) => (
-            <ContentEntry
-              key={item.id}
-              item={item}
-              number={index + 1}
-              done={ticks?.includes(item.id) ?? false}
-              streak={streaks?.[item.id]}
-              onToggle={
-                onTickItem
-                  ? () => onTickItem(item.id, !(ticks?.includes(item.id) ?? false))
-                  : undefined
-              }
-            />
-          ))}
-        </ol>
+        <ol className="mt-5 space-y-4">{entries(required)}</ol>
+      )}
+      {guide.optional && optional.length > 0 && (
+        <section className="mt-8">
+          <h3 className="text-sm font-semibold">{guide.optional.title}</h3>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">
+            {guide.optional.summary}
+          </p>
+          <ol className="mt-4 space-y-4">{entries(optional)}</ol>
+        </section>
       )}
       {guide.closingNote && (
         <p className="mt-5 border-l-2 border-primary/50 pl-3 text-xs leading-5 text-muted-foreground">
@@ -718,9 +731,11 @@ function ContentEntry({
         </p>
       )}
       <div className="mt-4 flex flex-wrap items-start gap-2 border-t pt-3">
-        <span className="rounded-md bg-muted px-2 py-0.5 text-xs uppercase tracking-wide">
-          {item.grade}
-        </span>
+        {item.grade && (
+          <span className="rounded-md bg-muted px-2 py-0.5 text-xs uppercase tracking-wide">
+            {item.grade}
+          </span>
+        )}
         <p className="min-w-0 flex-1 text-xs leading-5 text-muted-foreground">
           {item.reference}
         </p>

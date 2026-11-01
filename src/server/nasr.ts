@@ -6,6 +6,7 @@ import {
   ADHKAR_KEYS,
   adhkarItemIds,
   emptyDay,
+  optionalItemIds,
   type AdhkarKey,
   type NasrAdhkarTick,
   type NasrDay,
@@ -104,9 +105,11 @@ function normalizeDay(row: DayRow | NasrDay, stored: Set<string>): NasrDay {
     ruqyah: asBool(row.ruqyah),
     daily_duas: asBool(row.daily_duas),
     // Days logged before item ticks existed still show every item as done.
-    adhkar_ticks: ADHKAR_KEYS.flatMap((key) =>
-      adhkarItemIds(key).filter((id) => asBool(row[key]) || stored.has(id)),
-    ),
+    // Optional items are never implied by the row, only by their own tick.
+    adhkar_ticks: ADHKAR_KEYS.flatMap((key) => [
+      ...adhkarItemIds(key).filter((id) => asBool(row[key]) || stored.has(id)),
+      ...optionalItemIds(key).filter((id) => stored.has(id)),
+    ]),
     istighfar_count: row.istighfar_count ?? 0,
     note: row.note ?? null,
   };
@@ -227,11 +230,12 @@ export class NasrStore {
       this.writeDay(merged);
       for (const key of ADHKAR_KEYS) {
         if (data[key] !== undefined) {
-          this.writeAdhkarTicks(
-            data.date,
-            key,
-            data[key] ? adhkarItemIds(key) : [],
-          );
+          // Marking the practice done or not leaves its optional ticks alone.
+          const optional = optionalItemIds(key);
+          this.writeAdhkarTicks(data.date, key, [
+            ...(data[key] ? adhkarItemIds(key) : []),
+            ...existing.adhkar_ticks.filter((id) => optional.includes(id)),
+          ]);
         }
       }
       return this.day(data.date);
@@ -286,14 +290,15 @@ export class NasrStore {
   }
   setAdhkarItem(data: NasrAdhkarTick): NasrDay {
     const key = ADHKAR_KEYS.find((key) =>
-      adhkarItemIds(key).includes(data.item_id),
+      [...adhkarItemIds(key), ...optionalItemIds(key)].includes(data.item_id),
     );
     if (!key) throw new Error(`Unknown adhkar item: ${data.item_id}`);
     return this.transaction(() => {
       const existing = this.day(data.date);
       const ids = adhkarItemIds(key);
+      const tickable = [...ids, ...optionalItemIds(key)];
       const ticks = new Set(
-        existing.adhkar_ticks.filter((id) => ids.includes(id)),
+        existing.adhkar_ticks.filter((id) => tickable.includes(id)),
       );
       if (data.done) ticks.add(data.item_id);
       else ticks.delete(data.item_id);

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { adhkarItemIds } from "../lib/nasr";
+import { adhkarItemIds, optionalItemIds } from "../lib/nasr";
 import { NasrStore } from "./nasr";
 
 let store: NasrStore;
@@ -160,6 +160,49 @@ describe("nasr store", () => {
     expect(
       store.upsertDay({ date: "2026-01-02", ruqyah: true }).adhkar_ticks,
     ).toEqual(ids);
+  });
+  it("ticks the optional sihr passages without touching self-ruqyah's completion", () => {
+    store = new NasrStore(":memory:");
+    const ids = adhkarItemIds("ruqyah");
+    const optional = optionalItemIds("ruqyah");
+    const first = store.setAdhkarItem({
+      date: "2026-01-01",
+      item_id: optional[0]!,
+      done: true,
+    });
+    expect(first.adhkar_ticks).toEqual([optional[0]]);
+    expect(first.ruqyah).toBe(false);
+    for (const id of ids)
+      store.setAdhkarItem({ date: "2026-01-01", item_id: id, done: true });
+    expect(store.day("2026-01-01").ruqyah).toBe(true);
+    const unticked = store.setAdhkarItem({
+      date: "2026-01-01",
+      item_id: optional[0]!,
+      done: false,
+    });
+    expect(unticked.ruqyah).toBe(true);
+    expect(unticked.adhkar_ticks).toEqual(ids);
+  });
+  it("keeps optional ticks when self-ruqyah is marked from its row", () => {
+    store = new NasrStore(":memory:");
+    const ids = adhkarItemIds("ruqyah");
+    const optional = optionalItemIds("ruqyah");
+    store.setAdhkarItem({ date: "2026-01-01", item_id: optional[1]!, done: true });
+    expect(
+      store.upsertDay({ date: "2026-01-01", ruqyah: true }).adhkar_ticks,
+    ).toEqual([...ids, optional[1]]);
+    expect(
+      store.upsertDay({ date: "2026-01-01", ruqyah: false }).adhkar_ticks,
+    ).toEqual([optional[1]]);
+  });
+  it("does not read optional items as done on a legacy completed day", () => {
+    store = new NasrStore(":memory:");
+    store.db
+      .prepare("INSERT INTO nasr_days (date, ruqyah) VALUES (?, 1)")
+      .run("2026-01-01");
+    expect(store.day("2026-01-01").adhkar_ticks).toEqual(
+      adhkarItemIds("ruqyah"),
+    );
   });
   it("returns each date's ticks in morning then evening guide order", () => {
     store = new NasrStore(":memory:");

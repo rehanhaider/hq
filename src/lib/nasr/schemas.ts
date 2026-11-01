@@ -109,9 +109,12 @@ export const nasrContentSchema = z.object({
   meaning: z.string().nullable(),
   repetitions: z.string(),
   reference: z.string(),
-  grade: evidenceGradeSchema,
+  // Null for a passage recited by scholarly practice, with no narration to grade.
+  grade: evidenceGradeSchema.nullable(),
   sort_order: z.number().int().nonnegative(),
   note: z.string().nullable(),
+  // Ticked on its own and left out of the practice's completion.
+  optional: z.boolean().optional(),
 });
 
 export const settingsSchema = z.object({
