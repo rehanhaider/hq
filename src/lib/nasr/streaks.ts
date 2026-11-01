@@ -1,4 +1,5 @@
 import type { NasrDay, PrayerStatus } from "./schemas";
+import { adhkarItemIds } from "./content";
 
 export interface StreakResult {
   current: number;
@@ -71,4 +72,46 @@ export function prayerStreak(
     },
     today,
   );
+}
+
+export interface PracticeStreaks {
+  morning_adhkar: StreakResult;
+  evening_adhkar: StreakResult;
+  /** One streak per daily dua, keyed by its guide item id. */
+  duas: Record<string, StreakResult>;
+}
+
+type PracticeDay = Pick<
+  NasrDay,
+  "date" | "morning_adhkar" | "evening_adhkar" | "adhkar_ticks"
+>;
+
+/**
+ * The adhkar and dua streaks Today shows. Morning and evening count a day once
+ * every item in the set is ticked, which is when the set reads as complete. A
+ * dua is one item, so its own tick is the whole day.
+ *
+ * Today is still open, so it counts once it is ticked and never breaks the
+ * streak before then: ticking the morning set must not zero the evening one.
+ */
+export function practiceStreaks(
+  days: PracticeDay[],
+  today: string,
+): PracticeStreaks {
+  const streak = (done: (day: PracticeDay) => boolean) =>
+    computeStreak(
+      days.filter((day) => day.date !== today || done(day)),
+      done,
+      today,
+    );
+  return {
+    morning_adhkar: streak((d) => d.morning_adhkar),
+    evening_adhkar: streak((d) => d.evening_adhkar),
+    duas: Object.fromEntries(
+      adhkarItemIds("daily_duas").map((id) => [
+        id,
+        streak((d) => d.adhkar_ticks.includes(id)),
+      ]),
+    ),
+  };
 }
