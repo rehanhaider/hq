@@ -1,7 +1,7 @@
 import type { NasrContent, NasrDay, NasrGuideKey } from "./schemas";
 import type { AdhkarKey } from "./content";
 import { windowDates } from "./dates";
-import { fajrOnTimeStreak } from "./streaks";
+import { fajrOnTimeStreak, practiceStreaks } from "./streaks";
 
 export interface AdherenceResult {
   percentage: number;
@@ -121,11 +121,11 @@ export function groupAdherence(
 }
 
 /**
- * Everything the pages derive from the day list: the window count, the Fajr
- * streak, and adherence over the window. The server builds its summary with
- * this, and the homepage reruns it when it logs a prayer optimistically, so
- * the strip and its figures move with the prayer rather than a round trip
- * later.
+ * Everything the pages derive from the day list: the window count, the Fajr,
+ * adhkar and dua streaks, and adherence over the window. The server builds its
+ * summary with this, and the homepage reruns it when it logs a prayer
+ * optimistically, so the strip and its figures move with the prayer rather
+ * than a round trip later.
  */
 export function windowSummary(
   days: NasrDay[],
@@ -144,6 +144,7 @@ export function windowSummary(
     // Deliberately not windowed. A streak has no denominator, so it never had
     // the mismatch the window exists to fix, and it runs to today.
     fajrStreak: fajrOnTimeStreak(days, today),
+    practiceStreaks: practiceStreaks(days, today),
     adherence: calculateAdherence(windowed, windowDays, istighfarTarget),
   };
 }

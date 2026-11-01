@@ -14,7 +14,9 @@ import {
   type NasrContent,
   type NasrContentItemKey,
   type NasrDay,
+  type PracticeStreaks,
   type PrayerStatus,
+  type StreakResult,
 } from "@/lib/nasr";
 
 /**
@@ -209,6 +211,14 @@ function TodayPage() {
                   Open a row for the recitation
                 </span>
               </div>
+              {data && (
+                <StreakSummary
+                  streaks={data.practiceStreaks}
+                  duas={data.content.filter(
+                    (item) => item.item_key === "daily_duas",
+                  )}
+                />
+              )}
               <div className="list">
                 {boolItems.map(({ key, itemKey, itemized }) => (
                   <PracticeDisclosure
@@ -216,6 +226,16 @@ function TodayPage() {
                     itemKey={itemKey}
                     openOnArrival={search.guide === key}
                     complete={day?.[key] ?? false}
+                    streak={
+                      key === "morning_adhkar" || key === "evening_adhkar"
+                        ? data?.practiceStreaks[key]
+                        : undefined
+                    }
+                    itemStreaks={
+                      key === "daily_duas"
+                        ? data?.practiceStreaks.duas
+                        : undefined
+                    }
                     items={(data?.content ?? []).filter(
                       (item) => item.item_key === itemKey,
                     )}
@@ -289,6 +309,50 @@ function TodayPage() {
   );
 }
 
+/**
+ * The streak figures above the practice rows: morning, evening, then each
+ * daily dua by name. The rows and guide entries below repeat their own.
+ */
+function StreakSummary({
+  streaks,
+  duas,
+}: {
+  streaks: PracticeStreaks;
+  duas: NasrContent[];
+}) {
+  const rows = [
+    { id: "morning_adhkar", label: "Morning adhkar", streak: streaks.morning_adhkar },
+    { id: "evening_adhkar", label: "Evening adhkar", streak: streaks.evening_adhkar },
+    ...duas.flatMap((dua) => {
+      const streak = streaks.duas[dua.id];
+      return streak ? [{ id: dua.id, label: dua.title, streak }] : [];
+    }),
+  ];
+  return (
+    <dl aria-label="Streaks" className="flex flex-wrap gap-x-8 gap-y-3">
+      {rows.map(({ id, label, streak }) => (
+        <div key={id} className="min-w-0">
+          <dt className="text-xs text-muted-foreground">{label}</dt>
+          <dd className="mt-1 text-sm font-medium tabular-nums">
+            {streak.current} {streak.current === 1 ? "day" : "days"}
+            <span className="ml-1.5 font-normal text-muted-foreground">
+              best {streak.longest}
+            </span>
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function streakText({ current, longest }: StreakResult) {
+  if (longest === 0) return "No streak yet";
+  const days = (n: number) => `${n} ${n === 1 ? "day" : "days"}`;
+  return current > 0
+    ? `${current}-day streak · best ${days(longest)}`
+    : `No current streak · best ${days(longest)}`;
+}
+
 function statusLabel(value: PrayerStatus) {
   if (value === "ontime") return "On time";
   if (value === "qada") return "Qada";
@@ -319,6 +383,8 @@ function PracticeDisclosure({
   itemKey,
   openOnArrival,
   complete,
+  streak,
+  itemStreaks,
   items,
   onToggle,
   ticks,
@@ -327,6 +393,10 @@ function PracticeDisclosure({
   itemKey: NasrContentItemKey;
   openOnArrival: boolean;
   complete: boolean;
+  /** The practice's own streak, for the sets ticked as a whole. */
+  streak?: StreakResult;
+  /** One streak per guide item, for practices whose items stand alone. */
+  itemStreaks?: Record<string, StreakResult>;
   items: NasrContent[];
   onToggle: () => void;
   ticks?: string[];
@@ -367,6 +437,11 @@ function PracticeDisclosure({
             <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">
               {guide.window}
             </span>
+            {streak && (
+              <span className="mt-0.5 block text-xs leading-5 tabular-nums text-muted-foreground">
+                {streakText(streak)}
+              </span>
+            )}
           </span>
         </label>
         <button
@@ -385,6 +460,7 @@ function PracticeDisclosure({
             items={items}
             ticks={ticks}
             onTickItem={onTickItem}
+            streaks={itemStreaks}
           />
         </div>
       )}
@@ -507,12 +583,14 @@ function PracticeGuide({
   nested = false,
   ticks,
   onTickItem,
+  streaks,
 }: {
   itemKey: NasrContentItemKey;
   items: NasrContent[];
   nested?: boolean;
   ticks?: string[];
   onTickItem?: (id: string, done: boolean) => void;
+  streaks?: Record<string, StreakResult>;
 }) {
   const guide = NASR_GUIDES[itemKey];
   return (
@@ -533,6 +611,7 @@ function PracticeGuide({
               item={item}
               number={index + 1}
               done={ticks?.includes(item.id) ?? false}
+              streak={streaks?.[item.id]}
               onToggle={
                 onTickItem
                   ? () => onTickItem(item.id, !(ticks?.includes(item.id) ?? false))
@@ -555,11 +634,13 @@ function ContentEntry({
   item,
   number,
   done = false,
+  streak,
   onToggle,
 }: {
   item: NasrContent;
   number: number;
   done?: boolean;
+  streak?: StreakResult;
   onToggle?: () => void;
 }) {
   return (
@@ -607,6 +688,11 @@ function ContentEntry({
           {item.repetitions}
         </span>
       </div>
+      {streak && (
+        <p className="mt-2 text-xs tabular-nums text-muted-foreground">
+          {streakText(streak)}
+        </p>
+      )}
       {item.arabic && (
         <p
           lang="ar"
