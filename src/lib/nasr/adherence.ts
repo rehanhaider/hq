@@ -295,7 +295,7 @@ export function practiceProgress(
 ): PracticeProgress[] {
   const ticked = (itemKey: AdhkarKey) => {
     const ids = content
-      .filter((item) => item.item_key === itemKey)
+      .filter((item) => item.item_key === itemKey && !item.optional)
       .map((item) => item.id);
     return {
       done: ids.filter((id) => day.adhkar_ticks.includes(id)).length,

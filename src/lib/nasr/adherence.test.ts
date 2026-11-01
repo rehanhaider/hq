@@ -15,7 +15,7 @@ import {
   windowSummary,
   withDay,
 } from "./adherence";
-import { NASR_CONTENT, adhkarItemIds } from "./content";
+import { NASR_CONTENT, adhkarItemIds, optionalItemIds } from "./content";
 import { windowDates } from "./dates";
 import { emptyDay } from "./schemas";
 import { fajrOnTimeStreak } from "./streaks";
@@ -437,7 +437,11 @@ describe("practiceProgress", () => {
     const morning = adhkarItemIds("morning_adhkar");
     const ruqyah = adhkarItemIds("ruqyah");
     const day = makeDay("2026-10-21", {
-      adhkar_ticks: [...morning.slice(0, 3), ...ruqyah],
+      adhkar_ticks: [
+        ...morning.slice(0, 3),
+        ...ruqyah,
+        ...optionalItemIds("ruqyah"),
+      ],
       ruqyah: true,
       night_baqarah: true,
     });

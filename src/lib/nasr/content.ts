@@ -5,6 +5,8 @@ type Guide = {
   window: string
   summary: string
   closingNote?: string
+  /** Heads the guide items marked optional, which do not count toward the day. */
+  optional?: { title: string; summary: string }
 }
 
 export const NASR_GUIDES: Record<NasrContentItemKey, Guide> = {
@@ -27,7 +29,11 @@ export const NASR_GUIDES: Record<NasrContentItemKey, Guide> = {
     title: 'Self-ruqyah',
     window: 'Once daily, roughly ten minutes.',
     summary: 'Cup your hands, recite into your palms, blow lightly, then wipe your head, face, chest and what you can reach. Repeat the wipe three times.',
-    closingNote: 'Optional passages for sihr-specific ruqyah: Al-A’raf 7:117–122, Yunus 10:79–82 and Ta-Ha 20:65–69. This is scholarly practice based on their meaning, not a transmitted prescription. If a marked reaction repeats, record it in Observations with the date and time; no reaction is also useful information.',
+    optional: {
+      title: 'Optional passages for sihr',
+      summary: 'Passages on Moses and Pharaoh’s magicians, recited for sihr-specific ruqyah. This is scholarly practice based on their meaning, not a transmitted prescription. Ticking them does not count toward the day.',
+    },
+    closingNote: 'If a marked reaction repeats, record it in Observations with the date and time; no reaction is also useful information.',
   },
   daily_duas: {
     title: 'Daily duas',
@@ -143,6 +149,24 @@ export const NASR_CONTENT: readonly NasrContent[] = [
     arabic: 'أَعُوذُ بِكَلِمَاتِ اللَّهِ التَّامَّةِ مِنْ كُلِّ شَيْطَانٍ وَهَامَّةٍ، وَمِنْ كُلِّ عَيْنٍ لَامَّةٍ', transliteration: "A'udhu bi kalimatillahit-tammati min kulli shaytanin wa hammah, wa min kulli 'aynin lammah.", meaning: 'I seek refuge in the perfect words of Allah from every devil and harmful creature, and from every evil eye.', note: 'The Prophet ﷺ used these words to seek refuge for Hasan and Husayn.',
   },
   {
+    id: 'ruqyah-sihr-araf', item_key: 'ruqyah', optional: true, title: 'Al-A’raf 7:117–122', repetitions: 'Once', sort_order: 70, grade: null, reference: 'Qur’an 7:117–122.',
+    arabic: 'وَأَوْحَيْنَا إِلَىٰ مُوسَىٰ أَنْ أَلْقِ عَصَاكَ ۖ فَإِذَا هِيَ تَلْقَفُ مَا يَأْفِكُونَ ۝ فَوَقَعَ الْحَقُّ وَبَطَلَ مَا كَانُوا يَعْمَلُونَ ۝ فَغُلِبُوا هُنَالِكَ وَانقَلَبُوا صَاغِرِينَ ۝ وَأُلْقِيَ السَّحَرَةُ سَاجِدِينَ ۝ قَالُوا آمَنَّا بِرَبِّ الْعَالَمِينَ ۝ رَبِّ مُوسَىٰ وَهَارُونَ',
+    transliteration: "Wa awhayna ila Musa an alqi 'asak, fa idha hiya talqafu ma ya'fikun. Fa waqa'al-haqqu wa batala ma kanu ya'malun. Faghulibu hunalika wanqalabu saghirin. Wa ulqiyas-saharatu sajidin. Qalu amanna bi Rabbil-'alamin. Rabbi Musa wa Harun.",
+    meaning: 'We inspired Moses: “Throw your staff,” and at once it swallowed what they had faked. So the truth was established, and what they were doing came to nothing. They were defeated there and turned back humbled. The magicians fell down in prostration. They said, “We believe in the Lord of the worlds, the Lord of Moses and Aaron.”', note: null,
+  },
+  {
+    id: 'ruqyah-sihr-yunus', item_key: 'ruqyah', optional: true, title: 'Yunus 10:79–82', repetitions: 'Once', sort_order: 80, grade: null, reference: 'Qur’an 10:79–82.',
+    arabic: 'وَقَالَ فِرْعَوْنُ ائْتُونِي بِكُلِّ سَاحِرٍ عَلِيمٍ ۝ فَلَمَّا جَاءَ السَّحَرَةُ قَالَ لَهُم مُّوسَىٰ أَلْقُوا مَا أَنتُم مُّلْقُونَ ۝ فَلَمَّا أَلْقَوْا قَالَ مُوسَىٰ مَا جِئْتُم بِهِ السِّحْرُ ۖ إِنَّ اللَّهَ سَيُبْطِلُهُ ۖ إِنَّ اللَّهَ لَا يُصْلِحُ عَمَلَ الْمُفْسِدِينَ ۝ وَيُحِقُّ اللَّهُ الْحَقَّ بِكَلِمَاتِهِ وَلَوْ كَرِهَ الْمُجْرِمُونَ',
+    transliteration: "Wa qala Fir'awnu'tuni bi kulli sahirin 'alim. Falamma ja'as-saharatu qala lahum Musa alqu ma antum mulqun. Falamma alqaw qala Musa ma ji'tum bihis-sihr. Innallaha sayubtiluh. Innallaha la yuslihu 'amalal-mufsidin. Wa yuhiqqullahul-haqqa bi kalimatihi wa law karihal-mujrimun.",
+    meaning: 'Pharaoh said, “Bring me every skilled magician.” When the magicians came, Moses said to them, “Throw whatever you will throw.” When they had thrown, Moses said, “What you have brought is magic. Allah will make it come to nothing. Allah does not set right the work of those who spread corruption. Allah establishes the truth by His words, however much the criminals hate it.”', note: null,
+  },
+  {
+    id: 'ruqyah-sihr-taha', item_key: 'ruqyah', optional: true, title: 'Ta-Ha 20:65–69', repetitions: 'Once', sort_order: 90, grade: null, reference: 'Qur’an 20:65–69.',
+    arabic: 'قَالُوا يَا مُوسَىٰ إِمَّا أَن تُلْقِيَ وَإِمَّا أَن نَّكُونَ أَوَّلَ مَنْ أَلْقَىٰ ۝ قَالَ بَلْ أَلْقُوا ۖ فَإِذَا حِبَالُهُمْ وَعِصِيُّهُمْ يُخَيَّلُ إِلَيْهِ مِن سِحْرِهِمْ أَنَّهَا تَسْعَىٰ ۝ فَأَوْجَسَ فِي نَفْسِهِ خِيفَةً مُّوسَىٰ ۝ قُلْنَا لَا تَخَفْ إِنَّكَ أَنتَ الْأَعْلَىٰ ۝ وَأَلْقِ مَا فِي يَمِينِكَ تَلْقَفْ مَا صَنَعُوا ۖ إِنَّمَا صَنَعُوا كَيْدُ سَاحِرٍ ۖ وَلَا يُفْلِحُ السَّاحِرُ حَيْثُ أَتَىٰ',
+    transliteration: "Qalu ya Musa imma an tulqiya wa imma an nakuna awwala man alqa. Qala bal alqu, fa idha hibaluhum wa 'isiyyuhum yukhayyalu ilayhi min sihrihim annaha tas'a. Fa awjasa fi nafsihi khifatan Musa. Qulna la takhaf innaka antal-a'la. Wa alqi ma fi yaminika talqaf ma sana'u. Innama sana'u kaydu sahir. Wa la yuflihus-sahiru haythu ata.",
+    meaning: 'They said, “Moses, either you throw, or we will be the first to throw.” He said, “No, you throw.” Then, by their magic, their ropes and staffs seemed to him to be moving. Moses felt a fear within himself. We said, “Do not fear. It is you who are superior. Throw what is in your right hand; it will swallow what they have made. What they have made is only a magician’s trick, and a magician does not succeed wherever he goes.”', note: null,
+  },
+  {
     id: 'dua-calamity', item_key: 'daily_duas', title: 'Refuge from calamity and misfortune', repetitions: 'Once', sort_order: 10, grade: 'sahih', reference: 'Abu Hurayra — Sahih al-Bukhari 6616, 6347; Sahih Muslim 2707.',
     arabic: 'أَعُوذُ بِاللَّهِ مِنْ جَهْدِ الْبَلَاءِ، وَدَرَكِ الشَّقَاءِ، وَسُوءِ الْقَضَاءِ، وَشَمَاتَةِ الْأَعْدَاءِ', transliteration: "A'udhu billahi min jahdil-bala', wa darakish-shaqa', wa su'il-qada', wa shamatatil-a'da'.", meaning: 'I seek refuge in Allah from the hardship of severe trial, from being overtaken by misfortune, from an evil decree, and from the gloating of enemies.', note: null,
   },
@@ -159,5 +183,10 @@ export type AdhkarKey = (typeof ADHKAR_KEYS)[number]
 
 /** The guide items, in display order, that a practice is ticked off by. */
 export function adhkarItemIds(key: AdhkarKey): string[] {
-  return NASR_CONTENT.filter((item) => item.item_key === key).map((item) => item.id)
+  return NASR_CONTENT.filter((item) => item.item_key === key && !item.optional).map((item) => item.id)
+}
+
+/** A practice's optional guide items, ticked on their own and never needed to complete it. */
+export function optionalItemIds(key: AdhkarKey): string[] {
+  return NASR_CONTENT.filter((item) => item.item_key === key && item.optional).map((item) => item.id)
 }
