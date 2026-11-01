@@ -662,44 +662,47 @@ function ContentEntry({
         onToggle && done ? "card p-4 border-positive/30 bg-positive/10" : "card p-4"
       }
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div
-          className={
-            onToggle
-              ? "flex min-w-0 items-center gap-3"
-              : "flex min-w-0 gap-3"
-          }
-        >
-          {onToggle && (
-            <label className="-m-3 inline-flex shrink-0 cursor-pointer p-3">
-              <input
-                type="checkbox"
-                className="peer sr-only"
-                checked={done}
-                aria-label={`${done ? "Mark not done" : "Mark done"}: ${item.title}`}
-                onChange={onToggle}
-              />
-              <span className="inline-flex shrink-0 rounded-[6px] peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ring">
-                <CheckMark complete={done} />
-              </span>
-            </label>
-          )}
-          <span className="text-xs tabular-nums text-muted-foreground">
-            {String(number).padStart(2, "0")}
-          </span>
-          <h3
+      <div className="flex items-start gap-3">
+        {/* On a phone the tick ends the row, under the right thumb. */}
+        {onToggle && (
+          <label className="order-last -m-3 inline-flex shrink-0 cursor-pointer p-3 sm:order-first">
+            <input
+              type="checkbox"
+              className="peer sr-only"
+              checked={done}
+              aria-label={`${done ? "Mark not done" : "Mark done"}: ${item.title}`}
+              onChange={onToggle}
+            />
+            <span className="inline-flex shrink-0 rounded-[6px] peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ring">
+              <CheckMark complete={done} />
+            </span>
+          </label>
+        )}
+        <div className="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-3">
+          <div
             className={
-              onToggle && done
-                ? "text-sm font-semibold leading-5 text-positive"
-                : "text-sm font-semibold leading-5"
+              onToggle
+                ? "flex min-w-0 items-center gap-3"
+                : "flex min-w-0 gap-3"
             }
           >
-            {item.title}
-          </h3>
+            <span className="text-xs tabular-nums text-muted-foreground">
+              {String(number).padStart(2, "0")}
+            </span>
+            <h3
+              className={
+                onToggle && done
+                  ? "text-sm font-semibold leading-5 text-positive"
+                  : "text-sm font-semibold leading-5"
+              }
+            >
+              {item.title}
+            </h3>
+          </div>
+          <span className="rounded-md bg-primary/10 px-2 py-0.5 text-xs text-primary">
+            {item.repetitions}
+          </span>
         </div>
-        <span className="rounded-md bg-primary/10 px-2 py-0.5 text-xs text-primary">
-          {item.repetitions}
-        </span>
       </div>
       {streak && (
         <p className="mt-2 text-xs tabular-nums text-muted-foreground">
