@@ -328,9 +328,13 @@ function HomePage() {
           <ul className="grid gap-x-4 gap-y-1 sm:grid-cols-2" aria-label="Today's practices">
             {practices.map((practice) => (
               <li key={practice.key}>
+                {/* Today scrolls the opened guide into view as it mounts.
+                    Without resetScroll={false} the router then scrolls the
+                    new page back to the top. */}
                 <Link
                   to="/nasr"
                   search={{ guide: practice.key }}
+                  resetScroll={false}
                   className="-mx-2 flex min-h-8 items-center gap-2 rounded-md px-2 hover:bg-muted/60"
                 >
                   {practice.complete ? (

@@ -108,6 +108,12 @@ describe("Home practices", () => {
     expect(nasr).toMatch(/search=\{\{ guide: practice\.key \}\}/);
   });
 
+  it("leaves the scroll to Today, which brings the opened guide into view", () => {
+    expect(nasr).toMatch(
+      /search=\{\{ guide: practice\.key \}\}\s+resetScroll=\{false\}/,
+    );
+  });
+
   it("opens a day on Today from each mark of the strip", () => {
     expect(nasr).toMatch(/search=\{\{ date: mark\.date \}\}/);
     expect(nasr).toMatch(/aria-label=\{markLabel\(mark\)\}/);
