@@ -40,6 +40,8 @@ const prayers: Array<{
   { key: "isha", label: "Isha" },
 ];
 
+const istighfarKey = ["nasr", "istighfar"] as const;
+
 const boolItems: Array<{
   key: keyof Pick<NasrDay, "morning_adhkar" | "evening_adhkar" | "ruqyah" | "daily_duas">;
   itemKey: NasrContentItemKey;
@@ -83,7 +85,34 @@ function TodayPage() {
       await queryClient.invalidateQueries({ queryKey: nasrKeys.home });
     },
   });
+  // Istighfar is tapped in quick runs, so it never locks the page. Each tap
+  // writes its count into the day's cache at once, and the saves go out one
+  // at a time in tap order, so the last count sent is the one stored. The
+  // page refetches once, after the last save of a run settles.
+  const istighfar = useMutation({
+    mutationKey: istighfarKey,
+    scope: { id: "nasr-istighfar" },
+    mutationFn: (values: { date: string; istighfar_count: number }) =>
+      updateNasrDay({ data: values }),
+    onSettled: () => {
+      if (queryClient.isMutating({ mutationKey: istighfarKey }) > 1) return;
+      void queryClient.invalidateQueries({ queryKey: nasrKeys.all });
+      void queryClient.invalidateQueries({ queryKey: nasrKeys.home });
+    },
+  });
+  function stepIstighfar(step: number) {
+    const key = nasrDayQuery(selected).queryKey;
+    // A refetch still in flight would land with the count from before this
+    // tap, so it is dropped; the run's own refetch replaces it.
+    void queryClient.cancelQueries({ queryKey: key });
+    const current = queryClient.getQueryData(key);
+    if (!current) return;
+    const count = Math.max(0, current.istighfar_count + step);
+    queryClient.setQueryData(key, { ...current, istighfar_count: count });
+    istighfar.mutate({ date: selected, istighfar_count: count });
+  }
   const saving = update.isPending || tick.isPending;
+  const saveError = update.error ?? tick.error ?? istighfar.error;
   if (summary.isPending) {
     return (
       <p className="py-16 text-center text-sm text-muted-foreground">
@@ -146,9 +175,9 @@ function TodayPage() {
         </Button>
       </div>
 
-      {(update.isError || tick.isError) && (
+      {saveError && (
         <p role="alert" className="text-sm text-negative">
-          Your change could not be saved. {(update.error ?? tick.error)?.message}
+          Your change could not be saved. {saveError.message}
         </p>
       )}
       {dayQuery.isError && (
@@ -279,9 +308,7 @@ function TodayPage() {
               <IstighfarCounter
                 count={day?.istighfar_count ?? 0}
                 target={data?.settings.istighfar_target ?? 100}
-                onUpdate={(count) =>
-                  patch({ date: selected, istighfar_count: count })
-                }
+                onStep={stepIstighfar}
               />
             </section>
             <div className="list">
@@ -774,11 +801,11 @@ function CheckMark({ complete }: { complete: boolean }) {
 function IstighfarCounter({
   count,
   target,
-  onUpdate,
+  onStep,
 }: {
   count: number;
   target: number;
-  onUpdate: (n: number) => void;
+  onStep: (step: number) => void;
 }) {
   const pct = Math.min(100, Math.round((count / target) * 100));
   return (
@@ -804,7 +831,7 @@ function IstighfarCounter({
           className="tabular-nums"
           disabled={count === 0}
           aria-label="Decrement istighfar count"
-          onClick={() => onUpdate(Math.max(0, count - 1))}
+          onClick={() => onStep(-1)}
         >
           −1
         </Button>
@@ -814,7 +841,7 @@ function IstighfarCounter({
             size="lg"
             variant={step === 1 ? "default" : "secondary"}
             className="flex-1 tabular-nums"
-            onClick={() => onUpdate(count + step)}
+            onClick={() => onStep(step)}
           >
             +{step}
           </Button>
