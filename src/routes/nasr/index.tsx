@@ -1,8 +1,22 @@
 import { useEffect, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useMutation,
+  useMutationState,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { nasrDayQuery, nasrKeys, nasrQuery } from "@/queries/nasr";
+import {
+  istighfarMutationKey,
+  latestIstighfarCount,
+  nasrDayQuery,
+  nasrKeys,
+  nasrQuery,
+  pendingIstighfarCount,
+  pendingIstighfarFilters,
+  type IstighfarSave,
+} from "@/queries/nasr";
 import { setNasrAdhkarItem, updateNasrDay } from "@/server/fns";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,8 +53,6 @@ const prayers: Array<{
   { key: "maghrib", label: "Maghrib" },
   { key: "isha", label: "Isha" },
 ];
-
-const istighfarKey = ["nasr", "istighfar"] as const;
 
 const boolItems: Array<{
   key: keyof Pick<NasrDay, "morning_adhkar" | "evening_adhkar" | "ruqyah" | "daily_duas">;
@@ -85,31 +97,37 @@ function TodayPage() {
       await queryClient.invalidateQueries({ queryKey: nasrKeys.home });
     },
   });
-  // Istighfar is tapped in quick runs, so it never locks the page. Each tap
-  // writes its count into the day's cache at once, and the saves go out one
-  // at a time in tap order, so the last count sent is the one stored. The
-  // page refetches once, after the last save of a run settles.
+  // Istighfar is tapped in quick runs, so it never locks the page. While a
+  // run is saving, the counter shows and builds on the newest unsaved tap,
+  // not the cached day, which another save's refetch can set lower. The
+  // saves go out one at a time in tap order, so the last count sent is the
+  // one stored. The last save of a run writes its day to the cache and the
+  // page refetches once.
   const istighfar = useMutation({
-    mutationKey: istighfarKey,
+    mutationKey: istighfarMutationKey,
     scope: { id: "nasr-istighfar" },
-    mutationFn: (values: { date: string; istighfar_count: number }) =>
-      updateNasrDay({ data: values }),
-    onSettled: () => {
-      if (queryClient.isMutating({ mutationKey: istighfarKey }) > 1) return;
+    mutationFn: (values: IstighfarSave) => updateNasrDay({ data: values }),
+    onSettled: (saved, _error, { date }) => {
+      if (queryClient.isMutating({ mutationKey: istighfarMutationKey }) > 1)
+        return;
+      if (saved) queryClient.setQueryData(nasrDayQuery(date).queryKey, saved);
       void queryClient.invalidateQueries({ queryKey: nasrKeys.all });
       void queryClient.invalidateQueries({ queryKey: nasrKeys.home });
     },
   });
+  const pendingIstighfar = useMutationState({
+    filters: pendingIstighfarFilters,
+    select: (mutation) => mutation.state.variables as IstighfarSave | undefined,
+  });
   function stepIstighfar(step: number) {
-    const key = nasrDayQuery(selected).queryKey;
-    // A refetch still in flight would land with the count from before this
-    // tap, so it is dropped; the run's own refetch replaces it.
-    void queryClient.cancelQueries({ queryKey: key });
-    const current = queryClient.getQueryData(key);
-    if (!current) return;
-    const count = Math.max(0, current.istighfar_count + step);
-    queryClient.setQueryData(key, { ...current, istighfar_count: count });
-    istighfar.mutate({ date: selected, istighfar_count: count });
+    const cached = queryClient.getQueryData(nasrDayQuery(selected).queryKey);
+    if (!cached) return;
+    const current =
+      pendingIstighfarCount(queryClient, selected) ?? cached.istighfar_count;
+    istighfar.mutate({
+      date: selected,
+      istighfar_count: Math.max(0, current + step),
+    });
   }
   const saving = update.isPending || tick.isPending;
   const saveError = update.error ?? tick.error ?? istighfar.error;
@@ -306,7 +324,11 @@ function TodayPage() {
                 )}
               />
               <IstighfarCounter
-                count={day?.istighfar_count ?? 0}
+                count={
+                  latestIstighfarCount(pendingIstighfar, selected) ??
+                  day?.istighfar_count ??
+                  0
+                }
                 target={data?.settings.istighfar_target ?? 100}
                 onStep={stepIstighfar}
               />

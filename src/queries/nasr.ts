@@ -1,4 +1,4 @@
-import { queryOptions } from "@tanstack/react-query";
+import { queryOptions, type QueryClient } from "@tanstack/react-query";
 import { getNasr, getNasrDay, getNasrSettings, getHome } from "@/server/fns";
 
 export const nasrKeys = {
@@ -36,3 +36,42 @@ export const nasrSettingsQuery = queryOptions({
   queryFn: () => getNasrSettings(),
   staleTime: 30000,
 });
+
+export const istighfarMutationKey = ["nasr", "istighfar"] as const;
+
+/** The Istighfar saves still on their way to the server, in tap order. */
+export const pendingIstighfarFilters = {
+  mutationKey: istighfarMutationKey,
+  status: "pending",
+} as const;
+
+export interface IstighfarSave {
+  date: string;
+  istighfar_count: number;
+}
+
+/**
+ * The count of the newest unsaved Istighfar tap on `date`, or undefined when
+ * every tap there is saved. While a run of taps is saving, this is the count
+ * to show and to build the next tap on: a day refetch that lands mid-run,
+ * after a prayer is logged or the window regains focus, carries only the
+ * saves that reached the server, so the cached day can read lower.
+ */
+export function latestIstighfarCount(
+  saves: ReadonlyArray<IstighfarSave | undefined>,
+  date: string,
+): number | undefined {
+  for (let i = saves.length - 1; i >= 0; i--) {
+    const save = saves[i];
+    if (save?.date === date) return save.istighfar_count;
+  }
+  return undefined;
+}
+
+export function pendingIstighfarCount(client: QueryClient, date: string) {
+  const saves = client
+    .getMutationCache()
+    .findAll(pendingIstighfarFilters)
+    .map((mutation) => mutation.state.variables as IstighfarSave | undefined);
+  return latestIstighfarCount(saves, date);
+}
