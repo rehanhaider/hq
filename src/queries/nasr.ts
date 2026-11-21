@@ -9,8 +9,17 @@ import {
   getNasrDay,
   getNasrSettings,
   getHome,
+  setNasrAdhkarItem,
   updateNasrDay,
 } from "@/server/fns";
+import {
+  ADHKAR_KEYS,
+  adhkarItemIds,
+  optionalItemIds,
+  type NasrAdhkarTick,
+  type NasrDay,
+  type NasrDayUpdate,
+} from "@/lib/nasr";
 
 export const nasrKeys = {
   all: ["nasr"] as const,
@@ -48,7 +57,16 @@ export const nasrSettingsQuery = queryOptions({
   staleTime: 30000,
 });
 
-export const istighfarMutationKey = ["nasr", "istighfar"] as const;
+/**
+ * Every write to a Nasr day on Today, Istighfar included, shares one queue:
+ * the writes reach the server one at a time in tap order, so each reply
+ * holds every write before it, and the reply written to the cache last is
+ * the newest.
+ */
+const dayWriteScope = { id: "nasr-day" };
+const nasrWriteKey = ["nasr", "write"] as const;
+export const istighfarMutationKey = [...nasrWriteKey, "istighfar"] as const;
+export const dayWriteMutationKey = [...nasrWriteKey, "day"] as const;
 
 /** The Istighfar saves still on their way to the server, in tap order. */
 export const pendingIstighfarFilters = {
@@ -110,28 +128,143 @@ export function nextIstighfarSave(
   return { date, istighfar_count: Math.max(0, current + step) };
 }
 
-export interface IstighfarOutcome {
+/** A Salah, practice, guide tick or night recitation write on Today. */
+export type DayWrite =
+  | { kind: "update"; data: NasrDayUpdate }
+  | { kind: "tick"; data: NasrAdhkarTick };
+
+/** The day an Istighfar save or a day write is for. */
+function writeDate(write: IstighfarSave | DayWrite): string {
+  return "kind" in write ? write.data.date : write.date;
+}
+
+/**
+ * `day` after `write`, by the rules the server applies: NasrStore.upsertDay
+ * and NasrStore.setAdhkarItem. Marking a set done or not ticks or clears its
+ * required items and leaves its optional ones; ticking an item marks the set
+ * done once every required item is ticked.
+ */
+export function applyDayWrite(day: NasrDay, write: DayWrite): NasrDay {
+  const ticks = new Set(day.adhkar_ticks);
+  let next: NasrDay;
+  if (write.kind === "tick") {
+    const { item_id: id, done } = write.data;
+    const key = ADHKAR_KEYS.find((key) =>
+      [...adhkarItemIds(key), ...optionalItemIds(key)].includes(id),
+    );
+    if (!key) return day;
+    if (done) ticks.add(id);
+    else ticks.delete(id);
+    next = { ...day, [key]: adhkarItemIds(key).every((id) => ticks.has(id)) };
+  } else {
+    const fields = Object.fromEntries(
+      Object.entries(write.data).filter(([, value]) => value !== undefined),
+    ) as Partial<NasrDay>;
+    next = { ...day, ...fields };
+    for (const key of ADHKAR_KEYS) {
+      const value = write.data[key];
+      if (value === undefined) continue;
+      for (const id of adhkarItemIds(key)) {
+        if (value) ticks.add(id);
+        else ticks.delete(id);
+      }
+    }
+  }
+  next.adhkar_ticks = ADHKAR_KEYS.flatMap((key) =>
+    [...adhkarItemIds(key), ...optionalItemIds(key)].filter((id) =>
+      ticks.has(id),
+    ),
+  );
+  return next;
+}
+
+/** The day writes still on their way to the server, in tap order. */
+export const pendingDayWriteFilters = {
+  mutationKey: dayWriteMutationKey,
+  status: "pending",
+} as const;
+
+/**
+ * `day` with the unsaved writes for it applied in tap order. A day refetch
+ * that lands mid-run carries only the writes that reached the server, so the
+ * page shows and builds on this instead of the cached day.
+ */
+export function withDayWrites(
+  day: NasrDay,
+  writes: ReadonlyArray<DayWrite | undefined>,
+): NasrDay {
+  return writes.reduce<NasrDay>(
+    (current, write) =>
+      write && write.data.date === day.date
+        ? applyDayWrite(current, write)
+        : current,
+    day,
+  );
+}
+
+/** The day as Today shows it now, or undefined until it has loaded. */
+export function currentNasrDay(
+  client: QueryClient,
+  date: string,
+): NasrDay | undefined {
+  const cached = client.getQueryData(nasrDayQuery(date).queryKey);
+  if (!cached) return undefined;
+  const writes = client
+    .getMutationCache()
+    .findAll(pendingDayWriteFilters)
+    .map((mutation) => mutation.state.variables as DayWrite | undefined);
+  return withDayWrites(cached, writes);
+}
+
+/**
+ * Write a returned day to the cache. The writes share one queue, so this is
+ * the newest state. Once the day has no writes of either kind left, the page
+ * refetches the day, the summary, and Home.
+ */
+function settleDayWrite(
+  client: QueryClient,
+  date: string,
+  saved: NasrDay | undefined,
+) {
+  if (saved) client.setQueryData(nasrDayQuery(date).queryKey, saved);
+  const queued = client
+    .getMutationCache()
+    .findAll({ mutationKey: nasrWriteKey, status: "pending" })
+    .filter((mutation) => {
+      const write = mutation.state.variables as
+        | IstighfarSave
+        | DayWrite
+        | undefined;
+      return write !== undefined && writeDate(write) === date;
+    }).length;
+  // This write still counts as pending here, so 1 means it was the day's last.
+  if (queued > 1) return;
+  void client.invalidateQueries({ queryKey: nasrKeys.all });
+  void client.invalidateQueries({ queryKey: nasrKeys.home });
+}
+
+export interface SaveOutcome {
   date: string;
   error: Error | null;
 }
 
-/** A finished Istighfar save's day and error, or undefined while pending. */
-export function istighfarOutcome({
+/** A finished write's day and error, or undefined while pending. */
+export function writeOutcome({
   state,
-}: Mutation<unknown, Error, unknown>): IstighfarOutcome | undefined {
-  const save = state.variables as IstighfarSave | undefined;
-  if (!save || (state.status !== "success" && state.status !== "error"))
+}: Mutation<unknown, Error, unknown>): SaveOutcome | undefined {
+  const write = state.variables as IstighfarSave | DayWrite | undefined;
+  if (!write || (state.status !== "success" && state.status !== "error"))
     return undefined;
-  return { date: save.date, error: state.error };
+  return { date: writeDate(write), error: state.error };
 }
 
 /**
- * The error to show for Istighfar: a failure that is still the newest
- * finished save on its day, whichever day the page shows now. A later save
- * on that day stores the full count again, so its success clears it.
+ * The error to show: a failure that is still the newest finished write of its
+ * kind on its day, whichever day the page shows now. The refetch puts back
+ * what was saved, and a later write's success clears it.
  */
-export function istighfarSaveError(
-  outcomes: ReadonlyArray<IstighfarOutcome | undefined>,
+export function saveFailure(
+  outcomes: ReadonlyArray<SaveOutcome | undefined>,
 ): Error | null {
   const newest = new Map<string, Error | null>();
   for (const outcome of outcomes)
@@ -141,24 +274,30 @@ export function istighfarSaveError(
 }
 
 /**
- * Istighfar is tapped in quick runs, so its saves never lock the page. They
- * share a scope, so they reach the server one at a time in tap order and the
- * last count sent is the one stored. Each save writes the day it returns to
- * that day's cache, so a day left mid-run comes back with its newest saved
- * count. Once a day has no saves left, the page refetches.
+ * Istighfar is tapped in quick runs, so its saves never lock the page. The
+ * last count sent is the one stored, and a day left mid-run comes back with
+ * its newest saved count.
  */
 export const istighfarMutationOptions = (client: QueryClient) =>
   mutationOptions({
     mutationKey: istighfarMutationKey,
-    scope: { id: "nasr-istighfar" },
+    scope: dayWriteScope,
     mutationFn: (save: IstighfarSave) => updateNasrDay({ data: save }),
-    onSuccess: (saved, { date }) => {
-      client.setQueryData(nasrDayQuery(date).queryKey, saved);
-    },
-    onSettled: (_saved, _error, { date }) => {
-      // This save still counts as pending here, so 1 means it was the last.
-      if (pendingIstighfarSaves(client, date).length > 1) return;
-      void client.invalidateQueries({ queryKey: nasrKeys.all });
-      void client.invalidateQueries({ queryKey: nasrKeys.home });
-    },
+    onSettled: (saved, _error, { date }) => settleDayWrite(client, date, saved),
+  });
+
+/**
+ * Salah, practice, guide tick and night recitation writes. They never lock
+ * the page: Today shows each one at once through withDayWrites.
+ */
+export const dayWriteMutationOptions = (client: QueryClient) =>
+  mutationOptions({
+    mutationKey: dayWriteMutationKey,
+    scope: dayWriteScope,
+    mutationFn: (write: DayWrite) =>
+      write.kind === "tick"
+        ? setNasrAdhkarItem({ data: write.data })
+        : updateNasrDay({ data: write.data }),
+    onSettled: (saved, _error, write) =>
+      settleDayWrite(client, write.data.date, saved),
   });

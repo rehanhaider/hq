@@ -8,19 +8,23 @@ import {
 } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import {
+  currentNasrDay,
+  dayWriteMutationKey,
+  dayWriteMutationOptions,
   istighfarMutationKey,
   istighfarMutationOptions,
-  istighfarOutcome,
-  istighfarSaveError,
   latestIstighfarCount,
   nasrDayQuery,
-  nasrKeys,
   nasrQuery,
   nextIstighfarSave,
+  pendingDayWriteFilters,
   pendingIstighfarFilters,
+  saveFailure,
+  withDayWrites,
+  writeOutcome,
+  type DayWrite,
   type IstighfarSave,
 } from "@/queries/nasr";
-import { setNasrAdhkarItem, updateNasrDay } from "@/server/fns";
 import { Button } from "@/components/ui/button";
 import {
   NASR_GUIDES,
@@ -57,6 +61,9 @@ const prayers: Array<{
   { key: "isha", label: "Isha" },
 ];
 
+type NightKey = "night_ayat_kursi" | "night_baqarah" | "night_three_suras";
+type BoolKey = (typeof boolItems)[number]["key"] | NightKey;
+
 const boolItems: Array<{
   key: keyof Pick<NasrDay, "morning_adhkar" | "evening_adhkar" | "ruqyah" | "daily_duas">;
   itemKey: NasrContentItemKey;
@@ -86,20 +93,21 @@ function TodayPage() {
       replace: true,
     });
   }
-  const update = useMutation({
-    mutationFn: updateNasrDay,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: nasrKeys.all });
-      await queryClient.invalidateQueries({ queryKey: nasrKeys.home });
-    },
+  // Salah, practice, guide tick and night writes never lock the page. Each
+  // shows at once: the page reads the cached day with the unsaved writes
+  // applied, so a refetch that lands mid-run cannot undo a tap.
+  const write = useMutation(dayWriteMutationOptions(queryClient));
+  const pendingWrites = useMutationState({
+    filters: pendingDayWriteFilters,
+    select: (mutation) => mutation.state.variables as DayWrite | undefined,
   });
-  const tick = useMutation({
-    mutationFn: setNasrAdhkarItem,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: nasrKeys.all });
-      await queryClient.invalidateQueries({ queryKey: nasrKeys.home });
-    },
-  });
+  // A hook's own error follows only its newest write, and a run can span days.
+  const writeError = saveFailure(
+    useMutationState({
+      filters: { mutationKey: dayWriteMutationKey },
+      select: writeOutcome,
+    }),
+  );
   // While a run of Istighfar taps is saving, the counter shows and builds on
   // the newest unsaved tap, not the cached day, which another save's refetch
   // can set lower.
@@ -108,19 +116,17 @@ function TodayPage() {
     filters: pendingIstighfarFilters,
     select: (mutation) => mutation.state.variables as IstighfarSave | undefined,
   });
-  // The hook's own error follows only the newest tap, and a run can span days.
-  const istighfarError = istighfarSaveError(
+  const istighfarError = saveFailure(
     useMutationState({
       filters: { mutationKey: istighfarMutationKey },
-      select: istighfarOutcome,
+      select: writeOutcome,
     }),
   );
   function stepIstighfar(step: number) {
     const save = nextIstighfarSave(queryClient, selected, step);
     if (save) istighfar.mutate(save);
   }
-  const saving = update.isPending || tick.isPending;
-  const saveError = update.error ?? tick.error ?? istighfarError;
+  const saveError = writeError ?? istighfarError;
   if (summary.isPending) {
     return (
       <p className="py-16 text-center text-sm text-muted-foreground">
@@ -129,7 +135,7 @@ function TodayPage() {
     );
   }
   const data = summary.data;
-  const day = dayQuery.data;
+  const day = dayQuery.data && withDayWrites(dayQuery.data, pendingWrites);
   const logged = prayers.filter(
     ({ key }) => (day?.[key] ?? null) !== null,
   ).length;
@@ -141,16 +147,41 @@ function TodayPage() {
         timeZone: "UTC",
       })
     : "";
-  function patch(values: Parameters<typeof updateNasrDay>[0]["data"]) {
-    update.mutate({ data: values });
+  // Each tap builds on the day as shown now, read straight from the caches
+  // rather than the last render, so taps between renders still add up.
+  function writeDay(build: (current: NasrDay) => DayWrite) {
+    const current = currentNasrDay(queryClient, selected);
+    if (current) write.mutate(build(current));
   }
-  function togglePrayer(
-    key: (typeof prayers)[number]["key"],
-    current: PrayerStatus,
-  ) {
-    const cycle: Exclude<PrayerStatus, null>[] = ["ontime", "qada", "missed"];
-    const idx = current === null ? -1 : cycle.indexOf(current);
-    patch({ date: selected, [key]: cycle[(idx + 1) % cycle.length] });
+  function clearPrayer(key: (typeof prayers)[number]["key"]) {
+    writeDay(() => ({ kind: "update", data: { date: selected, [key]: null } }));
+  }
+  function togglePrayer(key: (typeof prayers)[number]["key"]) {
+    writeDay((current) => {
+      const cycle: Exclude<PrayerStatus, null>[] = ["ontime", "qada", "missed"];
+      const value = current[key];
+      const idx = value === null ? -1 : cycle.indexOf(value);
+      return {
+        kind: "update",
+        data: { date: selected, [key]: cycle[(idx + 1) % cycle.length] },
+      };
+    });
+  }
+  function toggleField(key: BoolKey) {
+    writeDay((current) => ({
+      kind: "update",
+      data: { date: selected, [key]: !current[key] },
+    }));
+  }
+  function tickItem(id: string) {
+    writeDay((current) => ({
+      kind: "tick",
+      data: {
+        date: selected,
+        item_id: id,
+        done: !current.adhkar_ticks.includes(id),
+      },
+    }));
   }
   return (
     <div className="space-y-8">
@@ -158,7 +189,6 @@ function TodayPage() {
         <Button
           variant="ghost"
           size="icon"
-          disabled={saving}
           aria-label="Previous day"
           onClick={() => showDay(shiftDate(selected, -1))}
         >
@@ -176,7 +206,7 @@ function TodayPage() {
           variant="ghost"
           size="icon"
           aria-label="Next day"
-          disabled={isToday || saving}
+          disabled={isToday}
           onClick={() => showDay(shiftDate(selected, 1))}
         >
           <ChevronRight />
@@ -194,7 +224,7 @@ function TodayPage() {
         </p>
       )}
       <fieldset
-        disabled={saving || dayQuery.isPending || dayQuery.isError}
+        disabled={dayQuery.isPending || dayQuery.isError}
         className="min-w-0 disabled:opacity-60"
       >
         <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] lg:gap-12">
@@ -216,7 +246,7 @@ function TodayPage() {
                     <div key={key} className="list-row">
                       <button
                         type="button"
-                        onClick={() => togglePrayer(key, value)}
+                        onClick={() => togglePrayer(key)}
                         className="flex flex-1 items-center justify-between gap-4 text-left"
                       >
                         <span className="text-sm font-medium">{name}</span>
@@ -228,7 +258,7 @@ function TodayPage() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => patch({ date: selected, [key]: null })}
+                        onClick={() => clearPrayer(key)}
                         disabled={value === null}
                         aria-label={`Clear ${name}`}
                         className="shrink-0 px-2 text-sm text-muted-foreground disabled:opacity-0"
@@ -276,18 +306,9 @@ function TodayPage() {
                     items={(data?.content ?? []).filter(
                       (item) => item.item_key === itemKey,
                     )}
-                    onToggle={() =>
-                      patch({ date: selected, [key]: !(day?.[key] ?? false) })
-                    }
+                    onToggle={() => toggleField(key)}
                     ticks={itemized ? (day?.adhkar_ticks ?? []) : undefined}
-                    onTickItem={
-                      itemized
-                        ? (id, done) =>
-                            tick.mutate({
-                              data: { date: selected, item_id: id, done },
-                            })
-                        : undefined
-                    }
+                    onTickItem={itemized ? tickItem : undefined}
                   />
                 ))}
                 <NightDisclosure
@@ -296,9 +317,7 @@ function TodayPage() {
                   items={(data?.content ?? []).filter(
                     (item) => item.item_key === "night_ayat",
                   )}
-                  onToggle={(key, value) =>
-                    patch({ date: selected, [key]: !value })
-                  }
+                  onToggle={toggleField}
                 />
               </div>
             </section>
@@ -439,7 +458,7 @@ function PracticeDisclosure({
   items: NasrContent[];
   onToggle: () => void;
   ticks?: string[];
-  onTickItem?: (id: string, done: boolean) => void;
+  onTickItem?: (id: string) => void;
 }) {
   const [open, setOpen] = useState(openOnArrival);
   const ref = useScrollOnArrival(openOnArrival);
@@ -518,10 +537,7 @@ function NightDisclosure({
   openOnArrival: boolean;
   day: NasrDay | undefined;
   items: NasrContent[];
-  onToggle: (
-    key: "night_ayat_kursi" | "night_baqarah" | "night_three_suras",
-    current: boolean,
-  ) => void;
+  onToggle: (key: NightKey) => void;
 }) {
   const [open, setOpen] = useState(openOnArrival);
   const ref = useScrollOnArrival(openOnArrival);
@@ -575,7 +591,7 @@ function NightDisclosure({
               <button
                 key={check.key}
                 type="button"
-                onClick={() => onToggle(check.key, check.value)}
+                onClick={() => onToggle(check.key)}
                 className={`flex min-h-11 items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-xs font-medium ${check.value ? "border-positive/30 bg-positive/10 text-positive" : "text-muted-foreground"}`}
               >
                 <CheckMark complete={check.value} />
@@ -630,7 +646,7 @@ function PracticeGuide({
   items: NasrContent[];
   nested?: boolean;
   ticks?: string[];
-  onTickItem?: (id: string, done: boolean) => void;
+  onTickItem?: (id: string) => void;
   streaks?: Record<string, StreakResult>;
 }) {
   const guide = NASR_GUIDES[itemKey];
@@ -644,11 +660,7 @@ function PracticeGuide({
         number={index + 1}
         done={ticks?.includes(item.id) ?? false}
         streak={streaks?.[item.id]}
-        onToggle={
-          onTickItem
-            ? () => onTickItem(item.id, !(ticks?.includes(item.id) ?? false))
-            : undefined
-        }
+        onToggle={onTickItem ? () => onTickItem(item.id) : undefined}
       />
     ));
   return (
