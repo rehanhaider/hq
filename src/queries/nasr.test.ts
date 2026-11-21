@@ -2,9 +2,13 @@ import { MutationObserver, QueryClient } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
 import { emptyDay, type NasrDay } from "@/lib/nasr";
 import {
+  istighfarMutationKey,
   istighfarMutationOptions,
+  istighfarOutcome,
+  istighfarSaveError,
   latestIstighfarCount,
   nasrKeys,
+  nextIstighfarSave,
   pendingIstighfarCount,
   type IstighfarSave,
 } from "./nasr";
@@ -15,14 +19,16 @@ const dayBefore = "2026-11-20";
 function setup() {
   const client = new QueryClient();
   const sent: IstighfarSave[] = [];
-  const replies: Array<() => void> = [];
+  const replies: Array<(failure?: Error) => void> = [];
   // The page's options, with the server call replaced by one the test answers.
   const observer = new MutationObserver(client, {
     ...istighfarMutationOptions(client),
     mutationFn: (save: IstighfarSave) => {
       sent.push(save);
-      return new Promise<NasrDay>((resolve) => {
-        replies.push(() => resolve({ ...emptyDay(save.date), ...save }));
+      return new Promise<NasrDay>((resolve, reject) => {
+        replies.push((failure) =>
+          failure ? reject(failure) : resolve({ ...emptyDay(save.date), ...save }),
+        );
       });
     },
   });
@@ -30,21 +36,29 @@ function setup() {
     client.setQueryData(nasrKeys.day(day), emptyDay(day));
   const cachedCount = (day: string) =>
     client.getQueryData<NasrDay>(nasrKeys.day(day))!.istighfar_count;
-  // The Today page's tap: build on the newest unsaved tap, else the day.
+  // The Today page's tap.
   const tap = (day: string, step: number) => {
-    const current = pendingIstighfarCount(client, day) ?? cachedCount(day);
-    void observer.mutate({ date: day, istighfar_count: current + step });
+    const save = nextIstighfarSave(client, day, step);
+    if (save) void observer.mutate(save).catch(() => {});
   };
   const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
   // Answer each save as the scope sends it.
-  const answer = async (count: number) => {
+  const answer = async (count: number, failure?: Error) => {
     for (let i = 0; i < count; i++) {
       await settle();
-      replies.shift()!();
+      replies.shift()!(failure);
     }
     await settle();
   };
-  return { client, sent, tap, answer, cachedCount };
+  // The page's alert.
+  const shownError = () =>
+    istighfarSaveError(
+      client
+        .getMutationCache()
+        .findAll({ mutationKey: istighfarMutationKey })
+        .map(istighfarOutcome),
+    );
+  return { client, sent, tap, answer, cachedCount, shownError };
 }
 
 describe("Istighfar saves", () => {
@@ -92,6 +106,23 @@ describe("Istighfar saves", () => {
     await answer(2);
     expect(cachedCount(date)).toBe(3);
     expect(cachedCount(dayBefore)).toBe(1);
+  });
+
+  it("keep a failed save's alert after the run moves to another day", async () => {
+    const { tap, answer, shownError } = setup();
+    tap(date, 1);
+    tap(dayBefore, 1);
+    await answer(1, new Error("offline"));
+    expect(shownError()?.message).toBe("offline");
+
+    // The other day's save succeeding does not clear today's failure.
+    await answer(1);
+    expect(shownError()?.message).toBe("offline");
+
+    // A later save on today stores the full count again.
+    tap(date, 1);
+    await answer(1);
+    expect(shownError()).toBeNull();
   });
 });
 

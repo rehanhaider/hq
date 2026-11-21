@@ -1,6 +1,7 @@
 import {
   mutationOptions,
   queryOptions,
+  type Mutation,
   type QueryClient,
 } from "@tanstack/react-query";
 import {
@@ -64,8 +65,8 @@ export interface IstighfarSave {
  * The count of the newest unsaved Istighfar tap on `date`, or undefined when
  * every tap there is saved. While a run of taps is saving, this is the count
  * to show and to build the next tap on: a day refetch that lands mid-run,
- * after a prayer is logged or the window regains focus, carries only the
- * saves that reached the server, so the cached day can read lower.
+ * after a prayer is logged or a guide item ticked, carries only the saves
+ * that reached the server, so the cached day can read lower.
  */
 export function latestIstighfarCount(
   saves: ReadonlyArray<IstighfarSave | undefined>,
@@ -92,6 +93,51 @@ export function pendingIstighfarSaves(
 
 export function pendingIstighfarCount(client: QueryClient, date: string) {
   return pendingIstighfarSaves(client, date).at(-1)?.istighfar_count;
+}
+
+/**
+ * The save for one tap of `step` on `date`, built on the newest unsaved tap
+ * there, else the cached day. Undefined until the day has loaded.
+ */
+export function nextIstighfarSave(
+  client: QueryClient,
+  date: string,
+  step: number,
+): IstighfarSave | undefined {
+  const cached = client.getQueryData(nasrDayQuery(date).queryKey);
+  if (!cached) return undefined;
+  const current = pendingIstighfarCount(client, date) ?? cached.istighfar_count;
+  return { date, istighfar_count: Math.max(0, current + step) };
+}
+
+export interface IstighfarOutcome {
+  date: string;
+  error: Error | null;
+}
+
+/** A finished Istighfar save's day and error, or undefined while pending. */
+export function istighfarOutcome({
+  state,
+}: Mutation<unknown, Error, unknown>): IstighfarOutcome | undefined {
+  const save = state.variables as IstighfarSave | undefined;
+  if (!save || (state.status !== "success" && state.status !== "error"))
+    return undefined;
+  return { date: save.date, error: state.error };
+}
+
+/**
+ * The error to show for Istighfar: a failure that is still the newest
+ * finished save on its day, whichever day the page shows now. A later save
+ * on that day stores the full count again, so its success clears it.
+ */
+export function istighfarSaveError(
+  outcomes: ReadonlyArray<IstighfarOutcome | undefined>,
+): Error | null {
+  const newest = new Map<string, Error | null>();
+  for (const outcome of outcomes)
+    if (outcome) newest.set(outcome.date, outcome.error);
+  for (const error of newest.values()) if (error) return error;
+  return null;
 }
 
 /**

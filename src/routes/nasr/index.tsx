@@ -8,12 +8,15 @@ import {
 } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import {
+  istighfarMutationKey,
   istighfarMutationOptions,
+  istighfarOutcome,
+  istighfarSaveError,
   latestIstighfarCount,
   nasrDayQuery,
   nasrKeys,
   nasrQuery,
-  pendingIstighfarCount,
+  nextIstighfarSave,
   pendingIstighfarFilters,
   type IstighfarSave,
 } from "@/queries/nasr";
@@ -105,18 +108,19 @@ function TodayPage() {
     filters: pendingIstighfarFilters,
     select: (mutation) => mutation.state.variables as IstighfarSave | undefined,
   });
+  // The hook's own error follows only the newest tap, and a run can span days.
+  const istighfarError = istighfarSaveError(
+    useMutationState({
+      filters: { mutationKey: istighfarMutationKey },
+      select: istighfarOutcome,
+    }),
+  );
   function stepIstighfar(step: number) {
-    const cached = queryClient.getQueryData(nasrDayQuery(selected).queryKey);
-    if (!cached) return;
-    const current =
-      pendingIstighfarCount(queryClient, selected) ?? cached.istighfar_count;
-    istighfar.mutate({
-      date: selected,
-      istighfar_count: Math.max(0, current + step),
-    });
+    const save = nextIstighfarSave(queryClient, selected, step);
+    if (save) istighfar.mutate(save);
   }
   const saving = update.isPending || tick.isPending;
-  const saveError = update.error ?? tick.error ?? istighfar.error;
+  const saveError = update.error ?? tick.error ?? istighfarError;
   if (summary.isPending) {
     return (
       <p className="py-16 text-center text-sm text-muted-foreground">
