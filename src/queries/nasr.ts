@@ -1,5 +1,15 @@
-import { queryOptions, type QueryClient } from "@tanstack/react-query";
-import { getNasr, getNasrDay, getNasrSettings, getHome } from "@/server/fns";
+import {
+  mutationOptions,
+  queryOptions,
+  type QueryClient,
+} from "@tanstack/react-query";
+import {
+  getNasr,
+  getNasrDay,
+  getNasrSettings,
+  getHome,
+  updateNasrDay,
+} from "@/server/fns";
 
 export const nasrKeys = {
   all: ["nasr"] as const,
@@ -68,10 +78,41 @@ export function latestIstighfarCount(
   return undefined;
 }
 
-export function pendingIstighfarCount(client: QueryClient, date: string) {
-  const saves = client
+/** The day's Istighfar saves still on their way to the server, in tap order. */
+export function pendingIstighfarSaves(
+  client: QueryClient,
+  date: string,
+): IstighfarSave[] {
+  return client
     .getMutationCache()
     .findAll(pendingIstighfarFilters)
-    .map((mutation) => mutation.state.variables as IstighfarSave | undefined);
-  return latestIstighfarCount(saves, date);
+    .map((mutation) => mutation.state.variables as IstighfarSave | undefined)
+    .filter((save): save is IstighfarSave => save?.date === date);
 }
+
+export function pendingIstighfarCount(client: QueryClient, date: string) {
+  return pendingIstighfarSaves(client, date).at(-1)?.istighfar_count;
+}
+
+/**
+ * Istighfar is tapped in quick runs, so its saves never lock the page. They
+ * share a scope, so they reach the server one at a time in tap order and the
+ * last count sent is the one stored. Each save writes the day it returns to
+ * that day's cache, so a day left mid-run comes back with its newest saved
+ * count. Once a day has no saves left, the page refetches.
+ */
+export const istighfarMutationOptions = (client: QueryClient) =>
+  mutationOptions({
+    mutationKey: istighfarMutationKey,
+    scope: { id: "nasr-istighfar" },
+    mutationFn: (save: IstighfarSave) => updateNasrDay({ data: save }),
+    onSuccess: (saved, { date }) => {
+      client.setQueryData(nasrDayQuery(date).queryKey, saved);
+    },
+    onSettled: (_saved, _error, { date }) => {
+      // This save still counts as pending here, so 1 means it was the last.
+      if (pendingIstighfarSaves(client, date).length > 1) return;
+      void client.invalidateQueries({ queryKey: nasrKeys.all });
+      void client.invalidateQueries({ queryKey: nasrKeys.home });
+    },
+  });

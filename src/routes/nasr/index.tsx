@@ -8,7 +8,7 @@ import {
 } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import {
-  istighfarMutationKey,
+  istighfarMutationOptions,
   latestIstighfarCount,
   nasrDayQuery,
   nasrKeys,
@@ -97,24 +97,10 @@ function TodayPage() {
       await queryClient.invalidateQueries({ queryKey: nasrKeys.home });
     },
   });
-  // Istighfar is tapped in quick runs, so it never locks the page. While a
-  // run is saving, the counter shows and builds on the newest unsaved tap,
-  // not the cached day, which another save's refetch can set lower. The
-  // saves go out one at a time in tap order, so the last count sent is the
-  // one stored. The last save of a run writes its day to the cache and the
-  // page refetches once.
-  const istighfar = useMutation({
-    mutationKey: istighfarMutationKey,
-    scope: { id: "nasr-istighfar" },
-    mutationFn: (values: IstighfarSave) => updateNasrDay({ data: values }),
-    onSettled: (saved, _error, { date }) => {
-      if (queryClient.isMutating({ mutationKey: istighfarMutationKey }) > 1)
-        return;
-      if (saved) queryClient.setQueryData(nasrDayQuery(date).queryKey, saved);
-      void queryClient.invalidateQueries({ queryKey: nasrKeys.all });
-      void queryClient.invalidateQueries({ queryKey: nasrKeys.home });
-    },
-  });
+  // While a run of Istighfar taps is saving, the counter shows and builds on
+  // the newest unsaved tap, not the cached day, which another save's refetch
+  // can set lower.
+  const istighfar = useMutation(istighfarMutationOptions(queryClient));
   const pendingIstighfar = useMutationState({
     filters: pendingIstighfarFilters,
     select: (mutation) => mutation.state.variables as IstighfarSave | undefined,
