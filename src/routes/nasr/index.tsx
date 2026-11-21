@@ -9,6 +9,7 @@ import {
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import {
   currentNasrDay,
+  dayWriteFailure,
   dayWriteMutationKey,
   dayWriteMutationOptions,
   istighfarMutationKey,
@@ -102,7 +103,7 @@ function TodayPage() {
     select: (mutation) => mutation.state.variables as DayWrite | undefined,
   });
   // A hook's own error follows only its newest write, and a run can span days.
-  const writeError = saveFailure(
+  const writeError = dayWriteFailure(
     useMutationState({
       filters: { mutationKey: dayWriteMutationKey },
       select: writeOutcome,

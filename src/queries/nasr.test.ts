@@ -10,6 +10,7 @@ import { NasrStore } from "@/server/nasr";
 import {
   applyDayWrite,
   currentNasrDay,
+  dayWriteFailure,
   dayWriteMutationKey,
   dayWriteMutationOptions,
   istighfarMutationKey,
@@ -92,10 +93,12 @@ function setup() {
     await settle();
   };
   // The page's alerts.
+  const outcomes = (mutationKey: readonly string[]) =>
+    client.getMutationCache().findAll({ mutationKey }).map(writeOutcome);
   const shownError = (mutationKey: readonly string[]) =>
-    saveFailure(
-      client.getMutationCache().findAll({ mutationKey }).map(writeOutcome),
-    );
+    mutationKey === dayWriteMutationKey
+      ? dayWriteFailure(outcomes(mutationKey))
+      : saveFailure(outcomes(mutationKey));
   const invalidated = (day: string) =>
     client.getQueryState(nasrKeys.day(day))?.isInvalidated ?? false;
   return {
@@ -179,6 +182,24 @@ describe("Nasr day writes", () => {
     expect(invalidated(date)).toBe(false);
     await answer(1);
     expect(invalidated(date)).toBe(true);
+  });
+
+  it("keep a failed write's alert when a write queued behind it succeeds", async () => {
+    const { tick, answer, shownError } = setup();
+    const [first, second, third] = adhkarItemIds("morning_adhkar");
+    tick(date, first!);
+    tick(date, second!);
+    await answer(1, new Error("offline"));
+    expect(shownError(dayWriteMutationKey)?.message).toBe("offline");
+    // The write behind it was tapped before the failure and does not redo it.
+    await answer(1);
+    expect(shownError(dayWriteMutationKey)?.message).toBe("offline");
+
+    // The next tap on the day clears it.
+    tick(date, third!);
+    expect(shownError(dayWriteMutationKey)).toBeNull();
+    await answer(1);
+    expect(shownError(dayWriteMutationKey)).toBeNull();
   });
 
   it("keep a failed write's alert after the run moves to another day", async () => {

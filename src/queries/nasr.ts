@@ -259,9 +259,9 @@ export function writeOutcome({
 }
 
 /**
- * The error to show: a failure that is still the newest finished write of its
- * kind on its day, whichever day the page shows now. The refetch puts back
- * what was saved, and a later write's success clears it.
+ * The Istighfar error to show: a failure that is still the newest finished
+ * save on its day, whichever day the page shows now. A later save on that
+ * day stores the full count again, so its success clears it.
  */
 export function saveFailure(
   outcomes: ReadonlyArray<SaveOutcome | undefined>,
@@ -287,6 +287,30 @@ export const istighfarMutationOptions = (client: QueryClient) =>
   });
 
 /**
+ * The day-write error to show: the first failed write still in the cache,
+ * whichever day the page shows now. A later write does not redo a failed
+ * one, so a queued write's success leaves the alert up; the next tap on that
+ * day clears it.
+ */
+export function dayWriteFailure(
+  outcomes: ReadonlyArray<SaveOutcome | undefined>,
+): Error | null {
+  return outcomes.find((outcome) => outcome?.error)?.error ?? null;
+}
+
+/** Drop the failed day writes for `date`, as a new tap on it is made. */
+function dismissFailedDayWrites(client: QueryClient, date: string) {
+  const cache = client.getMutationCache();
+  for (const mutation of cache.findAll({
+    mutationKey: dayWriteMutationKey,
+    status: "error",
+  })) {
+    const write = mutation.state.variables as DayWrite | undefined;
+    if (write?.data.date === date) cache.remove(mutation);
+  }
+}
+
+/**
  * Salah, practice, guide tick and night recitation writes. They never lock
  * the page: Today shows each one at once through withDayWrites.
  */
@@ -294,6 +318,8 @@ export const dayWriteMutationOptions = (client: QueryClient) =>
   mutationOptions({
     mutationKey: dayWriteMutationKey,
     scope: dayWriteScope,
+    // Runs as the tap is made, even when the write queues behind others.
+    onMutate: (write) => dismissFailedDayWrites(client, write.data.date),
     mutationFn: (write: DayWrite) =>
       write.kind === "tick"
         ? setNasrAdhkarItem({ data: write.data })
