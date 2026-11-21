@@ -1,8 +1,25 @@
 import { useEffect, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useMutation,
+  useMutationState,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { nasrDayQuery, nasrKeys, nasrQuery } from "@/queries/nasr";
+import {
+  istighfarMutationKey,
+  istighfarMutationOptions,
+  istighfarOutcome,
+  istighfarSaveError,
+  latestIstighfarCount,
+  nasrDayQuery,
+  nasrKeys,
+  nasrQuery,
+  nextIstighfarSave,
+  pendingIstighfarFilters,
+  type IstighfarSave,
+} from "@/queries/nasr";
 import { setNasrAdhkarItem, updateNasrDay } from "@/server/fns";
 import { Button } from "@/components/ui/button";
 import {
@@ -83,7 +100,27 @@ function TodayPage() {
       await queryClient.invalidateQueries({ queryKey: nasrKeys.home });
     },
   });
+  // While a run of Istighfar taps is saving, the counter shows and builds on
+  // the newest unsaved tap, not the cached day, which another save's refetch
+  // can set lower.
+  const istighfar = useMutation(istighfarMutationOptions(queryClient));
+  const pendingIstighfar = useMutationState({
+    filters: pendingIstighfarFilters,
+    select: (mutation) => mutation.state.variables as IstighfarSave | undefined,
+  });
+  // The hook's own error follows only the newest tap, and a run can span days.
+  const istighfarError = istighfarSaveError(
+    useMutationState({
+      filters: { mutationKey: istighfarMutationKey },
+      select: istighfarOutcome,
+    }),
+  );
+  function stepIstighfar(step: number) {
+    const save = nextIstighfarSave(queryClient, selected, step);
+    if (save) istighfar.mutate(save);
+  }
   const saving = update.isPending || tick.isPending;
+  const saveError = update.error ?? tick.error ?? istighfarError;
   if (summary.isPending) {
     return (
       <p className="py-16 text-center text-sm text-muted-foreground">
@@ -146,9 +183,9 @@ function TodayPage() {
         </Button>
       </div>
 
-      {(update.isError || tick.isError) && (
+      {saveError && (
         <p role="alert" className="text-sm text-negative">
-          Your change could not be saved. {(update.error ?? tick.error)?.message}
+          Your change could not be saved. {saveError.message}
         </p>
       )}
       {dayQuery.isError && (
@@ -277,11 +314,13 @@ function TodayPage() {
                 )}
               />
               <IstighfarCounter
-                count={day?.istighfar_count ?? 0}
-                target={data?.settings.istighfar_target ?? 100}
-                onUpdate={(count) =>
-                  patch({ date: selected, istighfar_count: count })
+                count={
+                  latestIstighfarCount(pendingIstighfar, selected) ??
+                  day?.istighfar_count ??
+                  0
                 }
+                target={data?.settings.istighfar_target ?? 100}
+                onStep={stepIstighfar}
               />
             </section>
             <div className="list">
@@ -774,11 +813,11 @@ function CheckMark({ complete }: { complete: boolean }) {
 function IstighfarCounter({
   count,
   target,
-  onUpdate,
+  onStep,
 }: {
   count: number;
   target: number;
-  onUpdate: (n: number) => void;
+  onStep: (step: number) => void;
 }) {
   const pct = Math.min(100, Math.round((count / target) * 100));
   return (
@@ -804,7 +843,7 @@ function IstighfarCounter({
           className="tabular-nums"
           disabled={count === 0}
           aria-label="Decrement istighfar count"
-          onClick={() => onUpdate(Math.max(0, count - 1))}
+          onClick={() => onStep(-1)}
         >
           −1
         </Button>
@@ -814,7 +853,7 @@ function IstighfarCounter({
             size="lg"
             variant={step === 1 ? "default" : "secondary"}
             className="flex-1 tabular-nums"
-            onClick={() => onUpdate(count + step)}
+            onClick={() => onStep(step)}
           >
             +{step}
           </Button>
